@@ -1,17 +1,16 @@
-import {refreshGalleryStorage} from './gallery-storage.js';
-import { planPreview } from "./platform-preview-data.js";
+import { refreshGalleryStorage } from "./gallery-storage.js";
 
 import { repo } from "./repo.js";
 
 import { body, json, fail, HttpError, randomId, b64 } from "./core.js";
 
-import { subjectInput, subjectContent, stableKey, packVersion, docTypes } from "./platform-validation.js";
+import { subjectInput, subjectContent, docTypes } from "./platform-validation.js";
 
 import { stylePackage, assetPath } from "./style-package.js";
 
-import { invalid, ids, text } from "./content-document.js";
+import { invalid, ids, text } from "./tool-validation.js";
 
-import { planDate } from "./plan-math.js";
+import { dateValue } from "./tool-validation.js";
 
 const conflict = latest => {
     const e = new HttpError(409, "版本已变化，请刷新", "version_conflict");
@@ -72,82 +71,7 @@ function examples(type, m) {
         from: "2026-09-01",
         to: "2026-12-20"
     };
-    if (type === "report") return {
-        id: "example_report",
-        version: 1,
-        status: "published",
-        progress: "published",
-        style: style,
-        brand: brand,
-        student: student,
-        period: period,
-        stats: {
-            lessons: {
-                value: 14,
-                crm_value: 14,
-                source: "crm",
-                overridden: false
-            },
-            attendance: {
-                value: 14,
-                crm_value: 14,
-                source: "crm",
-                overridden: false
-            },
-            repertoire_done: {
-                value: 3,
-                crm_value: 3,
-                source: "crm",
-                overridden: false
-            }
-        },
-        dimensions_snapshot: [ {
-            key: "reading",
-            name: "读谱",
-            order: 1
-        }, {
-            key: "rhythm",
-            name: "节奏",
-            order: 2
-        }, {
-            key: "practice",
-            name: "练习习惯",
-            order: 3
-        } ],
-        scores: [ {
-            key: "reading",
-            value: 3,
-            previous: 2
-        }, {
-            key: "rhythm",
-            value: 4,
-            previous: 3
-        }, {
-            key: "practice",
-            value: 3,
-            previous: 3
-        } ],
-        mock_exams: [],
-        texts: {
-            progress: "平台示例：本期读谱更流畅",
-            focus: "平台示例：继续练习句尾",
-            next_goals: [ "完成下一阶段曲目" ],
-            home_practice: [ "每日分段练习" ],
-            teacher_note: "以上均为平台预览示例"
-        },
-        artwork_image_ids: [],
-        artwork_image_urls: [],
-        renewal: {
-            visible: false,
-            text: ""
-        },
-        options: {
-            compare_previous: true,
-            require_artwork: false,
-            mock_exam: false,
-            renewal_suggestion: false
-        }
-    };
+
     if (type === "feedback_card") return {
         id: "example_feedback",
         style: style,
@@ -167,49 +91,8 @@ function examples(type, m) {
         image_ids: [],
         image_urls: []
     };
-    if (type === "article") return {
-        id: "example_article",
-        style: style,
-        brand: brand,
-        type: "article",
-        subject: "music_interest",
-        title: "平台示例：秋季体验课",
-        scene: "平台预览",
-        blocks: [ {
-            id: "example_heading",
-            type: "heading",
-            level: 2,
-            text: "体验内容"
-        }, {
-            id: "example_paragraph",
-            type: "paragraph",
-            text: "这是平台示例内容，不代表任何机构的真实招生信息。"
-        }, {
-            id: "example_list",
-            type: "list",
-            ordered: false,
-            items: [ "节奏体验", "报名方式由机构填写" ]
-        } ],
-        sources: {
-            profile: false,
-            prices: false,
-            course_ids: [],
-            gallery_tags: []
-        },
-        author: {
-            name: "平台示例"
-        },
-        status: "draft"
-    };
-    return {
-        ...structuredClone(planPreview),
-        example: true,
-        style: {
-            ...planPreview.style,
-            ...style
-        },
-        brand: brand
-    };
+
+    return { example: true, style, brand };
 }
 
 async function uploadFile(req) {
@@ -452,7 +335,7 @@ export async function platformOps(req, env, url, admin) {
         });
     }
     if (path === "/api/ops/ai/usage" && req.method === "GET") {
-        const from = url.searchParams.get("from"), to = url.searchParams.get("to"), start = planDate(from), end = planDate(to);
+        const from = url.searchParams.get("from"), to = url.searchParams.get("to"), start = dateValue(from), end = dateValue(to);
         if (end < start || end - start > 366 * 864e5) invalid("日期范围须在一年内", "to");
         const group = url.searchParams.get("group") || "day";
         if (![ "day", "tenant", "tool" ].includes(group)) invalid("汇总方式不正确", "group");

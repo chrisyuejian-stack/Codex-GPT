@@ -1,10 +1,6 @@
 import { repo } from "./repo.js";
-import {
-  backupTables,
-  restoreTables,
-  BUSINESS_SETTINGS,
-} from "./backup-model.js";
-import { bytes, unb64, textBytes, fail, now, randomId, sha } from "./core.js";
+import { backupTables, restoreTables, BUSINESS_SETTINGS } from "./backup-model.js";
+import { bytes, unb64, textBytes, fail, now, randomId } from "./core.js";
 export function backupConfig(env) {
   if (
     !env.CHANNEL_BACKUPS ||
@@ -229,30 +225,14 @@ export async function backupPage(env, id, table, offset, tenantId) {
       offset + file.count < manifest.tables[table] ? offset + file.count : null,
   };
 }
-export async function cleanupPromoUploads(env, at = now()) {
-  if (!env.CHANNEL_MEDIA) fail(503, "推广图片清理存储未配置");
-  const r = repo(env, null),
-    rows = await r.claimExpiredPromoUploads(at - 86400000),
-    completed = [];
-  for (const row of rows) {
-    const page = await env.CHANNEL_MEDIA.list({
-      prefix: "promo/" + row.tenant_id + "/" + row.id + "/",
-      limit: 1000,
-    });
-    if (page.objects.length)
-      await env.CHANNEL_MEDIA.delete(page.objects.map((x) => x.key));
-    if (!page.truncated) completed.push(row);
-  }
-  await r.finishPromoCleanup(completed);
-  return { examined: rows.length, removed: completed.length };
-}
+
 const worker = {
   async scheduled(controller, env, ctx) {
     if (controller.cron === "0 19 * * *")
       await startBackup(env, controller.scheduledTime);
     try {
       if (controller.cron === "*/5 * * * *") {
-        await cleanupPromoUploads(env, controller.scheduledTime);
+
         await repo(env, null).aiCleanupPage(controller.scheduledTime);
       }
     } finally {

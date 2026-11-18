@@ -16,8 +16,8 @@ test("P3 会话：机构和控制台续期每分钟最多一次，读写各自�
     const consoleLast=()=>db.prepare("SELECT last_seen_at FROM platform_sessions WHERE admin_id='adm_fixture'").get().last_seen_at;
     const before=tenantLast(), adminBefore=consoleLast();
     clock+=30000;
-    assert.equal((await request(s,"me")).queries,2);
-    assert.equal((await adminCall(f,"me")).queries,2);
+    assert.equal((await request(s,"me")).queries,1);
+    assert.equal((await adminCall(f,"me")).queries,1);
     assert.equal(tenantLast(),before);
     assert.equal(consoleLast(),adminBefore);
     clock+=31000;
@@ -41,9 +41,9 @@ test("P3 会话：机构和控制台续期每分钟最多一次，读写各自�
 
     limit.run("console-request-get:adm_fixture",240,clock);
     assert.equal((await adminCall(f,"me")).status,429);
-    assert.equal((await adminCall(f,"platform/features/referrals","PUT",{enabled:true})).status,200);
+    assert.equal((await adminCall(f,"announcements","POST",{title:"预算测试",content:"公告",roles:["academic"],tenants:[s.t.id]})).status,200);
     limit.run("console-request:adm_fixture",120,clock);
-    assert.equal((await adminCall(f,"platform/features/referrals","PUT",{enabled:false})).status,429);
+    assert.equal((await adminCall(f,"announcements","POST",{title:"预算测试",content:"公告",roles:["academic"],tenants:[s.t.id]})).status,429);
   }finally{Date.now=realNow; f.restore();}
 });
 

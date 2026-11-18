@@ -1,14 +1,10 @@
 import { platformCommand } from "./tenant-lifecycle.js";
 import { boundedText, LEGACY_ROW_BUDGET } from "./d1-limits.js";
 import { repo } from "./repo.js";
-import { fail, string, integer, randomId, now, sha, json } from "./core.js";
+import { fail, string, integer, randomId, now } from "./core.js";
 import { decrypt, encrypt } from "./crypto.js";
 import { backupManifest, backupPage, seal } from "./backup.js";
-import {
-  restoreTables,
-  BUSINESS_SETTINGS,
-  TABLE_LABELS,
-} from "./backup-model.js";
+import { restoreTables, BUSINESS_SETTINGS, TABLE_LABELS } from "./backup-model.js";
 import { LEGACY_TABLES, convertLegacy } from "./legacy-import.js";
 import { businessApi, scheduleView, generateTemplates } from "./scheduling.js";
 import { creditApi } from "./credits.js";
@@ -35,40 +31,7 @@ export async function adminTools(req, env, url, admin, readBody) {
     };
   if (path === "/api/backups" && req.method === "GET")
     return { items: await platform.backupRuns() };
-  if (path === "/api/referrals" && req.method === "GET") {
-    const rows = await platform.platformReferrals(off(url));
-    await platform.platformLog(
-      admin.id,
-      "referrals_view",
-      null,
-      "查看合作升学推荐联系方式",
-      "",
-    );
-    return {
-      items: await Promise.all(
-        rows.map(async (r) => ({
-          id: r.id,
-          tenant_id: r.tenant_id,
-          tenant_name: r.tenant_name,
-          name: r.name,
-          grade: r.grade,
-          direction: r.direction,
-          intention: r.intention,
-          parent_phone: await decrypt(
-            env,
-            r.parent_phone_enc,
-            r.tenant_id + ":phone",
-          ),
-          consent_name: r.consent_name,
-          consent_at: r.consent_at,
-          consent_method: r.consent_method,
-          consent_operator: r.consent_operator,
-          status: r.status,
-          created_at: r.created_at,
-        })),
-      ),
-    };
-  }
+
   const withdrawal = /^\/api\/announcements\/(msg_[a-f0-9]{24})\/withdraw$/.exec(path);
   if (withdrawal && req.method === "POST") {
     const d = await readBody(req), reason = string(d.reason, "原因", 1000);
@@ -135,7 +98,7 @@ export async function adminTools(req, env, url, admin, readBody) {
     return { export_id, tables: [...restoreTables, "tenant_settings"] };
   }
   const m =
-    /^\/api\/tenants\/(ten_[a-f0-9]{24})\/(overview|referrals|maintenance|business|operate|export-schema|export|jobs)(?:\/([^/]+))?(?:\/(page|preview|commit|cancel))?$/.exec(
+    /^\/api\/tenants\/(ten_[a-f0-9]{24})\/(overview|maintenance|business|operate|export-schema|export|jobs)(?:\/([^/]+))?(?:\/(page|preview|commit|cancel))?$/.exec(
       path,
     );
   if (!m) return undefined;
@@ -145,7 +108,7 @@ export async function adminTools(req, env, url, admin, readBody) {
   if (!t) fail(404, "不存在");
   if (await platform.purgeJob(tenantId)) fail(409, "机构删除作业进行中");
   if (action && section !== "jobs") fail(404, "不存在");
-  if (id && !["jobs", "referrals", "maintenance"].includes(section))
+  if (id && !["jobs", "maintenance"].includes(section))
     fail(404, "不存在");
   if (section === "export-schema" && req.method === "GET")
     return {
@@ -161,11 +124,7 @@ export async function adminTools(req, env, url, admin, readBody) {
     await r.endMaintenance(id, admin);
     return { ok: true };
   }
-  if (section === "referrals" && id && req.method === "POST") {
-    await readBody(req);
-    await r.receiveReferral(id, admin);
-    return { ok: true };
-  }
+
   if (section === "maintenance" && !id && req.method === "POST") {
     const d = await readBody(req),
       lease = { id: randomId("mnt"), reason: reason(d.reason) };
@@ -513,13 +472,7 @@ export async function adminTools(req, env, url, admin, readBody) {
       } else {
         if (manifest.done.length !== manifest.required.length)
           fail(409, "备份尚未暂存完整");
-        const missingPartner = await r.promoRestoreMissing(id);
-        if (missingPartner.length)
-          fail(
-            409,
-            "备份缺少当前合作课参课学员档案：" +
-              missingPartner.map((x) => x.name).join("、"),
-          );
+
         const broken = await r.restoreReferences(id);
         if (broken.length)
           fail(

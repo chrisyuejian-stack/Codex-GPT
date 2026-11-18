@@ -1,6 +1,6 @@
-import { call, ok, draft, seed, course, filled, school, accountToken } from "./fixtures-plans.mjs";
+import { call, ok, seed, course, school, accountToken } from "./fixtures-plans.mjs";
 
-export { call, ok, draft, seed, course, filled, school, accountToken };
+export { call, ok, seed, course, school, accountToken };
 
 export function model(s, output = {
     suggestions: []
@@ -18,19 +18,6 @@ export function model(s, output = {
             }
         };
     };
-}
-
-export async function content(s, extra = {}) {
-    return ok(await call(s, "content", "POST", {
-        type: "article",
-        subject: "music_interest",
-        title: "本地测试内容",
-        blocks: [ {
-            type: "paragraph",
-            text: "机构地址是上海测试路8号"
-        } ],
-        ...extra
-    }), 201);
 }
 
 export const aiExamples = [];

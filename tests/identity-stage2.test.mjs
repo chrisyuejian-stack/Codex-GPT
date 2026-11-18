@@ -1,16 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
-import { fixture } from './support.mjs';
-import { schoolFixture } from './fixtures-school.mjs';
-import { setup, accountToken, request } from './fixtures-credit.mjs';
-import { rolesInput } from '../src/server/accounts.js';
-import { repo } from '../src/server/repo.js';
-import { can, modules } from '../src/server/permissions.js';
-import { sha, b64, bytes } from '../src/server/core.js';
-import { encrypt, phoneIndex, platformPhoneIndex, newPassword } from '../src/server/crypto.js';
-import { rebuildPlatformPhoneIndex } from '../scripts/rebuild-platform-phone-index.mjs';
-import { startBackup } from '../src/server/backup.js';
+import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { fixture } from "./support.mjs";
+import { schoolFixture } from "./fixtures-school.mjs";
+import { setup, accountToken, request } from "./fixtures-credit.mjs";
+import { rolesInput } from "../src/server/accounts.js";
+import { repo } from "../src/server/repo.js";
+import { can, modules } from "../src/server/permissions.js";
+import { sha, b64, bytes } from "../src/server/core.js";
+import { encrypt, phoneIndex, platformPhoneIndex, newPassword } from "../src/server/crypto.js";
+import { rebuildPlatformPhoneIndex } from "../scripts/rebuild-platform-phone-index.mjs";
+import { startBackup } from "../src/server/backup.js";
 const PASSWORD='PhaseTwoSecure9';
 const examples=[];
 async function call(f,path,method='GET',data,cookie='',ops=false,extra={}) {
@@ -178,12 +178,10 @@ test('YX2 新角色组合合法性与权限并集，个人角色不能混用',as
   assert.deepEqual(rolesInput(['supervisor','consultant','academic','finance']),['supervisor','consultant','academic','finance']);
   for(const one of ['teacher','student','parent']) {assert.deepEqual(rolesInput([one]),[one]);assert.throws(()=>rolesInput([one,'consultant']));}
   const policy={modules:Object.fromEntries(modules.map(x=>[x,true])),settings:{},rights:[]};
-  assert.equal(can({roles:['consultant']},policy,'plans','write'),true);
+
   assert.equal(can({roles:['consultant']},policy,'prices','write'),false);
   assert.equal(can({roles:['consultant']},policy,'settings','propose'),true);
-  assert.equal(can({roles:['teacher'],teacher_id:'t'},policy,'growth_reports','write',{teacher_id:'other',student_id:'s'}),false);
-  assert.equal(can({roles:['parent'],guardian_student_ids:['s']},policy,'growth_reports','read',{student_id:'s',status:'draft'}),false);
-  assert.equal(can({roles:['parent'],guardian_student_ids:['s']},policy,'growth_reports','read',{student_id:'s',status:'published'}),true);
+
 });
 test('YX2 财务计管理席位，老师和家长不计；停用员工释放席位，重新启用受限制',()=>withSetup(async s=>{
   const finance=ok(await scoped(s,'accounts','POST',{phone:'13810000001',name:'财务',roles:['finance']}),201);
@@ -224,9 +222,9 @@ test('YX2 学员新增字段保存读取，伪造跨机构来源线索拒绝',()
 }));
 test('YX2 ops机构创建、列表分页、修改、模块标签、学科与覆盖配置、并发和Access',async()=>{
   const f=await fixture();try {
-    const created=ok(await admin(f,'tenants','POST',{name:'星光测试',slug:'starlight-test',staff_seat_limit:4,expires_at:'2026-12-31',subjects:['music_interest'],modules:{growth_reports:false},ai_override:{fast_daily_limit:12,deep_daily_limit:null}}),201);
-    assert.equal(created.modules.school_db,false);assert.equal(created.modules.growth_reports,false);assert.equal(created.modules.reports,true);
-    assert.equal(created.module_labels.growth_reports,'成长报告');assert.equal(created.module_labels.reports,'统计报表');assert.equal(created.subjects[0].key,'music_interest');
+    const created=ok(await admin(f,'tenants','POST',{name:'星光测试',slug:'starlight-test',staff_seat_limit:4,expires_at:'2026-12-31',subjects:['music_interest'],modules:{school_db:false},ai_override:{fast_daily_limit:12,deep_daily_limit:null}}),201);
+    assert.equal(created.modules.school_db,false);assert.equal(created.modules.reports,true);
+    assert.equal(created.module_labels.reports,'统计报表');assert.equal(created.subjects[0].key,'music_interest');
     const list=ok(await admin(f,'tenants?offset=0&limit=1'));assert.equal(list.total,1);assert.equal(list.next_offset,null);
     const updated=ok(await admin(f,'tenants','PUT',{id:created.id,version:created.version,name:'星光更新'}));assert.equal(updated.name,'星光更新');
     assert.ok(ok(await admin(f,'tenants','PUT',{id:created.id,version:created.version,name:'覆盖'}),409).details.latest);
@@ -249,13 +247,13 @@ test('YX2 统计报表与成长报告权限/模块完全独立，财务仍能查
   const fin=await accountToken(s,['finance']);
   ok(await request(s,'finance/report?month=2026-11','GET',undefined,fin.token));
   const exported=await s.f.request('https://school.test/'+s.t.slug+'/api/export?kind=report&month=2026-11',{headers:{Cookie:'channel_session='+fin.token}});assert.equal(exported.status,200);
-  const p=await s.r.policy();assert.equal(can({roles:['finance']},p,'reports','read'),true);assert.equal(can({roles:['finance']},p,'growth_reports','read'),false);
-  assert.equal(can({roles:['academic']},p,'reports','read'),true);assert.equal(can({roles:['academic']},p,'growth_reports','write'),true);
-  await repo(s.f.env,null).module(s.t.id,'growth_reports',false,'adm_fixture');
+  const p=await s.r.policy();assert.equal(can({roles:['finance']},p,'reports','read'),true);
+  assert.equal(can({roles:['academic']},p,'reports','read'),true);
+
   ok(await request(s,'finance/report?month=2026-11','GET',undefined,fin.token));
-  await repo(s.f.env,null).module(s.t.id,'growth_reports',true,'adm_fixture');await repo(s.f.env,null).module(s.t.id,'reports',false,'adm_fixture');
-  const current=await repo({...s.f.env},s.t.id).policy();assert.equal(can({roles:['academic']},current,'growth_reports','read'),true);assert.equal(can({roles:['finance']},current,'reports','read'),false);
-  const me=ok(await scoped(s,'me'));assert.equal(me.module_labels.growth_reports,'成长报告');assert.equal(me.module_labels.reports,'统计报表');
+  await repo(s.f.env,null).module(s.t.id,'reports',false,'adm_fixture');
+  const current=await repo({...s.f.env},s.t.id).policy();assert.equal(can({roles:['finance']},current,'reports','read'),false);
+  const me=ok(await scoped(s,'me'));assert.equal(me.module_labels.reports,'统计报表');
   ok(await scoped(s,'reports/rpt_not_implemented','GET',undefined,fin.token),404);
 }));
 test('YX2 新字段和家长绑定进入加密备份快照',()=>withSetup(async s=>{
@@ -275,7 +273,7 @@ test('YX2 根路径在认证前拒绝控制台与未知路由，路径新接口�
 test('YX2 顾问兼财务权限取并集，教务可管家长，平台顾问不能管理机构',()=>withSetup(async s=>{
   const combo=await accountToken(s,['consultant','finance']);
   const me=ok(await scoped(s,'me','GET',undefined,combo.token));
-  assert.equal(me.capabilities.leads.create,true);assert.equal(me.capabilities.plans.write,true);assert.equal(me.capabilities.reports.read,true);assert.equal(me.capabilities.growth_reports.write,false);
+  assert.equal(me.capabilities.leads.create,true);assert.equal(me.capabilities.reports.read,true);
   const academic=await accountToken(s,['academic']);
   ok(await scoped(s,'students/'+s.students[0]+'/guardians','POST',{phone:'13811112222',name:'教务开通',relation:'father'},academic.token),201);
   s.f.db.raw.prepare("UPDATE platform_admins SET role='consultant' WHERE id='adm_fixture'").run();

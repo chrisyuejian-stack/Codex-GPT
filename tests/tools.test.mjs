@@ -9,7 +9,7 @@ const ok = async (r, code = 200) => {
   assert.ok(r.queries <= 40);
   return r.body;
 };
-test("第六阶段：班级、跟进、线索、推荐均校验同机构关联；招生转正原子建档；名单、金额无个人泄漏", async () => {
+test("第六阶段：班级、跟进、线索均校验同机构关联；招生转正原子建档；名单、金额无个人泄漏", async () => {
   const f = await fixture();
   try {
     const s = { ...(await setup(f, 2)), f },
@@ -88,20 +88,7 @@ test("第六阶段：班级、跟进、线索、推荐均校验同机构关联�
       }),
     );
     assert.ok(converted.student_id);
-    const parents = await ok(
-      await request(s, "tools/referrals", "POST", {
-        student_id: s.students[0],
-        intention: "本科",
-        parent_phone: "13900000008",
-        consent_name: "同意人",
-        consent_at: "2026-01-01T10:00",
-        consent_method: "书面",
-        consent_operator: "经办人",
-      }),
-    );
-    assert.ok(parents.id);
-    const rr = await ok(await request(s, "tools/referrals"));
-    assert.ok(!JSON.stringify(rr).includes("13900000008"));
+
     const student = await accountToken(s, ["student"], s.students[0]);
     await ok(
       await request(s, "tools/classes", "GET", undefined, student.token),

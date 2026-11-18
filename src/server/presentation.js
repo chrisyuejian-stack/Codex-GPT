@@ -51,7 +51,7 @@ export const MODULE_LABELS = Object.freeze({
   teacher_pay: "教师课酬",
   settlements: "月度结算",
   reports: "统计报表",
-  content: "招生内容", plans: "课程方案", growth_reports: "成长报告", school_db: "院校库",
+     school_db: "院校库",
   prices: "报价价格", feedback: "课后反馈", parents: "家长管理", ai: "AI工具", usage: "AI用量",
   exports: "导出",
   settings: "设置",
@@ -60,10 +60,10 @@ export const MODULE_LABELS = Object.freeze({
   profile: "个人中心",
   classes: "班级",
   leads: "招生线索",
-  referrals: "升学推荐",
+
   imports: "导入",
   comments: "课后点评",
-  promo: "推广中心",
+
 });
 export const ACTION_LABELS = Object.freeze({
   read: "查看",

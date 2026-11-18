@@ -1,16 +1,16 @@
-import {platformOps} from './platform-ops.js';
-import { aiOps } from './ai.js';
-import { repo } from './repo.js';
-import { authenticateAdmin, requireAccess, readCookie } from './auth.js';
-import { platformPhoneIndex, digestPassword, phoneIndex, encrypt, temporaryPassword, newPassword } from './crypto.js';
-import { body, json, fail, string, integer, version, randomId, now, sha, b64, bytes, equal, clientInfo, turnstileMode, accessMode, HttpError } from './core.js';
-import { publicUser, modules } from './permissions.js';
-import { requireCan } from './accounts.js';
-import { validSlug } from './tenant.js';
-import { platformCommand } from './tenant-lifecycle.js';
+import { platformOps } from "./platform-ops.js";
+import { aiOps } from "./ai.js";
+import { repo } from "./repo.js";
+import { authenticateAdmin, requireAccess, readCookie } from "./auth.js";
+import { platformPhoneIndex, digestPassword, phoneIndex, encrypt, temporaryPassword, newPassword } from "./crypto.js";
+import { body, json, fail, string, integer, version, randomId, now, sha, b64, bytes, equal, clientInfo, turnstileMode, accessMode, HttpError } from "./core.js";
+import { publicUser, modules } from "./permissions.js";
+import { requireCan } from "./accounts.js";
+import { validSlug } from "./tenant.js";
+import { platformCommand } from "./tenant-lifecycle.js";
 
 export const ROOT_COOKIE='__Host-yx_session';
-export const identityLabels={plan_templates:'方案模版',plan_references:'参考方案',content:'招生内容',plans:'课程方案',growth_reports:'成长报告',school_db:'院校库',prices:'报价价格',feedback:'课后反馈',parents:'家长管理',ai:'AI工具',usage:'AI用量'};
+export const identityLabels={school_db:'院校库',prices:'报价价格',feedback:'课后反馈',parents:'家长管理',ai:'AI工具',usage:'AI用量'};
 export function identityPath(path) {
   return /^\/api\/(?:auth\/(?:login(?:\/choose)?|status)|parent\/children|parents\/[^/]+\/(?:disable|reset-password)|students\/[^/]+\/guardians(?:\/[^/]+)?)$/.test(path);
 }
@@ -232,7 +232,7 @@ function opsInput(d,old,id) {
   if(date!==null&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date)) fail(422,'到期日期不正确','validation_failed');
   const selected=d.subjects===undefined?undefined:d.subjects;
   if(selected!==undefined&&(!Array.isArray(selected)||selected.some(x=>!['music_interest','music_exam','art_interest','art_exam'].includes(x))||new Set(selected).size!==selected.length)) fail(422,'学科包不正确','validation_failed');
-  if(d.modules&&(typeof d.modules!=='object'||Array.isArray(d.modules)||Object.entries(d.modules).some(([k,v])=>!['content','plans','growth_reports','school_db'].includes(k)||typeof v!=='boolean'))) fail(422,'模块格式不正确','validation_failed');
+  if(d.modules&&(typeof d.modules!=='object'||Array.isArray(d.modules)||Object.entries(d.modules).some(([k,v])=>!['school_db'].includes(k)||typeof v!=='boolean'))) fail(422,'模块格式不正确','validation_failed');
   const override=d.ai_override;
   if(override) for(const key of ['fast_daily_limit','deep_daily_limit']) if(override[key]!==null) integer(override[key],key,0,1000000);
   if(d.status!==undefined&&!['active','paused'].includes(d.status)) fail(422,'机构状态不正确','validation_failed');
