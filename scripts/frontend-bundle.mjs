@@ -55,6 +55,12 @@ export async function tenantAssets() {
       "\n" +
       (await read("src/tenant/yx-theme.css")) +
       "\n" +
-      (await read("src/tenant/v2.css")),
+      (await read("src/tenant/v2.css")) +
+      "\n" +
+      (await read("src/tenant/fq-fonts.css")) +
+      "\n" +
+      (await read("src/tenant/fq-assets.css")) +
+      "\n" +
+      (await read("src/tenant/fq.css")),
   };
 }

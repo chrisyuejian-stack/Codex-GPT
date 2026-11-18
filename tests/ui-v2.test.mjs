@@ -8,7 +8,11 @@ test("UI重构v2：新页面并入既有两条静态路径，样式最后加载�
     css = await readFile("src/tenant/v2.css", "utf8"),
     assets = await tenantAssets();
   assert.ok(assets.js.indexOf("ChannelV2") > assets.js.indexOf("ChannelRebuild"));
-  assert.ok(assets.css.trimEnd().endsWith(css.trimEnd()));
+  // 枫琴教务中心：fq.css（共用样式）在 v2.css 之后、作为最后一层加载。
+  const fq = await readFile("src/tenant/fq.css", "utf8");
+  assert.ok(assets.css.trimEnd().endsWith(fq.trimEnd()));
+  assert.ok(assets.css.indexOf(css.trimEnd()) < assets.css.indexOf(fq.trimEnd()));
+  assert.doesNotMatch(fq, /fonts\.googleapis|cdn\.jsdelivr|unpkg\.com/);
   assert.doesNotMatch(js, /\.innerHTML\s*=|\.style\.|setAttribute\(["']style["']/);
   // 只允许共享弹窗 UI.confirm，不允许浏览器原生 alert/prompt/confirm。
   assert.ok(!/(?<![.\w])(?:alert|prompt|confirm)\(/.test(js));
