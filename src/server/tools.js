@@ -1,15 +1,7 @@
 import { withStudentSearchKeys } from "./student-search.js";
 import { VIEW_DEFAULTS } from "../shared/view.js";
 import { repo } from "./repo.js";
-import {
-  fail,
-  string,
-  integer,
-  randomId,
-  now,
-  version,
-  phone,
-} from "./core.js";
+import { fail, string, integer, randomId, now, version, phone } from "./core.js";
 import { requireCan } from "./accounts.js";
 import { can } from "./permissions.js";
 import { encrypt, decrypt } from "./crypto.js";
@@ -22,7 +14,7 @@ export const toolResources = {
   followup_tasks: "followup",
   student_routines: "followup",
   leads: "leads",
-  referrals: "referrals",
+
 };
 export const LEAD_STAGES = {
   new: "新咨询",
@@ -73,30 +65,13 @@ async function normalize(env, t, r, kind, d, user, old) {
       "class_members",
       "followup_notes",
       "student_routines",
-      "referrals",
+
     ].includes(kind)
   ) {
     const student = await reference(r, "students", d.student_id);
     row.student_id = student.id;
     if (old && old.student_id !== student.id) fail(400, "不可更换关联学员");
-    if (kind === "referrals") {
-      row.name = student.name;
-      row.grade = student.grade;
-      row.direction = student.direction;
-      row.intention = text(d, "intention", 1000, true);
-      row.parent_phone_enc = await encrypt(
-        env,
-        phone(d.parent_phone),
-        t.id + ":phone",
-      );
-      row.consent_name = text(d, "consent_name", 100, true);
-      row.consent_at = instant(d.consent_at);
-      if (Date.parse(row.consent_at) > now())
-        fail(400, "同意时间不能晚于当前时间");
-      row.consent_method = text(d, "consent_method", 100, true);
-      row.consent_operator = text(d, "consent_operator", 100, true);
-      row.status = "submitted";
-    }
+
   }
   if (kind === "followup_tasks")
     row.student_id = d.student_id
@@ -198,11 +173,7 @@ function safe(kind, row) {
   return kind === "class_members" ? withStudentSearchKeys(out) : out;
 }
 export async function toolsApi(req, env, t, user, policy, path, url, readBody) {
-  if (
-    /^\/api\/tools\/referrals(?:\/|$)/.test(path) &&
-    !(await repo(env, null).referralsEnabled())
-  )
-    fail(403, "功能未开放");
+
   const r = repo(env, t.id);
   if (!path.startsWith("/api/system-messages")) staff(user);
   if (path === "/api/followup-assignees" && req.method === "GET") {
@@ -378,33 +349,15 @@ export async function toolsApi(req, env, t, user, policy, path, url, readBody) {
       0,
       1000000,
     );
-    const promoAccess = can(user, policy, "promo", "read");
-    const { items, unread: unread_count, promo } = await r.systemMessagePage(user, offset, promoAccess);
-    if (promoAccess) {
-      for (const row of promo)
-        items.push({
-          id: row.id,
-          title: row.title,
-          content: row.summary,
-          starts_at: row.publish_at,
-          source: "fengqin",
-          thumbnail_key: row.cover || row.detail_image_key,
-          is_read: Number(row.is_read > 0),
-        });
-      items.sort(
-        (a, b) => b.starts_at - a.starts_at || a.id.localeCompare(b.id),
-      );
-    }
+
+    const { items, unread: unread_count } = await r.systemMessagePage(user, offset);
+
     return { items, unread_count };
   }
   const read = /^\/api\/system-messages\/([^/]+)\/read$/.exec(path);
   if (read && req.method === "POST") {
     await readBody(req);
-    if (/^camp_[a-f0-9]{24}$/.test(read[1])) {
-      requireCan(user, policy, "promo", "read");
-      if (!(await r.promoVisible(read[1])).length) fail(404, "不存在");
-      await r.promoMarkRead(read[1], user);
-    } else await r.readMessage(read[1], user);
+    await r.readMessage(read[1], user);
     return { ok: true };
   }
   const membership = /^\/api\/tools\/classes\/([^/]+)\/members$/.exec(path);
@@ -540,28 +493,7 @@ export async function toolsApi(req, env, t, user, policy, path, url, readBody) {
   if (operation) fail(404, "不存在");
   if ((req.method === "POST" && id) || (req.method !== "POST" && !id))
     fail(404, "不存在");
-  if (kind === "referrals" && old) {
-    if (
-      req.method !== "PATCH" ||
-      d.status !== "withdrawn" ||
-      old.status !== "submitted"
-    )
-      fail(409, "推荐已接收或已撤回");
-    await r.commitBusiness(
-      revision,
-      [
-        {
-          resource: kind,
-          previous: old,
-          data: { ...old, status: "withdrawn" },
-        },
-      ],
-      user,
-      module,
-      "withdraw",
-    );
-    return { ok: true };
-  }
+
   if (req.method === "DELETE") {
     if (kind === "classes" && (await r.classMembers(id)).length)
       fail(409, "请先移除班级成员或归档班级");

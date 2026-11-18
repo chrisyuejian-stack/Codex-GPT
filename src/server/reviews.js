@@ -1,4 +1,4 @@
-import {feedbackAliases,feedbackPersonal,feedbackInserts,feedbackDecisions,mergeReviewChanges} from './growth-feedback.js';
+import { feedbackAliases, feedbackPersonal, feedbackInserts, feedbackDecisions, mergeReviewChanges } from "./growth-feedback.js";
 import { maxDebtUnits } from "./debt.js";
 import { repo } from "./repo.js";
 import { can } from "./permissions.js";
@@ -7,17 +7,13 @@ import { fail, sha, randomId, now, version, string, integer } from "./core.js";
 import { day, nextDay } from "./scheduling.js";
 import { effectivePolicies } from "./absence.js";
 import { reviewedAttendanceChanges, attendanceLockMonths } from "./credits.js";
-import {
-  ATTENDANCE_LABELS,
-  lessonWindow,
-  SUBMISSION_GRACE_MS,
-} from "./presentation.js";
+import { ATTENDANCE_LABELS, lessonWindow, SUBMISSION_GRACE_MS } from "./presentation.js";
 function staff(user, policy, record) {
   return can(user, policy, "attendance", "confirm", record);
 }
 function scopeRecord(ctx, user) {
   const l = ctx.lessons[0];
-  if (l?.source_course_id) fail(403, "合作课不参与机构出勤和点评");
+
   if (!l) fail(404, "不存在");
   return {
     ...l,
@@ -200,7 +196,7 @@ export async function reviewApi(
       ...(user.roles.includes("teacher") ? {} : { deducted: p.deducted }),
       version: p.version,
     }));
-    const growthRows=canDraft && policy.modules.growth_reports ? await r.growthReviewRows(match[1]) : [];
+    const growthRows=canDraft && policy.modules.feedback ? await r.growthReviewRows(match[1]) : [];
     return {
       ...(growthRows.some(x=>x.submission_id===latest?.id&&JSON.parse(x.doc_json).structured) ? {personal:growthRows.filter(x=>x.submission_id===latest?.id).map(x=>({...JSON.parse(x.doc_json),copied_count:x.copied_count}))} : {}),
       lesson: {
@@ -284,7 +280,7 @@ export async function reviewApi(
         { ctx, record } = await context(r, user, policy, id),
         latest = ctx.submissions[0],
         changes = [];
-      const structured = policy.modules.growth_reports ? await r.growthReviewRows(id) : [];
+      const structured = policy.modules.feedback ? await r.growthReviewRows(id) : [];
       const personal = !decision ? await feedbackPersonal(r,d,ctx,policy,structured) : null;
       let submittedId = null;
       let result = { committed: true, lesson_id: id },
@@ -381,7 +377,7 @@ export async function reviewApi(
             homework: string(d.homework || "", "作业", 4000, 0),
           };
         changes.push(...publicationChanges(ctx, proposal, people, user));
-        changes.push(...feedbackInserts(policy.modules.growth_reports?(personal??[]):null,record,null,structured,proposal.public_text,proposal.homework,"confirmed",people));
+        changes.push(...feedbackInserts(policy.modules.feedback?(personal??[]):null,record,null,structured,proposal.public_text,proposal.homework,"confirmed",people));
         audit = "correct_comments";
       } else {
         const kind = d.kind;
@@ -466,7 +462,7 @@ export async function reviewApi(
           },
         );
         submittedId = submitted.id;
-        const additions = feedbackInserts(policy.modules.growth_reports?(personal??[]):null,record,submitted.id,structured,public_text,homework,'pending',people);
+        const additions = feedbackInserts(policy.modules.feedback?(personal??[]):null,record,submitted.id,structured,public_text,homework,'pending',people);
         if(policy.settings.feedback_auto_confirm === true){
           if(kind==='attendance'){
             const credit=await r.creditContext(id);await r.primeReferences({typeIds:credit.lessons.map(l=>l.course_type_id)});
@@ -592,7 +588,7 @@ export async function timetableApi(env, tenant, user, policy, url) {
     to: nextDay(to, -1),
     items: rows.map((l) => ({
       start_at: l.start_at,
-      source_course_id: l.source_course_id,
+
       duration: l.duration,
       course_name: l.course_name,
       teacher_name: l.teacher_name,

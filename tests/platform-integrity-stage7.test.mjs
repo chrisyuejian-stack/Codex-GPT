@@ -109,29 +109,6 @@ test("YX7I 导入SQL故障整批回滚，没有新课程/映射/开通标志；�
     }));
 }));
 
-test("YX7I 禁用机构/模块/越机构会话的资源请求被拒绝，R2不读取", () => using(async f => {
-    const a = await setup(f, 1, "resourcea"), b = await setup(f, 1, "resourceb");
-    a.f = f;
-    b.f = f;
-    const row = ok(await upload(f), 201);
-    ok(await publish(f, row));
-    let reads = 0;
-    const get = f.env.CHANNEL_MEDIA.get.bind(f.env.CHANNEL_MEDIA);
-    f.env.CHANNEL_MEDIA.get = async k => {
-        reads++;
-        return get(k);
-    };
-    ok(await call(a, "/" + b.t.slug + "/api/styles/test_style/versions/1.0.0/assets/pic.png"), 404);
-    assert.equal(reads, 0);
-    f.db.raw.prepare("UPDATE tenants SET status='paused' WHERE id=?").run(a.t.id);
-    ok(await call(a, "styles/test_style/versions/1.0.0/assets/pic.png"), 403);
-    assert.equal(reads, 0);
-    f.db.raw.prepare("UPDATE tenants SET status='active' WHERE id=?").run(a.t.id);
-    f.db.raw.prepare("UPDATE tenant_modules SET enabled=0 WHERE tenant_id=? AND id IN('plans','content','growth_reports')").run(a.t.id);
-    ok(await call(a, "styles/test_style/versions/1.0.0/assets/pic.png"), 404);
-    assert.equal(reads, 0);
-}));
-
 test("YX7I 深层模板和非法标量返回422，不触发500或写入草稿", () => using(async f => {
     const b = ok(await ops(f, "subject-packs")).items[0].versions[0];
     const d = structuredClone(b);
@@ -186,26 +163,25 @@ test("YX7I 平台开通使用当前发布模板，已有机构普通保存不自
     assert.equal(saved.subjects[0].pack_version, "0.2");
 }));
 
-test("YX7I 纯成长风格财务不可读，文档类型和默认类型由服务器检查", () => using(async f => {
-    const s = await setup(f, 1, "typedstyles");
-    s.f = f;
-    const m = manifest(f, "growth_only");
-    m.doc_types = [ "report", "feedback_card" ];
-    const row = ok(await upload(f, m), 201);
+test("YX7I 禁用机构/模块/越机构会话的资源请求被拒绝，R2不读取", () => using(async f => {
+    const a = await setup(f, 1, "resourcea"), b = await setup(f, 1, "resourceb");
+    a.f = f;
+    b.f = f;
+    const row = ok(await upload(f), 201);
     ok(await publish(f, row));
-    const {accountToken: accountToken} = await import("./fixtures-plans.mjs");
-    const finance = await accountToken(s, [ "finance" ]);
-    ok(await call(s, "styles/growth_only/versions/1.0.0/assets/pic.png", "GET", undefined, finance.token), 404);
-    ok(await call(s, "plans", "POST", {
-        student_id: s.students[0],
-        subject: "music_interest",
-        title: "错误类型",
-        style: {
-            pack_id: row.pack_id
-        }
-    }), 422);
-    ok(await ops(f, "style-packs/default", "PUT", {
-        doc_type: "plan",
-        pack_id: row.pack_id
-    }), 422);
+    let reads = 0;
+    const get = f.env.CHANNEL_MEDIA.get.bind(f.env.CHANNEL_MEDIA);
+    f.env.CHANNEL_MEDIA.get = async k => {
+        reads++;
+        return get(k);
+    };
+    ok(await call(a, "/" + b.t.slug + "/api/styles/test_style/versions/1.0.0/assets/pic.png"), 404);
+    assert.equal(reads, 0);
+    f.db.raw.prepare("UPDATE tenants SET status='paused' WHERE id=?").run(a.t.id);
+    ok(await call(a, "styles/test_style/versions/1.0.0/assets/pic.png"), 403);
+    assert.equal(reads, 0);
+    f.db.raw.prepare("UPDATE tenants SET status='active' WHERE id=?").run(a.t.id);
+    f.db.raw.prepare("UPDATE tenant_modules SET enabled=0 WHERE tenant_id=? AND id='feedback'").run(a.t.id);
+    ok(await call(a, "styles/test_style/versions/1.0.0/assets/pic.png"), 404);
+    assert.equal(reads, 0);
 }));

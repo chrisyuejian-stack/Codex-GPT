@@ -1,69 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fixture } from "./support.mjs";
-import {
-  setup,
-  request,
-  accountToken,
-  pack,
-  mutate,
-  lesson,
-} from "./fixtures-credit.mjs";
+import { setup, request, accountToken, pack, mutate, lesson } from "./fixtures-credit.mjs";
 import { adminCall } from "./fixtures-admin.mjs";
-
-test("C复核：合作升学默认暂停，主管不能启用，机构和控制台接口拒绝，平台显式开启后恢复", async () => {
-  const f = await fixture();
-  try {
-    f.db.raw
-      .prepare("DELETE FROM platform_state WHERE id='referrals_enabled'")
-      .run();
-    const s = { ...(await setup(f, 1)), f };
-    for (const method of ["GET", "POST"])
-      assert.equal(
-        (
-          await request(
-            s,
-            "tools/referrals",
-            method,
-            method === "POST" ? {} : undefined,
-          )
-        ).status,
-        403,
-      );
-    assert.equal(
-      (await request(s, "me")).body.capabilities.referrals.read,
-      false,
-    );
-    assert.equal((await adminCall(f, "me")).body.referrals_enabled, false);
-    assert.equal((await adminCall(f, "referrals")).status, 404);
-    assert.equal(
-      (
-        await adminCall(
-          f,
-          "tenants/" + s.t.id + "/business?path=%2Ftools%2Freferrals",
-        )
-      ).status,
-      403,
-    );
-    assert.equal(
-      (await s.call("settings", "PUT", { key: "REFERRALS_MODE", value: "on" }))
-        .status,
-      400,
-    );
-    assert.equal(
-      (
-        await adminCall(f, "platform/features/referrals", "PUT", {
-          enabled: true,
-        })
-      ).status,
-      200,
-    );
-    assert.equal((await request(s, "tools/referrals")).status, 200);
-    assert.equal((await adminCall(f, "referrals")).status, 200);
-  } finally {
-    f.restore();
-  }
-});
 
 test("C复核：收款与课时流水批量返回本机构学员姓名，学员仅见本人且查询预算不超限", async () => {
   const f = await fixture();

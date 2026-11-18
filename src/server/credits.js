@@ -662,7 +662,7 @@ async function execute(req, env, tenant, user, policy, path, url, readBody) {
     result = { committed: true, ...reference };
   } else if (action) {
     const lesson = await owned(r, "lessons", id);
-    if (lesson.source_course_id) fail(403, "合作课不参与机构销课");
+
     if (version(d.lesson_version ?? d.version) !== lesson.version)
       fail(409, "课程已修改，请刷新");
     const ctx = await r.creditContext(id),

@@ -1,6 +1,6 @@
 import { fail, randomId, now } from "./core.js";
 
-import { invalid, text, object, ids, list } from "./content-document.js";
+import { invalid, text, object, ids, list } from "./tool-validation.js";
 
 export function feedbackAliases(input) {
     const d = {
@@ -32,7 +32,7 @@ export function feedbackMessage(v = {}) {
 
 export async function feedbackPersonal(r, d, ctx, policy, oldRows = []) {
     if (d.personal === undefined && d.applied_suggestion_ids === undefined) return null;
-    if (!policy.modules.growth_reports) fail(404, "不存在", "not_found");
+    if (!policy.modules.feedback) fail(404, "不存在", "not_found");
     const applied = ids(d.applied_suggestion_ids ?? [], "applied_suggestion_ids", 30), seen = new Set;
     const personal = list(d.personal ?? [], "personal", 200).map(raw => {
         const x = object(raw, "personal");

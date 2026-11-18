@@ -1,8 +1,8 @@
-import {refreshGalleryStorage,requireGalleryCapacity,storageFull,storagePending} from './gallery-storage.js';
-import {planDate} from './plan-math.js';
+import { refreshGalleryStorage, requireGalleryCapacity, storageFull, storagePending } from "./gallery-storage.js";
+import { dateValue } from "./tool-validation.js";
 import { repo } from "./repo.js";
 
-import { body, json, fail, randomId, now, version, HttpError, b64, unb64 } from "./core.js";
+import { body, json, fail, randomId, version, HttpError, b64, unb64 } from "./core.js";
 
 import { can } from "./permissions.js";
 
@@ -211,7 +211,7 @@ async function prepare(r, kind, input, id, allowRetired = false) {
       if (!months.length) error("月份不能为空", "items." + i + ".months");
       const list = months.map(m => num(m, "months", 1, 12));
       if (new Set(list).size !== list.length) error("月份不能重复", "months");
-      if(x.exact_date!==undefined && x.exact_date!==null) planDate(x.exact_date,"exact_date");
+      if(x.exact_date!==undefined && x.exact_date!==null) dateValue(x.exact_date,"exact_date");
       return {
         ...(x.exact_date!==undefined ? {exact_date:x.exact_date} : {}),
         key: str(x.key, "key", 64),
@@ -650,20 +650,14 @@ export async function toolSettingsApi(req, env, resolved, user, policy, url) {
   const path = resolved.relative;
   if (!toolSettingsPath(path)) return undefined;
   env.__identityContract = true;
-  const planFile = /^\/api\/gallery\/[^/]+\/file$/.test(path) && req.method === "GET" && can(user,policy,"plans","read");
-  if (!policy.modules.settings && !planFile) fail(404, "不存在", "not_found");
+
+  if (!policy.modules.settings) fail(404, "不存在", "not_found");
   const r = repo(env, resolved.tenant.id), apiBase = resolved.root ? "/api" : resolved.base.replace(/\/$/, "") + "/api";
   const c = await changesApi(req, r, path, user, policy, url);
   if (c !== undefined) return c;
   const gallery = /^\/api\/gallery(?:\/([^/]+)(\/file)?)?$/.exec(path);
   if (gallery) {
-    if (planFile && !can(user,policy,"settings","read",{settings_scope:"tools"})) {
-      const image = await r.planStaffMedia(gallery[1]);
-      if (!image) fail(404,"不存在","not_found");
-      const object = await env.CHANNEL_MEDIA.get(image.r2_key);
-      if (!object) fail(404,"不存在","not_found");
-      return new Response(unb64(await object.text()),{headers:{"Content-Type":image.mime,"Cache-Control":"private, max-age=60","X-Content-Type-Options":"nosniff"}});
-    }
+
     allowed(user, policy, req.method === "GET" ? "read" : "write");
     if (!gallery[1] && req.method === "GET") {
       const {offset: offset, limit: limit} = page(url), data = await r.settingsGalleryList(url.searchParams.get("tag"), offset, limit);
@@ -883,6 +877,6 @@ export async function validateSettingProposal(r,payload) {
  const targets=await changeTargets(r,payload,{});
  for(const target of targets)await prepare(r,target.kind,target.doc,target.id);
  const target_versions=Object.fromEntries(targets.map(t=>[t.kind+':'+t.id,t.old?.version||1]));
- const count=await r.settingsAffectedPlanCount();
- return {payload:{ops:payload.ops,side_effects:[],affected:{plans_in_progress:count}},target_versions};
+
+ return {payload:{ops:payload.ops,side_effects:[],affected:{}},target_versions};
 }

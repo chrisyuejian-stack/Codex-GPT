@@ -460,7 +460,7 @@ test("二级页面改版·角色权限：整张表勾选、一次保存；默认
     const block = src.slice(src.indexOf(role + ": {"), src.indexOf("}", src.indexOf(role + ": {")));
     return Object.fromEntries(
       [...block.matchAll(/(\w+): \[([^\]]*)\]/g)]
-        .filter((m) => !["accounts", "logs", "profile"].includes(m[1]))
+        .filter((m) => !["accounts", "logs", "profile", "referrals", "promo"].includes(m[1]))
         .map((m) => [m[1], m[2].replace(/\s/g, "")]),
     );
   };

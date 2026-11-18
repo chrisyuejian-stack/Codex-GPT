@@ -67,33 +67,3 @@ export async function confirmFeedback(s, id, action = "confirm") {
         } : {}
     });
 }
-
-export async function batch(s, extra = {}) {
-    return ok(await call(s, "report-batches", "POST", {
-        name: "秋季报告",
-        from: "2026-11-01",
-        to: "2026-11-30",
-        report_class_id: s.reportClass.id,
-        teacher_id: s.teacher,
-        student_ids: s.students,
-        ...extra
-    }), 201);
-}
-
-export async function readyDoc(s, row, token = s.academic.token) {
-    return ok(await call(s, "reports/" + row.id, "PUT", {
-        version: row.version,
-        scores: row.dimensions_snapshot.map(x => ({
-            key: x.key,
-            value: 3,
-            previous: 999
-        })),
-        texts: {
-            progress: "节奏更稳定",
-            focus: "注意句尾",
-            teacher_note: "继续保持",
-            next_goals: [ "练习下一首" ],
-            home_practice: [ "每天练习" ]
-        }
-    }, token));
-}

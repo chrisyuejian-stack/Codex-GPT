@@ -1,13 +1,6 @@
 import { requireCan } from "./accounts.js";
 import { fail, now } from "./core.js";
-import {
-  day,
-  nextDay,
-  normalizeMakeupLesson,
-  occupiesSchedule,
-  prepareMakeupLesson,
-  scheduleConflicts,
-} from "./scheduling.js";
+import { day, nextDay, normalizeMakeupLesson, occupiesSchedule, prepareMakeupLesson, scheduleConflicts } from "./scheduling.js";
 
 const reasons = [
   "same_time",
@@ -310,7 +303,7 @@ export async function makeupPlanning(
   const part = await r.businessGet("lesson_participants", id);
   if (!part) fail(404, "不存在");
   const original = await r.businessGet("lessons", part.lesson_id);
-  if (!original || original.source_course_id) fail(404, "不存在");
+  if (!original) fail(404, "不存在");
   if (part.makeup_for) fail(400, "不能把补课再次作为原课");
   const student = part.student_id;
   if (action === "check") {

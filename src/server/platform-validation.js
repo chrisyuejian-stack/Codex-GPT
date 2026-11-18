@@ -1,9 +1,8 @@
-import {validateSamplePlans} from './plan-v2-samples.js';
-import { invalid, text, object, list, ids } from "./content-document.js";
+import { invalid, text, object, list, ids } from "./tool-validation.js";
 
 import { stageRuleKeys, subjectPacks } from "./subject-packs.js";
 
-import { planDate } from "./plan-math.js";
+import { dateValue } from "./tool-validation.js";
 
 export const docTypes = [ "plan", "report", "feedback_card", "article" ];
 
@@ -73,7 +72,7 @@ export function subjectContent(raw,subjectKey=null) {
         if (!n.months.length) invalid("月份不能为空", "months");
         unique(n.months, "months");
         n.months.forEach(x => integer(x, "months", 1, 12));
-        if (n.exact_date !== undefined && n.exact_date !== null) planDate(n.exact_date);
+        if (n.exact_date !== undefined && n.exact_date !== null) dateValue(n.exact_date);
         if (n.next_year !== undefined) bool(n.next_year, "next_year");
         if (n.note !== undefined) text(n.note, "note", 1e3);
     }
@@ -124,7 +123,6 @@ export function subjectContent(raw,subjectKey=null) {
     ids(d.constraints.prohibited_terms, "prohibited_terms", 200);
     for (const k of [ "policy_source", "student_privacy", "report_basis" ]) str(d.constraints[k], k, 2e3);
     str(d.tone, "tone", 1e3);
-    if(samplePlans!==undefined){d.sample_plans=validateSamplePlans(samplePlans,d);if(subjectKey&&d.sample_plans.some(x=>x.doc.subject!==subjectKey))invalid('方案示例须与所属学科一致','sample_plans');}
     return d;
 }
 

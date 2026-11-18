@@ -1,17 +1,9 @@
-import { studentNickname } from './student-nickname.js';
+import { studentNickname } from "./student-nickname.js";
 import { matchesDebtScope } from "./debt.js";
 import { withStudentSearchKeys } from "./student-search.js";
-import { quantityIn, moneyOut } from "./numbers.js";
+import { quantityIn } from "./numbers.js";
 import { repo } from "./repo.js";
-import {
-  fail,
-  string,
-  integer,
-  randomId,
-  version,
-  now,
-  phone,
-} from "./core.js";
+import { fail, string, integer, randomId, version, now, phone } from "./core.js";
 import { can } from "./permissions.js";
 import { requireCan } from "./accounts.js";
 import { encrypt, decrypt } from "./crypto.js";
@@ -278,13 +270,7 @@ async function normalize(env, tenantId, r, resource, d, old) {
     const course = await reference(r, "course_types", row.course_type_id);
     await reference(r, "course_categories", course.category_id);
     await reference(r, "teachers", row.teacher_id);
-    if (
-      (await r.partnerManaged("teachers", row.teacher_id)) ||
-      (await r.partnerManaged("course_types", row.course_type_id)) ||
-      (row.assistant_id &&
-        (await r.partnerManaged("teachers", row.assistant_id)))
-    )
-      fail(403, "合作课的专用讲师和课程不能用于机构排课");
+
     if (row.assistant_id) {
       await reference(r, "teachers", row.assistant_id);
       if (row.assistant_id === row.teacher_id) fail(400, "主讲与助教不能相同");
@@ -446,8 +432,6 @@ function dto(user, resource, row) {
       resource === "lessons"
         ? [
             "id",
-            "source_course_id",
-            "source_session_id",
             "start_at",
             "duration",
             "units",
@@ -640,14 +624,7 @@ async function businessApiOnce(
         }
       }
       if (resource === "lessons") {
-        if (row.source_course_id && can(user, policy, "promo", "read")) {
-          const [meeting] = await r.promoMeetings([row.id]);
-          if (meeting)
-            ({
-              meeting_no: result.meeting_no,
-              meeting_url: result.meeting_url,
-            } = meeting);
-        }
+
         let parts = await r.participantsFor(id);
         if (user.roles.includes("student"))
           parts = parts.filter((x) => x.student_id === user.student_id);
@@ -726,11 +703,7 @@ async function businessApiOnce(
     revision = await r.dataVersion(),
     old = id ? await r.businessGet(resource, id) : null;
   if (id && !old) fail(404, "不存在");
-  if (
-    old?.source_course_id ||
-    (old && (await r.partnerManaged(resource, old.id)))
-  )
-    fail(403, "合作课次及专用资料由合作方维护，不可修改或销课");
+
   if ((req.method !== "POST" && !id) || (req.method === "POST" && id))
     fail(404, "不存在");
   if (old && version(d.version) !== old.version)
@@ -1072,7 +1045,7 @@ export async function scheduleView(env, tenant, user, policy, url) {
     ),
     r = repo(env, tenant.id),
     { rows, participants, meetings } = await r.scheduleWeek(
-      from, to, offset, user, studentId, can(user, policy, "promo", "read"),
+      from, to, offset, user, studentId,
     );
   const items = [];
   for (const row of rows) {
