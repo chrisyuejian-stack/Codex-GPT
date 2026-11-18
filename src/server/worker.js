@@ -1,9 +1,8 @@
-import {styleAssetPath,styleAssetsApi} from './style-assets.js';
-import {growthPath,growthApi} from './growth.js';
-import { aiPath, aiApi } from './ai.js';
-import { contentPath, contentApi } from './content.js';
-import { planPath, plansApi, plansPublic } from './plans.js';
-import { toolSettingsPath, toolSettingsApi } from './tool-settings.js';
+import { stylesPath, stylesApi } from "./styles.js";
+import { feedbackPath, feedbackApi } from "./feedback.js";
+import { aiPath, aiApi } from "./ai.js";
+
+import { toolSettingsPath, toolSettingsApi } from "./tool-settings.js";
 import { identityRoot, identityOps, identityTenant, identityParentScope, identityPath, identityErrorCode, identityLabels, clearRootCookie } from "./identity.js";
 import { platformPhoneIndex, phoneIndex } from "./crypto.js";
 import { tenantLifecycle } from "./tenant-lifecycle.js";
@@ -12,71 +11,25 @@ import { apiTiming, measureDatabase } from "./request-timing.js";
 import { rebuild3Api } from "./rebuild3.js";
 import { rebuildApi } from "./rebuild.js";
 import { BRAND_IMAGE_BUDGET, boundedText } from "./d1-limits.js";
-import { promoTenant, promoConsole, PROMO_LABELS } from "./promo.js";
+
 import { readBatch } from "./read-batch.js";
 import { accountReadResponse } from "./security.js";
 import { importsApi, IMPORT_HEADERS } from "./imports.js";
 import { adminTools } from "./admin-tools.js";
 import { toolsApi, LEAD_STAGES } from "./tools.js";
 import { reviewApi, timetableApi } from "./reviews.js";
-import {
-  MODULE_LABELS,
-  ACTION_LABELS,
-  LESSON_LABELS,
-  ATTENDANCE_LABELS,
-  REVIEW_LABELS,
-  AUTH_EVENT_LABELS,
-  RATE_UNITS,
-  beijingTime,
-} from "./presentation.js";
+import { MODULE_LABELS, ACTION_LABELS, LESSON_LABELS, ATTENDANCE_LABELS, REVIEW_LABELS, AUTH_EVENT_LABELS, RATE_UNITS, beijingTime } from "./presentation.js";
 import { effectivePolicies } from "./absence.js";
 import { financeApi } from "./finance.js";
 import { moneyOut, quantityIn } from "./numbers.js";
 import { creditApi } from "./credits.js";
-import {
-  businessApi,
-  addStudentSummaries,
-  day,
-  generateTemplates,
-  scheduleView,
-  fixedRulesView,
-  reorderBusiness,
-} from "./scheduling.js";
-import {
-  config,
-  accessMode,
-  turnstileMode,
-  secureResponse,
-  neutral404,
-  json,
-  body,
-  fail,
-  HttpError,
-  string,
-  integer,
-  version,
-  clientInfo,
-  now,
-} from "./core.js";
+import { businessApi, addStudentSummaries, day, generateTemplates, scheduleView, fixedRulesView, reorderBusiness } from "./scheduling.js";
+import { config, accessMode, turnstileMode, secureResponse, neutral404, json, body, fail, HttpError, string, integer, version, clientInfo, now } from "./core.js";
 import { repo } from "./repo.js";
 import { resolveTenant, validSlug } from "./tenant.js";
-import {
-  requireAccess,
-  authenticateAdmin,
-  platformAuth,
-  consultantEnrollment,
-  authenticate,
-  loginTenant,
-  clearCookie,
-  changeTenantPassword,
-} from "./auth.js";
+import { requireAccess, authenticateAdmin, platformAuth, consultantEnrollment, authenticate, loginTenant, clearCookie, changeTenantPassword } from "./auth.js";
 import { modules, can, publicUser, projectRecord } from "./permissions.js";
-import {
-  requireCan,
-  rolesInput,
-  createAccount,
-  resetAccount,
-} from "./accounts.js";
+import { requireCan, rolesInput, createAccount, resetAccount } from "./accounts.js";
 import { encrypt, decrypt } from "./crypto.js";
 import { randomId } from "./core.js";
 const staticTenant = new Set(["/assets/tenant.js", "/assets/tenant.css"]);
@@ -196,7 +149,7 @@ async function consoleApi(req, env, url) {
     a.role !== "owner" &&
     !(
       a.role === "consultant" &&
-      (/^\/api\/promo(?:\/|$)/.test(path) ||
+      (
         (path === "/api/me" && req.method === "GET") ||
         (path === "/api/logout" && req.method === "POST"))
     )
@@ -225,24 +178,7 @@ async function consoleApi(req, env, url) {
     );
     return json({ ok: true });
   }
-  if (path === "/api/platform/features/referrals") {
-    if (req.method === "GET")
-      return json({ enabled: await r.referralsEnabled() });
-    if (req.method === "PUT") {
-      const d = await body(req);
-      if (typeof d.enabled !== "boolean") fail(400, "开关格式不正确");
-      await r.setReferralsEnabled(d.enabled, a.id, info.ip);
-      return json({ enabled: d.enabled });
-    }
-  }
-  const promoResult = await promoConsole(req, env, url, a, body);
-  if (promoResult !== undefined)
-    return promoResult instanceof Response ? promoResult : json(promoResult);
-  if (
-    /^\/api\/(?:referrals|tenants\/[^/]+\/referrals)(?:\/|$)/.test(path) &&
-    !(await r.referralsEnabled())
-  )
-    return neutral404();
+
   const lifecycle = await tenantLifecycle(req, env, path, a, info.ip, body);
   if (lifecycle !== undefined) return json(lifecycle);
   const toolResult = await adminTools(req, env, url, a, body);
@@ -252,7 +188,7 @@ async function consoleApi(req, env, url) {
     return json({
       username: a.username,
       role: a.role,
-      referrals_enabled: a.role === "owner" && (await r.referralsEnabled()),
+
       security_warnings: turnstileMode(env) === "off" ? ["人机验证未开启"] : [],
       labels: {
         modules: MODULE_LABELS,
@@ -372,11 +308,10 @@ async function consoleApi(req, env, url) {
   return neutral404();
 }
 const tenantAuthenticatedApi = (path) =>
-    identityPath(path) || toolSettingsPath(path) || planPath(path) || contentPath(path) || aiPath(path) || growthPath(path) || styleAssetPath(path) ||
+    identityPath(path) || toolSettingsPath(path) || aiPath(path) || feedbackPath(path) || stylesPath(path) ||
     ["/api/read-batch", "/api/schedule-templates"].includes(path) ||
     /^\/api\/c[23]\//.test(path) ||
     /^\/api\/students\/[^/]+\/fixed-rules$/.test(path) ||
-    /^\/api\/promo(?:\/|$)/.test(path) ||
     [
       "/api/imports/template",
       "/api/imports/preview",
@@ -466,7 +401,7 @@ const tenantHtmlRoutes = new Set([
 async function tenantApi(req, env, resolved, url, context) {
   const { tenant: t, base, relative: path } = resolved,
     r = repo(env, t.id);
-  if (identityPath(path) || toolSettingsPath(path) || planPath(path) || contentPath(path) || aiPath(path) || growthPath(path) || styleAssetPath(path)) env.__identityContract = true;
+  if (identityPath(path) || toolSettingsPath(path) || aiPath(path) || feedbackPath(path)) env.__identityContract = true;
   env.__identityStatus = path === "/api/auth/status";
   if (env.__identityStatus && !resolved.hash)
     return json({ authenticated: false, api_base: base.replace(/\/$/, "") + "/api",
@@ -524,16 +459,15 @@ async function tenantApi(req, env, resolved, url, context) {
     fail(403, "请先修改初始密码", "PASSWORD_CHANGE_REQUIRED");
   const identityResult = await identityTenant(req, env, resolved, user, policy, url);
   if (identityResult !== undefined) return identityResult;
-  const styleAssetResult=await styleAssetsApi(req,env,resolved,user,policy,url);
-  if(styleAssetResult!==undefined)return styleAssetResult;
+
+  const stylesResult = await stylesApi(req, env, resolved, user, policy, url);
+  if (stylesResult !== undefined) return stylesResult;
   const aiResult = await aiApi(req, env, resolved, user, policy, url);
   if (aiResult !== undefined) return aiResult;
-  const contentResult = await contentApi(req, env, resolved, user, policy, url);
-  if (contentResult !== undefined) return contentResult;
-  const growthResult = await growthApi(req,env,resolved,user,policy,url);
+
+  const growthResult = await feedbackApi(req,env,resolved,user,policy,url);
   if(growthResult !== undefined) return growthResult;
-  const plansResult = await plansApi(req, env, resolved, user, policy, url);
-  if (plansResult !== undefined) return plansResult;
+
   const settingsResult = await toolSettingsApi(req, env, resolved, user, policy, url);
   if (settingsResult !== undefined) return settingsResult;
   user = await identityParentScope(user, r, path, url);
@@ -576,8 +510,6 @@ async function tenantApi(req, env, resolved, url, context) {
               "mode",
               "status",
               "course_name",
-              "source_course_id",
-              "source_session_id",
               "teacher_name",
               "location_name",
               "participants_summary",
@@ -590,19 +522,7 @@ async function tenantApi(req, env, resolved, url, context) {
     return json(await rebuild3Api(req, env, t, user, policy, path, url, body));
   if (/^\/api\/c[23]\//.test(path))
     return json(await rebuildApi(req, env, t, user, policy, path, url, body));
-  if (path.startsWith("/api/promo")) {
-    const result = await promoTenant(
-      req,
-      env,
-      t,
-      user,
-      policy,
-      path,
-      url,
-      body,
-    );
-    return result instanceof Response ? result : json(result);
-  }
+
   if (path.startsWith("/api/imports/")) {
     const result = await importsApi(req, env, t, user, policy, path, url, body);
     return result instanceof Response ? result : json(result);
@@ -682,9 +602,9 @@ async function tenantApi(req, env, resolved, url, context) {
       await generateTemplates(req, env, t, user, policy, await body(req)),
     );
   if (path === "/api/me" && req.method === "GET") {
-    const referrals = await r.referralsEnabled();
+
     return json({
-      features: { referrals },
+
       user: publicUser(user),
       labels: {
         import_headers: IMPORT_HEADERS,
@@ -696,7 +616,7 @@ async function tenantApi(req, env, resolved, url, context) {
         reviews: REVIEW_LABELS,
         events: AUTH_EVENT_LABELS,
         rate_units: RATE_UNITS,
-        promo: PROMO_LABELS,
+
       },
       tenant_id: t.id,
       api_base: resolved.root ? "/api" : base.replace(/\/$/, "") + "/api",
@@ -705,7 +625,7 @@ async function tenantApi(req, env, resolved, url, context) {
       module_labels: { ...MODULE_LABELS, ...identityLabels },
       policy: { ...policy, settings: { ...policy.settings, max_debt_units: maxDebtUnits(policy.settings) } },
       capabilities: Object.fromEntries(
-        [...modules,"plan_templates","plan_references"].map((module) => [
+        modules.map((module) => [
           module,
           Object.fromEntries(
             [
@@ -728,8 +648,7 @@ async function tenantApi(req, env, resolved, url, context) {
               "reveal_phone",
             ].map((action) => [
               action,
-              (module !== "referrals" || referrals) &&
-                can(
+              can(
                   user,
                   policy,
                   module,
@@ -1044,13 +963,7 @@ async function dispatch(req, env, url) {
           : "",
     });
   }
-  // Public page shell never resolves the token or enters the institution login shell.
-  if (url.hostname === env.TENANT_HOST && req.method === "GET" && /^\/s\/[^/]+$/.test(url.pathname)) {
-    env.__shareShell = true;
-    return serve(env, req, "/share/index.html");
-  }
-  const publicPlan = await plansPublic(req, env, url);
-  if (publicPlan) return publicPlan;
+
   const identity = await identityRoot(req, env, url, tenantAuthenticatedApi);
   if (identity?.response) return identity.response;
   if (identity?.resolved) {
@@ -1058,7 +971,7 @@ async function dispatch(req, env, url) {
     return tenantApi(req, env, identity.resolved, url);
   }
   const relativeIdentityPath = "/" + url.pathname.split("/").slice(2).join("/");
-  if (identityPath(relativeIdentityPath) || toolSettingsPath(relativeIdentityPath) || planPath(relativeIdentityPath) || contentPath(relativeIdentityPath) || aiPath(relativeIdentityPath)) env.__identityContract = true;
+  if (identityPath(relativeIdentityPath) || toolSettingsPath(relativeIdentityPath) || aiPath(relativeIdentityPath)) env.__identityContract = true;
   const htmlMethod = ["GET", "HEAD"].includes(req.method);
   const resolved = await resolveTenant(req, env, (path) =>
     tenantAuthenticatedApi(path) || (htmlMethod && path.startsWith("/app") && tenantHtmlRoutes.has(path)),
@@ -1133,14 +1046,6 @@ function errorResponse(e, env, url) {
           if (resolved)
             response.headers.set("Set-Cookie", resolved.root ? clearRootCookie() : clearCookie(resolved.base));
         }
-      } else if (/partner_readonly/.test(String(e?.message))) {
-        response = json(
-          {
-            error: "合作课次及名单由专用入口维护，不参与机构销课",
-            code: "PARTNER_READONLY",
-          },
-          403,
-        );
       } else if (
         /invalid_teacher_reference|invalid_student_reference|profile_in_use/.test(
           String(e?.message),
@@ -1216,8 +1121,6 @@ const worker = {
         turnstileMode(env) === "on",
       response.status === 200 ? env.__cacheControl : undefined,
     );
-    if (env.__shareShell) secured.headers.set("X-Robots-Tag", "noindex");
-    else if (env.__planPublic) secured.headers.set("X-Robots-Tag", "noindex, nofollow");
     if (/^\/(?:[^/]+\/)?api\//.test(url.pathname))
       secured.headers.set("Server-Timing", apiTiming(timing, timerStart));
     return secured;

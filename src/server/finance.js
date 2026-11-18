@@ -1,10 +1,4 @@
-import {
-  LESSON_LABELS,
-  MODULE_LABELS,
-  ACTION_LABELS,
-  EXPORT_KIND_LABELS,
-  beijingTime,
-} from "./presentation.js";
+import { LESSON_LABELS, MODULE_LABELS, ACTION_LABELS, EXPORT_KIND_LABELS, beijingTime } from "./presentation.js";
 import { effectivePolicies } from "./absence.js";
 import { repo } from "./repo.js";
 import { HttpError, fail, string, integer, version, randomId, sha, now } from "./core.js";
@@ -1027,7 +1021,7 @@ async function writeApi(req, env, tenant, user, policy, path, url, body) {
     result = { id: row.id, committed: true, status: row.status };
   } else if (override) {
     const old = await get(r, "lessons", override[1]);
-    if (old.source_course_id) fail(403, "合作课程不参与机构课酬");
+
     if (version(d.version) !== old.version) fail(409, "课程已修改");
     await r.assertUnlocked([old.start_at.slice(0, 7)]);
     const row = {
@@ -1176,8 +1170,7 @@ async function writeApi(req, env, tenant, user, policy, path, url, body) {
         row.note = string(d.note ?? old?.note ?? "", "备注", 1000, 0);
       } else row.reason = string(d.reason ?? old?.reason, "调整原因", 1000);
     }
-    if (row.teacher_id && (await r.partnerManaged("teachers", row.teacher_id)))
-      fail(403, "合作讲师不参与机构课酬");
+
     if (req.method === "DELETE") row.deleted_at = now();
     changes.push({ resource: table, previous: old, data: row });
     result = { id: row.id, committed: true };

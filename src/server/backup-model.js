@@ -15,7 +15,7 @@ export const creditTables = Object.fromEntries(
   }]),
 );
 export const backupTables = {
-  plan_prospects:{pk:['tenant_id','id'],columns:['tenant_id','id','data_enc','phone_last4','created_at','created_by'],tenant:true},
+
   ...creditTables,
   tenants: {
     columns: [
@@ -432,8 +432,6 @@ export const backupTables = {
       "locked_rate",
       "current_submission_id",
       "class_id",
-      "source_course_id",
-      "source_session_id",
     ],
     tenant: true,
   },
@@ -894,30 +892,7 @@ export const backupTables = {
     ],
     tenant: true,
   },
-  referrals: {
-    columns: [
-      "tenant_id",
-      "id",
-      "student_id",
-      "name",
-      "grade",
-      "direction",
-      "intention",
-      "parent_phone_enc",
-      "consent_name",
-      "consent_at",
-      "consent_method",
-      "consent_operator",
-      "status",
-      "created_at",
-      "created_by",
-      "updated_at",
-      "updated_by",
-      "version",
-      "deleted_at",
-    ],
-    tenant: true,
-  },
+
   announcement_reads: {
     columns: [
       "tenant_id",
@@ -957,159 +932,7 @@ export const backupTables = {
     columns: ["id", "at", "status", "detail"],
     tenant: false,
   },
-  campaigns: {
-    columns: [
-      "id",
-      "type",
-      "title",
-      "summary",
-      "body",
-      "cover",
-      "publish_at",
-      "expire_at",
-      "status",
-      "audience",
-      "audience_type",
-      "version",
-      "created_at",
-      "updated_at",
-    ],
-    tenant: false,
-  },
-  campaign_targets: {
-    columns: ["tenant_id", "id", "campaign_id"],
-    tenant: true,
-  },
-  campaign_reads: {
-    columns: ["tenant_id", "id", "campaign_id", "user_id", "at"],
-    tenant: true,
-  },
-  promo_images: {
-    columns: [
-      "id",
-      "tenant_id",
-      "owner_id",
-      "kind",
-      "mime",
-      "width",
-      "height",
-      "parts",
-      "part_keys",
-      "bytes",
-      "ready",
-      "version",
-      "created_at",
-    ],
-    tenant: true,
-  },
-  poster_templates: {
-    columns: [
-      "id",
-      "campaign_id",
-      "image_key",
-      "width",
-      "height",
-      "slots",
-      "version",
-    ],
-    tenant: false,
-  },
-  poster_outputs: {
-    columns: ["tenant_id", "id", "template_id", "user_id", "action", "at"],
-    tenant: true,
-  },
-  tenant_promo_assets: {
-    columns: [
-      "tenant_id",
-      "id",
-      "logo_key",
-      "qr_key",
-      "updated_by",
-      "updated_at",
-      "version",
-      "qr_caption",
-    ],
-    tenant: true,
-  },
-  partner_courses: {
-    columns: [
-      "id",
-      "campaign_id",
-      "lecturer",
-      "detail_image_key",
-      "seat_price",
-      "suggested_price",
-      "min_size",
-      "apply_deadline",
-      "status",
-      "reason",
-      "version",
-      "format",
-      "is_free",
-    ],
-    tenant: false,
-  },
-  partner_sessions: {
-    columns: [
-      "id",
-      "course_id",
-      "start_at",
-      "duration",
-      "meeting_no",
-      "meeting_url",
-      "cancelled",
-      "version",
-    ],
-    tenant: false,
-  },
-  course_applications: {
-    columns: [
-      "tenant_id",
-      "id",
-      "course_id",
-      "est_size",
-      "unsure",
-      "contact_user_id",
-      "note",
-      "status",
-      "confirmed_size",
-      "seat_price",
-      "consultant",
-      "consultant_note",
-      "created_at",
-      "updated_at",
-      "version",
-      "paid",
-      "paid_by",
-      "paid_at",
-    ],
-    tenant: true,
-  },
-  promo_followups: {
-    columns: [
-      "tenant_id",
-      "id",
-      "campaign_id",
-      "admin_id",
-      "text",
-      "created_at",
-    ],
-    tenant: true,
-  },
-  promo_user_notices: {
-    columns: [
-      "tenant_id",
-      "user_id",
-      "campaign_id",
-      "dismissed_at",
-      "deadline_shown_at",
-    ],
-    tenant: true,
-  },
-  partner_rosters: {
-    columns: ["tenant_id", "id", "course_id", "student_id", "created_at"],
-    tenant: true,
-  },
+
 };
 export const restoreTables = [
   "students",
@@ -1144,7 +967,7 @@ export const restoreTables = [
   "followup_notes",
   "followup_tasks",
   "leads",
-  "referrals",
+
   ...Object.keys(creditTables),
 ];
 export const BUSINESS_SETTINGS = [
@@ -1188,7 +1011,7 @@ export const TABLE_LABELS = {
   followup_notes: "沟通记录",
   followup_tasks: "跟进任务",
   leads: "招生线索",
-  referrals: "合作升学推荐",
+
   tenant_settings: "业务设置",
 };
 
@@ -1764,27 +1587,7 @@ export const IMPORT_SHAPES = {
     version: { required: true, has_default: true, default: 1 },
     deleted_at: { required: false, has_default: false, default: null },
   },
-  referrals: {
-    tenant_id: { required: true, has_default: false, default: null },
-    id: { required: true, has_default: false, default: null },
-    student_id: { required: true, has_default: false, default: null },
-    name: { required: true, has_default: false, default: null },
-    grade: { required: true, has_default: true, default: "" },
-    direction: { required: true, has_default: true, default: "" },
-    intention: { required: true, has_default: false, default: null },
-    parent_phone_enc: { required: true, has_default: false, default: null },
-    consent_name: { required: true, has_default: false, default: null },
-    consent_at: { required: true, has_default: false, default: null },
-    consent_method: { required: true, has_default: false, default: null },
-    consent_operator: { required: true, has_default: false, default: null },
-    status: { required: true, has_default: true, default: "submitted" },
-    created_at: { required: true, has_default: false, default: null },
-    created_by: { required: true, has_default: false, default: null },
-    updated_at: { required: true, has_default: false, default: null },
-    updated_by: { required: true, has_default: false, default: null },
-    version: { required: true, has_default: true, default: 1 },
-    deleted_at: { required: false, has_default: false, default: null },
-  },
+
 };
 export const BACKUP_STATUS_LABELS = {
   running: "备份进行中",
@@ -2028,109 +1831,7 @@ Object.assign(backupTables,{
 
 // Stage4 course plans and their immutable snapshots are part of full encrypted backups.
 Object.assign(backupTables,{
-  "plans": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "student_id",
-      "source_lead_id",
-      "subject",
-      "title",
-      "status",
-      "doc_json",
-      "context_id",
-      "manifest_json",
-      "current_revision_id",
-      "sent_revision_id",
-      "signed_revision_id",
-      "signed_at",
-      "archived_at",
-      "created_at",
-      "created_by",
-      "updated_at",
-      "updated_by",
-      "version",
-      "deleted_at"
-    ]
-  },
-  "plan_contexts": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "plan_id",
-      "doc_json",
-      "created_at"
-    ]
-  },
-  "plan_revisions": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "plan_id",
-      "seq",
-      "student_id",
-      "source_lead_id",
-      "doc_json",
-      "context_id",
-      "manifest_json",
-      "image_ids_json",
-      "action",
-      "sent_at",
-      "created_at",
-      "created_by"
-    ]
-  },
-  "plan_elements": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "plan_id",
-      "kind",
-      "target_id",
-      "snapshot_json",
-      "created_at"
-    ]
-  },
-  "share_links": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "plan_id",
-      "revision_id",
-      "token_hash",
-      "expires_at",
-      "revoked_at",
-      "visits",
-      "created_at",
-      "created_by",
-      "version"
-    ]
-  },
+
   "style_packs": {
     "tenant": false,
     "pk": [
@@ -2202,49 +1903,7 @@ Object.assign(backupTables,{
 
 // Stage5 content and dedicated AI state are included in full encrypted snapshots.
 Object.assign(backupTables,{
-  "content_items": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "type",
-      "subject",
-      "scene",
-      "title",
-      "status",
-      "doc_json",
-      "article_json",
-      "manifest_json",
-      "author_id",
-      "created_at",
-      "updated_at",
-      "updated_by",
-      "version",
-      "deleted_at"
-    ]
-  },
-  "content_revisions": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "content_id",
-      "seq",
-      "doc_json",
-      "manifest_json",
-      "action",
-      "created_at",
-      "created_by"
-    ]
-  },
+
   "ai_settings": {
     "tenant": false,
     "pk": [
@@ -2386,96 +2045,10 @@ Object.assign(backupTables,{
       "copied_at"
     ]
   },
-  "growth_batches": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "name",
-      "from_date",
-      "to_date",
-      "teacher_id",
-      "created_at",
-      "created_by",
-      "updated_at",
-      "updated_by",
-      "version",
-      "deleted_at"
-    ]
-  },
-  "growth_reports": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "batch_id",
-      "student_id",
-      "teacher_id",
-      "report_class_id",
-      "status",
-      "progress",
-      "doc_json",
-      "context_json",
-      "published_revision_id",
-      "created_at",
-      "created_by",
-      "updated_at",
-      "updated_by",
-      "version",
-      "deleted_at"
-    ]
-  },
-  "growth_report_revisions": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "report_id",
-      "seq",
-      "doc_json",
-      "manifest_json",
-      "context_json",
-      "action",
-      "published_at",
-      "created_at",
-      "created_by"
-    ]
-  },
-  "growth_notifications": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "student_id",
-      "report_id",
-      "revision_id",
-      "created_at",
-      "created_by"
-    ]
-  }
+
 });
 
-backupTables.growth_reports.columns.push('position');
-
 backupTables.growth_feedback_copies.columns.push('submission_id');
-
-backupTables.growth_report_revisions.columns.push('publication_order');
 
 backupTables.lesson_submissions.columns.push("personal_json");
 backupTables.lesson_comments.columns.push("feedback_versions_json");
@@ -2591,10 +2164,5 @@ Object.assign(backupTables,{
 
 // v0.5 side tables join the full encrypted snapshot, with composite tenant keys.
 Object.assign(backupTables,{
- plan_templates:{tenant:true,pk:['tenant_id','id'],columns:['tenant_id','id','name','description','applicability_json','doc_json','source_json','version','created_at','created_by','updated_at','updated_by','deleted_at']},
- plan_sample_templates:{tenant:true,pk:['tenant_id','pack_key','pack_version','sample_key'],columns:['tenant_id','pack_key','pack_version','sample_key','doc_json','created_at']},
- plan_reference_flags:{tenant:true,pk:['tenant_id','plan_id'],columns:['tenant_id','plan_id','revision_id','enabled','version','updated_at','updated_by']},
- plan_briefs:{tenant:true,pk:['tenant_id','plan_id'],columns:['tenant_id','plan_id','text_enc','version','updated_at','updated_by']},
- plan_v2_conversions:{tenant:true,pk:['tenant_id','plan_id','source_revision_id'],columns:['tenant_id','plan_id','source_revision_id','source_doc_sha256','mapping_version','v2_initial_projection_sha256','created_at']},
- plan_v2_elements:{tenant:true,pk:['tenant_id','id'],columns:['tenant_id','id','plan_id','kind','created_at']}
+
 });

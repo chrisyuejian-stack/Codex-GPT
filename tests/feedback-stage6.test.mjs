@@ -228,8 +228,8 @@ test("YX6F 普通点评也能替换旧结构化版本，窗口外员工更正不
     assert.equal(ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token)).items[0].message.good, "员工确认的新版本");
 }));
 
-test("YX6F 关闭成长模块不破坏原纯文字出勤流程，结构化入口返回404", () => growthSchool(async s => {
-    s.f.db.raw.prepare("UPDATE tenant_modules SET enabled=0 WHERE tenant_id=? AND id='growth_reports'").run(s.t.id);
+test("YX6F 关闭反馈模块不破坏原纯文字出勤流程，结构化入口返回404", () => growthSchool(async s => {
+    s.f.db.raw.prepare("UPDATE tenant_modules SET enabled=0 WHERE tenant_id=? AND id='feedback'").run(s.t.id);
     ok(await submitFeedback(s), 404);
     const old = ok(await submitFeedback(s, {
         personal: false

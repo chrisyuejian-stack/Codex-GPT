@@ -1,10 +1,10 @@
 // FK children before parents. A migration test checks coverage against the actual schema.
 export const PURGE_TABLES = [
   "setting_template_refs","style_version_tenants",
-  "growth_notifications","growth_report_revisions","growth_reports","growth_batches","growth_feedback_copies","growth_repertoire",
-  "content_revisions","content_items","ai_usage","ai_quota_holds","ai_requests","ai_quota_daily",
-  "plan_templates","plan_sample_templates","plan_reference_flags","plan_briefs","plan_v2_conversions","plan_v2_elements",
-  "plan_prospects","share_links","plan_revisions","plan_elements","plan_contexts","plans","style_pack_scopes","tenant_compliance_terms",
+  "growth_feedback_copies","growth_repertoire",
+  "ai_usage","ai_quota_holds","ai_requests","ai_quota_daily",
+
+  "style_pack_scopes","tenant_compliance_terms",
   "setting_changes","setting_asset_refs","setting_imports","ai_suggestions","tenant_brand","gallery_images","report_dimensions","report_classes","offer_courses","stage_types","stage_rules","calendar_nodes","course_rules","tenant_profile","tenant_price_lists",
   "guardian_links", "login_choices", "platform_phone_index", "tenant_subjects", "tenant_ai_overrides",
   "tenant_slug_aliases",
@@ -35,21 +35,14 @@ export const PURGE_TABLES = [
   "followup_tasks",
   "student_routines",
   "leads",
-  "referrals",
+
   "announcement_reads",
   "announcement_targets",
   "maintenance_leases",
   "data_job_rows",
-  "campaign_targets",
-  "campaign_reads",
-  "poster_outputs",
-  "tenant_promo_assets",
-  "course_applications",
-  "partner_rosters",
-  "partner_write_guards",
+
   "renewal_reminders",
-  "promo_followups",
-  "promo_user_notices",
+
   "credit_debts",
   "student_payment_resolutions",
   "student_payment_allocations",
@@ -59,7 +52,7 @@ export const PURGE_TABLES = [
   "lesson_submissions",
   "classes",
   "data_jobs",
-  "promo_images",
+
   "student_balances_ledger",
   "lessons",
   "student_payments",

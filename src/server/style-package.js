@@ -1,4 +1,4 @@
-import { invalid, object, text, ids } from "./content-document.js";
+import { invalid, object, text, ids } from "./tool-validation.js";
 
 import { imageInfo } from "./tool-settings.js";
 

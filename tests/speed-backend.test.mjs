@@ -101,10 +101,10 @@ test("速度 S2/S3：认证固定往返与实测 D1 次数，成功及失败的 
     const s = await setup(f, 1);
     const root = tenant + "/" + s.t.slug + "/api/";
     const headers = { Cookie: "channel_session=" + s.token };
-    // /me does one feature-switch read after auth and is exempt from response record accounting.
+    // /me no longer reads the retired referrals feature switch.
     const me = await f.request(root + "me", { headers });
     assert.equal(me.status, 200);
-    assert.equal(verifyTiming(me), 1 + 1);
+    assert.equal(verifyTiming(me), 1);
     const logs = await f.request(consoleOrigin + "/api/logs", {
       headers: { Cookie: f.adminCookie, "Cf-Access-Jwt-Assertion": f.access },
     });
@@ -172,7 +172,6 @@ test("速度预算样本：典型接口的独立 D1 往返统计", async () => {
       "todo/summary",
       "c2/home",
       "logs?kind=login",
-      "promo",
       "system-messages",
     ]) {
       const r = await f.request(root + path, { headers });
@@ -188,7 +187,6 @@ test("速度预算样本：典型接口的独立 D1 往返统计", async () => {
       "logs",
       "tenants",
       "platform/accounts",
-      "promo",
     ]) {
       const r = await adminCall(f, path);
       assert.equal(r.status, 200, r.text);

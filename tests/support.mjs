@@ -101,7 +101,7 @@ export class LocalD1 {
     }
   }
 }
-export async function fixture({ migrateIncome = true, migrateSettings = true, migratePlans = true, migrateAi = true, migrateGrowth = true, migratePlatform = true, migrateArticle = true, migrateProspects = true, migrateStorage = true } = {}) {
+export async function fixture({ migrateIncome = true, migrateSettings = true, migratePlans = true, migrateAi = true, migrateGrowth = true, migratePlatform = true, migrateArticle = true, migrateProspects = true, migrateStorage = true, migrateRemoval = true } = {}) {
   const db = new LocalD1();
   db.raw.exec(
     await readFile(
@@ -190,12 +190,7 @@ export async function fixture({ migrateIncome = true, migrateSettings = true, mi
   if(migrateSettings && migratePlans && migrateProspects) db.raw.exec(await readFile(new URL('../migrations/0026_plan_prospects.sql',import.meta.url),'utf8'));
   if(migrateSettings && migrateStorage) db.raw.exec(await readFile(new URL('../migrations/0027_gallery_storage.sql',import.meta.url),'utf8'));
   if(migrateSettings && migratePlans && migrateStorage) db.raw.exec(await readFile(new URL('../migrations/0028_plan_v2.sql',import.meta.url),'utf8'));
-  // The legacy referral tests run with the persisted platform switch enabled.
-  db.raw
-    .prepare(
-      "INSERT INTO platform_state(id,value) VALUES('referrals_enabled','1')",
-    )
-    .run();
+  if (migrateRemoval) db.raw.exec(await readFile(new URL("../migrations/0029_remove_modules.sql", import.meta.url), "utf8"));
   const env = {
     CHANNEL_DB: db,
     CHANNEL_BACKUPS: new LocalR2(),

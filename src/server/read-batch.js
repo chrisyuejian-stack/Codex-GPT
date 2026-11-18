@@ -6,7 +6,7 @@ const exact = new Set([
   "finance/receivable-summary", "c2/renewals", "system-messages", "c2/followups",
   "c2/students", "c2/students/counts", "credits/packages", "schedule-templates",
   "data/schedule_templates", "data/schedule_enrollments", "data/teachers", "data/locations",
-  "data/course_types", "data/course_categories", "data/students", "promo/recommend", "todo/summary",
+  "data/course_types", "data/course_categories", "data/students", "todo/summary",
 ]);
 export function validateReadPaths(value) {
   if (!Array.isArray(value) || !value.length || value.length > 12) fail(400, "批量读取须包含 1–12 条路径");

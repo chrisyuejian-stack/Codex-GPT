@@ -1190,7 +1190,7 @@ export async function runIsolation({
           for (const endpoint of [
             "tools/classes",
             "tools/leads",
-            "tools/referrals",
+
             "workbench",
             "renewals",
             "followup-assignees",
@@ -1211,7 +1211,7 @@ export async function runIsolation({
       },
     );
     await run(
-      "第六阶段 HTTP：线索转正与推荐只在本机构，手机加密字段及未同意推荐不可读写",
+      "第六阶段 HTTP：线索只在本机构，手机加密字段不可越权读取",
       async () => {
         let r = await tenantCall(a, "tools/leads", "POST", {
           name: "来源仅属于机构A",
@@ -1230,22 +1230,6 @@ export async function runIsolation({
           {},
         );
         assert.equal(r.status, 403, r.text);
-        r = await tenantCall(a, "tools/referrals", "POST", {
-          student_id: materialA.student,
-          intention: "本科",
-          parent_phone: "13900000088",
-        });
-        assert.equal(r.status, 400, r.text);
-        r = await tenantCall(a, "tools/referrals", "POST", {
-          student_id: materialB.student,
-          intention: "本科",
-          parent_phone: "13900000088",
-          consent_name: "家长",
-          consent_at: "2026-01-01T09:00",
-          consent_method: "书面",
-          consent_operator: "经办",
-        });
-        assert.equal(r.status, 404, r.text);
         const list = await tenantCall(b, "tools/leads");
         assert.equal(list.status, 200, list.text);
         assert.ok(!list.text.includes("来源仅属于机构A"));
@@ -1289,285 +1273,7 @@ export async function runIsolation({
       },
     );
   }
-  if (phase >= 8) {
-    let promoId, partnerId, partnerLesson, imageId;
-    await run(
-      "第八阶段 HTTP：推广指定机构、角色与tuition价格裁剪；跨机构申请拒绝",
-      async () => {
-        const date =
-          new Date(Date.now() + 3 * 86400000 + 8 * 3600000)
-            .toISOString()
-            .slice(0, 10) + "T10:00";
-        const upload = await con("promo/images", "POST", { kind: "detail" });
-        assert.equal(upload.status, 200, upload.text);
-        const pngChunk = (tag, data) => {
-          const payload = Buffer.concat([Buffer.from(tag), data]);
-          const length = Buffer.alloc(4),
-            crc = Buffer.alloc(4);
-          length.writeUInt32BE(data.length);
-          crc.writeUInt32BE(crc32(payload));
-          return Buffer.concat([length, payload, crc]);
-        };
-        const header = Buffer.alloc(13);
-        header.writeUInt32BE(750, 0);
-        header.writeUInt32BE(1000, 4);
-        header[8] = 8;
-        const png = Buffer.concat([
-          Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-          pngChunk("IHDR", header),
-          pngChunk("IDAT", deflateSync(Buffer.alloc(751 * 1000))),
-          pngChunk("IEND", Buffer.alloc(0)),
-        ]);
-        const longImage = upload.body.id;
-        const part = await con("promo/images/" + longImage + "/part", "POST", {
-          index: 0,
-          data: "data:image/png;base64," + png.toString("base64"),
-        });
-        assert.equal(part.status, 200, part.text);
-        const complete = await con(
-          "promo/images/" + longImage + "/complete",
-          "POST",
-          {},
-        );
-        assert.equal(complete.status, 200, complete.text);
-        const made = await con("promo", "POST", {
-          type: "course",
-          detail_image_key: longImage,
-          title: "推广隔离验收",
-          body: "<img src=x onerror=alert(1)>",
-          audience: "selected",
-          tenant_ids: [a.id],
-          status: "published",
-          publish_at: Date.now() - 1000,
-          lecturer: "隔离讲师",
-          seat_price: 123,
-          suggested_price: 200,
-          min_size: 1,
-          apply_deadline: Date.now() + 3600000,
-          sessions: [
-            {
-              start_at: date,
-              duration: 45,
-              meeting_no: "隔离保密会议号",
-              meeting_url: "https://meeting.tencent.com/isolation",
-            },
-          ],
-        });
-        assert.equal(made.status, 200, made.text);
-        promoId = made.body.id;
-        const own = await tenantCall(a, "promo/" + promoId);
-        assert.equal(own.status, 200);
-        assert.equal(own.body.campaign.seat_price, 123);
-        assert.equal((await tenantCall(b, "promo/" + promoId)).status, 404);
-        assert.equal(
-          (
-            await tenantCall(b, "promo/" + promoId + "/application", "POST", {
-              est_size: 1,
-              unsure: false,
-            })
-          ).status,
-          404,
-        );
-        for (const actor of [studentScope, courseTeacherSession])
-          assert.equal((await tenantCall(actor, "promo")).status, 403);
-        const academic = await tenantCall(academicScope, "promo/" + promoId);
-        assert.equal(academic.status, 200, academic.text);
-        assert.ok(!academic.text.includes("seat_price"));
-        assert.ok(!academic.text.includes("suggested_price"));
-        assert.equal(
-          (
-            await tenantCall(a, "promo/" + promoId + "/application", "POST", {
-              est_size: 1,
-              unsure: false,
-            })
-          ).status,
-          200,
-        );
-      },
-    );
-    await run(
-      "第八阶段 HTTP：开班与学员名单同机构；学员仅见本人合作课，不见会议号、链接或同学",
-      async () => {
-        let detail = await con("promo/" + promoId),
-          app = detail.body.applications[0];
-        partnerId = detail.body.course.id;
-        assert.equal(
-          (
-            await con("promo/" + promoId + "/applications/" + app.id, "PUT", {
-              version: app.version,
-              status: "confirmed",
-              confirmed_size: 1,
-              consultant: "验收顾问",
-            })
-          ).status,
-          200,
-        );
-        detail = await con("promo/" + promoId);
-        assert.equal(
-          (
-            await con("promo/" + promoId + "/open", "POST", {
-              version: detail.body.course.version,
-            })
-          ).status,
-          200,
-        );
-        let own = await tenantCall(a, "promo/" + promoId);
-        const foreign = await tenantCall(
-          a,
-          "promo/" + promoId + "/roster",
-          "PUT",
-          {
-            version: own.body.application.version,
-            student_ids: [materialB.student],
-          },
-        );
-        assert.equal(foreign.status, 400);
-        assert.equal(
-          (
-            await tenantCall(a, "promo/" + promoId + "/roster", "PUT", {
-              version: own.body.application.version,
-              student_ids: [materialA.student],
-            })
-          ).status,
-          200,
-        );
-        const start = detail.body.sessions[0].start_at.slice(0, 10),
-          end = new Date(Date.parse(start + "T00:00:00Z") + 86400000)
-            .toISOString()
-            .slice(0, 10);
-        const schedule = await tenantCall(
-          studentScope,
-          "schedule?from=" + start + "&to=" + end,
-        );
-        assert.equal(schedule.status, 200);
-        const l = schedule.body.items.find(
-          (x) => x.source_course_id === partnerId,
-        );
-        assert.ok(l);
-        partnerLesson = l.id;
-        const read = await tenantCall(studentScope, "data/lessons/" + l.id);
-        assert.equal(read.status, 200);
-        assert.equal(read.body.record.participants.length, 1);
-        assert.ok(!read.text.includes("隔离保密会议号"));
-        assert.ok(!read.text.includes("meeting.tencent.com"));
-        assert.ok(!read.text.includes(materialB.student));
-        assert.equal((await tenantCall(b, "data/lessons/" + l.id)).status, 404);
-      },
-    );
-    await run(
-      "第八阶段 HTTP：合作课不能经普通接口修改、删除、销课或点评；不计机构课酬",
-      async () => {
-        const l = (await tenantCall(a, "data/lessons/" + partnerLesson)).body
-          .record;
-        assert.equal(
-          (
-            await tenantCall(a, "data/lessons/" + l.id, "PATCH", {
-              version: l.version,
-              note: "不可修改",
-            })
-          ).status,
-          403,
-        );
-        assert.equal(
-          (
-            await tenantCall(a, "data/lessons/" + l.id, "DELETE", {
-              version: l.version,
-            })
-          ).status,
-          403,
-        );
-        assert.equal(
-          (
-            await tenantCall(a, "credits/lessons/" + l.id + "/status", "POST", {
-              operation_id: crypto.randomUUID(),
-              lesson_version: l.version,
-              status: "completed",
-            })
-          ).status,
-          403,
-        );
-        assert.equal(
-          (await tenantCall(a, "lessons/" + l.id + "/review")).status,
-          403,
-        );
-        const pay = await tenantCall(
-          a,
-          "finance/payroll?month=" + l.start_at.slice(0, 7),
-        );
-        assert.equal(pay.status, 200);
-        assert.ok(!pay.body.lessons.some((x) => x.id === partnerLesson));
-      },
-    );
-    await run(
-      "第八阶段 HTTP：推广R2图片按机构及角色鉴权；关闭promo后图片与列表均拒绝",
-      async () => {
-        const created = await con("promo/images", "POST", { kind: "cover" });
-        assert.equal(created.status, 200);
-        imageId = created.body.id;
-        const png =
-          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6S9sAAAAASUVORK5CYII=";
-        assert.equal(
-          (
-            await con("promo/images/" + imageId + "/part", "POST", {
-              index: 0,
-              data: png,
-            })
-          ).status,
-          200,
-        );
-        assert.equal(
-          (await con("promo/images/" + imageId + "/complete", "POST", {}))
-            .status,
-          200,
-        );
-        const c = await con("promo", "POST", {
-          type: "material",
-          title: "图片隔离验收",
-          cover: imageId,
-          audience: "selected",
-          tenant_ids: [a.id],
-          status: "published",
-          publish_at: Date.now() - 1000,
-        });
-        assert.equal(c.status, 200);
-        assert.equal(
-          (await tenantCall(a, "promo/images/" + imageId)).status,
-          200,
-        );
-        assert.equal(
-          (await tenantCall(b, "promo/images/" + imageId)).status,
-          404,
-        );
-        assert.equal(
-          (await tenantCall(studentScope, "promo/images/" + imageId)).status,
-          403,
-        );
-        assert.equal(
-          (
-            await con("tenants/" + a.id + "/modules", "PUT", {
-              module: "promo",
-              enabled: false,
-            })
-          ).status,
-          200,
-        );
-        assert.equal((await tenantCall(a, "promo")).status, 403);
-        assert.equal(
-          (await tenantCall(a, "promo/images/" + imageId)).status,
-          403,
-        );
-        assert.equal(
-          (
-            await con("tenants/" + a.id + "/modules", "PUT", {
-              module: "promo",
-              enabled: true,
-            })
-          ).status,
-          200,
-        );
-      },
-    );
-  }
+
   await run("7.7-10 超管关闭模块后主管接口拒绝", async () => {
     assert.equal(
       (
@@ -1643,7 +1349,7 @@ export async function runIsolation({
           "tools/classes",
           "tools/followup_notes",
           "tools/leads",
-          "tools/referrals",
+
           "system-messages",
         ]) {
           const r = await tenantCall(a, path);

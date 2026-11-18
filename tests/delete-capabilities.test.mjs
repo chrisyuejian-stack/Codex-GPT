@@ -57,9 +57,7 @@ async function page(s, path, token = s.token) {
 
 test("D1 停用封闭机构所有入口、保留会话；恢复后有效会话可继续使用", () => withSchool(async (s) => {
   const student = await accountToken(s, ["student"], s.students[0]);
-  const promoted = expect(await adminCall(s.f, "promo", "POST", {
-    type: "message", title: "推广通知", status: "published", audience: "all",
-  })).id;
+
   s.f.env.TURNSTILE_MODE = "off";
   expect(await s.call("me"));
   expect(await request(s, "me", "GET", undefined, student.token));
@@ -75,7 +73,7 @@ test("D1 停用封闭机构所有入口、保留会话；恢复后有效会话�
     assert.match(await response.text(), path === "app/" || path === "api/brand-timetable" ? /机构已到期或停用/ : /该机构暂不可用/);
   }
   expect(await s.call("login", "POST", { phone: "13911112222", password: "PhaseTwoSecure9" }), 404);
-  expect(await s.call("promo/" + promoted + "/application", "POST", { est_size: 2 }), 403);
+
   expect(await control(s, "", "PATCH", { ...paused, status: "active" }), 409);
   expect(await control(s, "enable", "POST", { ...operation(), version: paused.version }));
   expect(await s.call("me"));
@@ -203,37 +201,6 @@ test("D1 学习阶段与课时包：软删、版本、幂等和关联拒绝；�
   expect(await mutate(s, "data/packages/"+pkg, { version: 2 }, "DELETE"));
   const used = await pack(s);
   assert.match(expect(await mutate(s, "data/packages/"+used, { version: 1 }, "DELETE"), 409).error, /课时流水/);
-}));
-
-test("D1 推广：只删已下架的无关联内容，同批清理目标、已读、海报产出", () => withSchool(async (s) => {
-  const db = s.f.db.raw;
-  const id = expect(await adminCall(s.f, "promo", "POST", {
-    type: "message", title: "删除推广", status: "published", audience: "selected", tenant_ids: [s.t.id],
-  })).id;
-  expect(await request(s, "promo/"+id+"/read", "POST", {}));
-  const img = randomId("img"), tpl = randomId("poster");
-  db.prepare("INSERT INTO promo_images(id,tenant_id,owner_id,kind,mime,width,height,ready,created_at) VALUES(?,'platform','fixture','poster','image/png',1080,1000,1,?)").run(img,Date.now());
-  db.prepare("INSERT INTO poster_templates(id,campaign_id,image_key,width,height,slots) VALUES(?,?,?,?,?,?)").run(tpl,id,img,1080,1000,"{}");
-  db.prepare("INSERT INTO poster_outputs(tenant_id,id,template_id,user_id,action,at) VALUES(?,?,?,?,'view',?)").run(s.t.id,randomId("poster"),tpl,s.user.id,Date.now());
-  expect(await adminCall(s.f, "promo/"+id, "DELETE", { ...operation(), version: 1 }), 409);
-  expect(await adminCall(s.f, "promo/"+id+"/state", "PUT", { status:"archived", version:1 }));
-  const body = { ...operation(), version: 2 };
-  const deleted = expect(await adminCall(s.f, "promo/"+id, "DELETE", body));
-  assert.deepEqual(expect(await adminCall(s.f, "promo/"+id, "DELETE", body)), deleted);
-  for (const table of ["campaign_targets","campaign_reads","poster_templates","poster_outputs"])
-    assert.equal(db.prepare("SELECT COUNT(*) n FROM "+table).get().n,0);
-  expect(await adminCall(s.f,"promo/"+id),404);
-
-  db.prepare("INSERT INTO promo_images(id,tenant_id,owner_id,kind,mime,width,height,ready,created_at) VALUES(?,'platform','fixture','detail','image/png',750,1000,1,?)").run(randomId("img"),Date.now());
-  const detail = db.prepare("SELECT id FROM promo_images WHERE kind='detail'").get().id;
-  const course = expect(await adminCall(s.f, "promo", "POST", {
-    type: "course", title: "已经报名", status: "published", audience: "all",
-    detail_image_key: detail, lecturer: "教师", min_size: 2, seat_price: 120, suggested_price: 200,
-    apply_deadline: Date.now()+day, sessions: [{ start_at: new Date(Date.now()+2*day).toISOString().slice(0,10)+"T19:00", duration:45 }],
-  })).id;
-  expect(await request(s,"promo/"+course+"/application","POST",{ est_size:2, unsure:false }));
-  expect(await adminCall(s.f,"promo/"+course+"/state","PUT",{ status:"archived",version:1 }));
-  assert.match(expect(await adminCall(s.f,"promo/"+course,"DELETE",{ ...operation(),version:2 }),409).error,/保持下架/);
 }));
 
 test("D1 平台公告：撤回后不再送达和计未读，平台历史可见", () => withSchool(async (s) => {

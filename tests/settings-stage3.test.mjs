@@ -674,7 +674,7 @@ test("YX3 未引用图片删除后R2移除且不可读取，重试删除可完�
 
 test("YX3 已引用图库图只隐藏，历史URL仍可读，不再出现在列表", () => withSchool(async s => {
   const img = ok(await upload(s), 201);
-  await s.r.settingsAssetReference(img.id, "plan", "pln_fixture");
+  await s.r.settingsAssetReference(img.id, "feedback", "fb_fixture");
   assert.equal(ok(await call(s, "gallery/" + img.id, "DELETE", {
     version: img.version
   })).hidden, true);

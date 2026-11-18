@@ -18,11 +18,9 @@ export const modules = [
   "profile",
   "classes",
   "leads",
-  "referrals",
   "imports",
   "comments",
-  "promo",
-  "content", "plans", "growth_reports", "school_db", "prices", "feedback", "parents", "ai", "usage",
+  "school_db", "prices", "feedback", "parents", "ai", "usage",
 ];
 const defaults = {
   consultant: {
@@ -32,7 +30,7 @@ const defaults = {
   academic: {
     classes: ["read", "create", "update", "delete"],
     leads: ["read", "create", "update", "delete"],
-    referrals: ["read", "create", "update"],
+
     imports: ["read", "create"],
     home: ["read"],
     schedule: ["read", "create", "update", "export"],
@@ -48,7 +46,7 @@ const defaults = {
     accounts: ["create_personal", "reset_personal"],
     comments: ["read", "update"],
     profile: ["read", "update"],
-    promo: ["read", "create", "update"],
+
   },
   finance: {
     home: ["read"],
@@ -93,17 +91,13 @@ const defaults = {
 };
 // 唯一授权入口。个人数据调用必须携带含归属信息的 record；列表服务也必须逐条调用。
 export function can(user, policy, module, action, record) {
-  if(user&&["plan_templates","plan_references"].includes(module))return identityPermission(user,policy,module,action,record);
+
   if (!user || !modules.includes(module) || !policy.modules[module])
     return false;
   const roles = user.roles;
   const identity = identityPermission(user, policy, module, action, record);
   if (identity !== undefined) return identity;
-  if (
-    module === "promo" &&
-    !roles.some((r) => ["supervisor", "academic"].includes(r))
-  )
-    return false;
+
   if (
     (module === "attendance" && action === "submit") ||
     (module === "comments" && action === "create")
@@ -277,39 +271,25 @@ function identityPermission(user, policy, module, action, record) {
   const academic = roles.includes('academic');
   const consultant = roles.includes('consultant');
   const teacher = roles.includes('teacher');
-  const student = roles.includes('student');
   const parent = roles.includes('parent');
-  if (['plan_templates','plan_references'].includes(module)) return !!policy.modules.plans && (supervisor || academic || consultant) && (module==='plan_templates'?['read','write'].includes(action):action==='write');
+
   if (module === 'settings' && ['write', 'propose'].includes(action))
     return action === 'write' ? supervisor : supervisor || academic || consultant;
   if (module === 'settings' && record?.settings_scope === 'tools')
     return action === 'read' && (supervisor || academic || consultant ||
       (teacher && record.kind === 'report_dimensions'));
-  if (['content','plans','growth_reports','school_db','prices','feedback','parents','ai','usage'].includes(module)) {
+  if (['school_db','prices','feedback','parents','ai','usage'].includes(module)) {
     if (module === 'usage') return action === 'read' && supervisor;
     if (module === 'parents') return action === 'manage' && (supervisor || academic);
     if (module === 'prices') return action === 'write' ? supervisor : action === 'read' && (supervisor || academic || consultant || roles.includes('finance'));
-    if (module === 'content') return ['read','write'].includes(action) && (supervisor || consultant);
+
     if (module === 'school_db') return action === 'read' && (supervisor || academic || consultant);
     if (module === 'ai') return action === 'use' && (supervisor || academic || consultant ||
-      (teacher && ['feedback','growth_reports'].includes(record?.tool) &&
+      (teacher && record?.tool === 'feedback' &&
        !!user.teacher_id && record?.teacher_id === user.teacher_id));
     if (module === 'feedback') return action === 'confirm' ? supervisor || academic
       : action === 'write' && teacher && !!user.teacher_id && record?.teacher_id === user.teacher_id;
-    if (module === 'plans') {
-      if (['write','share'].includes(action)) return supervisor || academic || consultant;
-      if (action !== 'read') return false;
-      if (supervisor || academic || consultant || roles.includes('finance')) return true;
-      return (student || parent) && ['sent','signed'].includes(record?.status) && ownsChild(user, record?.student_id);
-    }
-    if (module === 'growth_reports') {
-      if (!['read','write','publish','unpublish'].includes(action)) return false;
-      if (supervisor || academic) return true;
-      if (consultant) return action === 'read';
-      if (teacher) return !!user.teacher_id && record?.teacher_id === user.teacher_id && record?.main !== false &&
-        (['read','write'].includes(action) || policy.settings.teacher_can_publish_reports === true);
-      return action === 'read' && (student || parent) && record?.status === 'published' && ownsChild(user, record?.student_id);
-    }
+
   }
   if (parent) {
     if (module === 'profile') return ['read','update'].includes(action) && (!record || record.id === user.id);

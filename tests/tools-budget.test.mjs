@@ -107,7 +107,7 @@ test("第六阶段查询预算：30人班级、30个班级模板整月、200行E
       "followup_notes",
       "student_routines",
       "leads",
-      "referrals",
+
     ]) {
       const data = {
         followup_notes: {
@@ -122,15 +122,7 @@ test("第六阶段查询预算：30人班级、30个班级模板整月、200行E
           content: "练习",
         },
         leads: { name: "线索", phone: "13900000008", stage: "new" },
-        referrals: {
-          student_id: s.students[0],
-          intention: "本科",
-          parent_phone: "13900000009",
-          consent_name: "家长",
-          consent_at: "2026-01-01T09:00",
-          consent_method: "书面",
-          consent_operator: "经办",
-        },
+
       }[kind];
       const id = (
         await check(
@@ -150,7 +142,7 @@ test("第六阶段查询预算：30人班级、30个班级模板整月、200行E
         request(s, "tools/" + kind + "/" + id, "PATCH", {
           ...data,
           version: rec.version,
-          ...(kind === "referrals" ? { status: "withdrawn" } : {}),
+
         }),
       );
     }
@@ -192,7 +184,7 @@ test("第六阶段查询预算：30人班级、30个班级模板整月、200行E
     );
     await check("GET overview", adminCall(f, "overview"));
     await check("GET backups", adminCall(f, "backups"));
-    await check("GET referrals", adminCall(f, "referrals"));
+
     await check("GET announcements", adminCall(f, "announcements"));
     const msg = await check(
       "POST announcements",
