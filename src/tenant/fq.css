@@ -1,0 +1,469 @@
+/* 枫琴教务中心 · 共用样式（Claude，2026-11）
+   设计稿：claude.ai 画布「枫琴 CRM 重设计」v2。打包在所有样式最后，选择器统一加 html 前缀，压过 yx-theme.css 与 v2.css。
+   原则：深茄紫侧栏做框、米白纸色做底、紫红橙渐变只做细线点缀；卡片和顶栏用半透明磨砂；
+   关键数字用衬线（FQ Cormorant）；英文小标题用衬线斜体；状态标签为圆角胶囊加小圆点。 */
+
+:root {
+  --fq-ink: #2a1f3e;
+  --fq-ink-2: #3d3054;
+  --fq-ink-3: #43355e;
+  --fq-paper: #f4efe8;
+  --fq-card: rgba(255, 253, 249, 0.72);
+  --fq-card-solid: #fffdf9;
+  --fq-line: rgba(214, 203, 188, 0.62);
+  --fq-line-soft: #ede6db;
+  --fq-text: #2a1f3e;
+  --fq-sub: #655c72;
+  --fq-faint: #726a7e;
+  --fq-violet: #6a35b8;
+  --fq-violet-dark: #4e2490;
+  --fq-violet-soft: #eee6f7;
+  --fq-plum: #8e2f8c;
+  --fq-red: #b4301f;
+  --fq-amber: #f6a54a;
+  --fq-ribbon: linear-gradient(90deg, #7a3fc0, #e8352e 55%, #f6a54a);
+  --fq-glass: blur(12px) saturate(1.15);
+  --fq-shadow: 0 1px 2px rgba(42, 31, 62, 0.04), 0 8px 24px rgba(42, 31, 62, 0.05);
+  --fq-serif: "FQ Cormorant", "Cormorant Garamond", "Cormorant", "Iowan Old Style", Georgia, serif;
+  --fq-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+/* ---------- 令牌映射：让旧组件自动换成枫琴配色 ---------- */
+html .ui-root,
+html .v-frame {
+  --ui-primary: var(--fq-ink);
+  --ui-primary-hover: var(--fq-ink-2);
+  --ui-primary-soft: var(--fq-violet-soft);
+  --ui-page: var(--fq-paper);
+  --ui-panel: var(--fq-card-solid);
+  --ui-text: var(--fq-text);
+  --ui-secondary: #4a4158;
+  --ui-muted: var(--fq-sub);
+  --ui-border: #e4dccf;
+  --ui-input-border: #dcd3c6;
+  --ui-header: #f8f4ee;
+  --ui-divider: var(--fq-line-soft);
+  --ui-success-bg: #e6f3ea;
+  --ui-success: #256b43;
+  --ui-warning-bg: #fcefdd;
+  --ui-warning: #8a4a0b;
+  --ui-error-bg: #fbe6e3;
+  --ui-error: #a42a18;
+  --ui-info-bg: var(--fq-violet-soft);
+  --ui-info: #5a2ba0;
+  --ui-neutral-bg: #f0ecf3;
+  --ui-neutral: #5e5670;
+  --ui-font: var(--fq-sans);
+  --ui-radius-panel: 14px;
+  --ui-sidebar: 244px;
+}
+
+/* ---------- 顶部渐变彩带 ---------- */
+html body.ui-root::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 5px;
+  background: var(--fq-ribbon);
+  z-index: 60;
+  pointer-events: none;
+}
+
+/* ---------- 外壳与背景光晕 ---------- */
+html .v-frame {
+  background:
+    radial-gradient(900px 520px at 88% -8%, rgba(122, 63, 192, 0.13), transparent 62%),
+    radial-gradient(760px 480px at 30% 105%, rgba(246, 165, 74, 0.12), transparent 60%),
+    radial-gradient(600px 400px at 60% 40%, rgba(232, 53, 46, 0.05), transparent 60%),
+    var(--fq-paper);
+  background-attachment: fixed;
+  color: var(--fq-text);
+  font-family: var(--fq-sans);
+}
+
+/* ---------- 侧栏 ---------- */
+html .v-side {
+  background: linear-gradient(180deg, rgba(42, 31, 62, 0.97), rgba(48, 36, 70, 0.93));
+  border-right: 0;
+  color: #d3c9e1;
+  padding: 26px 14px 18px;
+  gap: 22px;
+}
+html .v-brand {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0 10px 4px;
+  border-bottom: 0;
+}
+html .v-brand .fq-logo {
+  display: block;
+  width: 84px;
+  height: 50px;
+  background: var(--fq-logo-light) left center / contain no-repeat;
+}
+html .v-brand strong {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+html .v-brand small {
+  font-family: var(--fq-serif);
+  font-style: italic;
+  font-size: 15px;
+  color: #bfb2d2;
+}
+html .v-nav {
+  gap: 3px;
+  padding: 0;
+}
+html .v-nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #9d90b3;
+  padding: 0 12px;
+  margin: 18px 0 6px;
+  text-transform: uppercase;
+}
+html .v-nav-label:first-child {
+  margin-top: 0;
+}
+html .v-nav .v-nav-item {
+  height: 42px;
+  min-height: 42px;
+  border-radius: 10px;
+  color: #d3c9e1;
+  background: transparent;
+  border: 0;
+  font-size: 14px;
+}
+html .v-nav .v-nav-item .ui-button-face {
+  justify-content: flex-start;
+  gap: 11px;
+  padding: 0 12px;
+  width: 100%;
+}
+html .v-nav .v-nav-item svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  opacity: 0.9;
+}
+html .v-nav .v-nav-item:hover {
+  background: #352a4b;
+  color: #ffffff;
+}
+html .v-nav .v-nav-item[aria-current="page"],
+html .v-nav .v-nav-item.is-active {
+  background: var(--fq-ink-3);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--fq-amber);
+}
+html .v-nav .ui-badge,
+html .v-nav .v-nav-count {
+  margin-left: auto;
+  background: #e8352e;
+  color: #ffffff;
+}
+
+/* ---------- 页头：Fantasme · Academy + 中文标题 + 英文斜体 ---------- */
+html .v-head {
+  background: rgba(251, 248, 243, 0.62);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border-bottom: 1px solid var(--fq-line);
+  top: 5px;
+  min-height: 78px;
+  padding-top: 16px;
+  padding-bottom: 6px;
+}
+html .v-head-title {
+  position: relative;
+}
+html .v-head-title::before {
+  content: "Fantasme · Academy";
+  position: absolute;
+  left: 0;
+  top: -15px;
+  font-family: var(--fq-serif);
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fq-plum);
+  white-space: nowrap;
+}
+html .v-head-title h1 {
+  color: var(--fq-text);
+  font-weight: 700;
+}
+html .v-head-title h1[data-en]::after {
+  content: attr(data-en);
+  margin-left: 8px;
+  font-family: var(--fq-serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.92em;
+  color: var(--fq-plum);
+}
+html .v-head-tabs .ui-button[aria-current="page"] {
+  color: var(--fq-text);
+}
+html .v-head-tabs > .v-tab-ink {
+  background: var(--fq-plum);
+}
+
+/* ---------- 卡片与面板：半透明磨砂 ---------- */
+html .v-panel,
+html .v-kpi,
+html .v-metric,
+html .v-grid-card,
+html .v-lead-card,
+html .v-renew-card,
+html .v-rate-card,
+html .v-tp-card,
+html .v-cl-card,
+html .v-spick-card,
+html .ui-table-wrap,
+html .ui-panel {
+  background-color: var(--fq-card);
+  border-color: var(--fq-line);
+  box-shadow: var(--fq-shadow);
+  backdrop-filter: var(--fq-glass);
+  -webkit-backdrop-filter: var(--fq-glass);
+}
+html .v-panel-head {
+  border-bottom-color: var(--fq-line-soft);
+}
+html .v-panel-head h2 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* 关键数字：衬线 */
+html .v-kpi-value,
+html .v-metric-value strong,
+html .v-td-metric strong,
+html .ui-number {
+  font-family: var(--fq-serif);
+  font-weight: 600;
+  letter-spacing: 0;
+  font-style: normal;
+}
+
+/* ---------- 表格 ---------- */
+html .v-table th,
+html .ui-table th {
+  background: rgba(248, 244, 238, 0.72);
+  color: var(--fq-sub);
+  font-size: 12px;
+  font-weight: 700;
+}
+html .v-table td,
+html .ui-table td {
+  border-bottom-color: #f0eae0;
+}
+
+/* ---------- 状态标签：胶囊 + 小圆点 ---------- */
+html .v-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+html .v-chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+html .v-chip-info {
+  background: var(--fq-violet-soft);
+  color: #5a2ba0;
+}
+
+/* ---------- 按钮 ---------- */
+html .ui-button--primary,
+html .button.primary {
+  background: var(--fq-ink);
+  border-color: var(--fq-ink);
+  color: #f7f1e8;
+}
+html .ui-button--primary:hover,
+html .button.primary:hover {
+  background: var(--fq-ink-2);
+  border-color: var(--fq-ink-2);
+}
+
+/* ---------- 手机底栏：磨砂 ---------- */
+html .v-tabbar {
+  background: rgba(255, 253, 249, 0.8);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top-color: var(--fq-line);
+}
+html .v-tabbar .v-tab[aria-current="page"],
+html .v-tabbar .v-tab.is-active {
+  color: var(--fq-violet);
+}
+
+/* ---------- 登录页 ---------- */
+html .fq-login {
+  display: flex;
+  flex-wrap: wrap;
+  min-height: 100vh;
+  background: var(--fq-paper);
+  color: var(--fq-text);
+  font-family: var(--fq-sans);
+}
+html .fq-login-side {
+  flex: 1 1 520px;
+  min-height: 360px;
+  box-sizing: border-box;
+  padding: 56px 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #f7f1e8;
+  background:
+    linear-gradient(90deg, rgba(42, 31, 62, 0.96) 0%, rgba(42, 31, 62, 0.82) 40%, rgba(42, 31, 62, 0.35) 100%),
+    var(--fq-login-photo) right center / cover no-repeat,
+    var(--fq-ink);
+}
+html .fq-login-side .fq-logo {
+  width: 132px;
+  height: 80px;
+  background: var(--fq-logo-light) left center / contain no-repeat;
+}
+html .fq-login-kicker {
+  margin: 0 0 20px;
+  font-family: var(--fq-serif);
+  font-size: 17px;
+  letter-spacing: 0.32em;
+  color: var(--fq-amber);
+}
+html .fq-login-side h1 {
+  margin: 0 0 22px;
+  font-size: clamp(38px, 4.4vw, 56px);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+html .fq-login-rule {
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fq-ribbon);
+}
+html .fq-login-foot {
+  margin: 0;
+  font-family: var(--fq-serif);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  color: #cfc5dc;
+}
+html .fq-login-main {
+  flex: 1 1 440px;
+  box-sizing: border-box;
+  padding: 56px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+html .fq-login-main .yx-login-card {
+  width: 100%;
+  max-width: 380px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+html .fq-login .yx-login-head h2 {
+  margin: 4px 0 0;
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--fq-text);
+}
+html .fq-login .yx-login-head .fq-welcome {
+  margin: 0;
+  font-family: var(--fq-serif);
+  font-style: italic;
+  font-size: 22px;
+  color: var(--fq-violet);
+}
+html .fq-login .yx-field input {
+  height: 52px;
+  border-radius: 10px;
+  border-color: #dcd3c6;
+  background: #fffdf9;
+  font-size: 16px;
+}
+html .fq-login .yx-field input:focus {
+  border-color: var(--fq-violet);
+  box-shadow: 0 0 0 3px rgba(106, 53, 184, 0.12);
+  outline: none;
+}
+html .fq-login .yx-btn--primary {
+  height: 54px;
+  border-radius: 10px;
+  background: var(--fq-ink);
+  border-color: var(--fq-ink);
+  color: #f7f1e8;
+  font-size: 17px;
+  letter-spacing: 0.3em;
+}
+html .fq-login .yx-login-note {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e4dccf;
+  font-size: 13px;
+  color: var(--fq-sub);
+}
+@media (max-width: 760px) {
+  html .v-head {
+    min-height: 0;
+    padding-top: 14px;
+    padding-bottom: 10px;
+  }
+  html .v-head-title::before {
+    position: static;
+    display: block;
+    flex-basis: 100%;
+    margin-bottom: 2px;
+  }
+  html .v-head-title {
+    flex-wrap: wrap;
+  }
+  html .fq-login-side {
+    flex-basis: 100%;
+    min-height: 0;
+    padding: 28px 24px 32px;
+    gap: 28px;
+  }
+  html .fq-login-side .fq-logo {
+    width: 96px;
+    height: 58px;
+  }
+  html .fq-login-kicker {
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    margin-bottom: 12px;
+  }
+  html .fq-login-side h1 {
+    font-size: 34px;
+    margin-bottom: 16px;
+  }
+  html .fq-login-foot {
+    display: none;
+  }
+  html .fq-login-main {
+    padding: 32px 20px 48px;
+  }
+}

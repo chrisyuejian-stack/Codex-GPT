@@ -314,7 +314,7 @@ test("UI重构回归：两组导航（日常7项+机构管理5项）、按角色
   await Promise.resolve();
   const nav = root.querySelectorAll("nav")[0];
   assert.deepEqual(
-    nav.querySelectorAll("button").map((x) => x.textContent),
+    nav.querySelectorAll("button").map((x) => x.textContent.trim()),
     [
       "今天",
       "待办",
@@ -344,7 +344,7 @@ test("UI重构回归：两组导航（日常7项+机构管理5项）、按角色
     const labels = root
       .querySelectorAll("nav")[0]
       .querySelectorAll("button")
-      .map((x) => x.textContent);
+      .map((x) => x.textContent.trim());
     assert.deepEqual(
       labels,
       role === "academic"
@@ -378,7 +378,7 @@ test("UI重构回归：两组导航（日常7项+机构管理5项）、按角色
     root
       .querySelectorAll("nav")[0]
       .querySelectorAll("button")
-      .map((x) => x.textContent),
+      .map((x) => x.textContent.trim()),
     ["今天"],
   );
   ui.set({ me: { ...me, user: { roles: ["teacher"] } }, brand });

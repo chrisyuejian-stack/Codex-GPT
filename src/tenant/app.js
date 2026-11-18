@@ -350,6 +350,17 @@ function submit(form, label, handler) {
 function brandInitial() {
   return Array.from((brand.display_name || "").trim())[0] || "教";
 }
+// 枫琴教务中心：一级页面的英文名（页头标题后的斜体）。
+const FQ_PAGE_EN = {
+  today: "Today",
+  todo: "To do",
+  schedule: "Schedule",
+  students: "Students",
+  leads: "Leads",
+  finance: "Finance",
+  teachers: "Faculty",
+  settings: "Settings",
+};
 function mark() {
   return brand.logo
     ? el("img", null, {
@@ -508,9 +519,10 @@ function shell() {
     aside = el("aside", null, { class: "v-side", "aria-label": "主菜单" }),
     branding = el("div", null, { class: "v-brand" }),
     copy = el("div");
-  copy.append(el("strong", brand.display_name), el("small", "艺界星途"));
-  if (brand.display_name) document.title = brand.display_name;
-  branding.append(mark(), copy);
+  // 枫琴教务中心：侧栏固定显示枫琴 logo 与系统名（logo 图片在 fq-assets.css 内嵌）。
+  copy.append(el("strong", "枫琴教务中心"), el("small", "Academy Workspace"));
+  document.title = "枫琴教务中心";
+  branding.append(el("span", null, { class: "fq-logo", role: "img", "aria-label": "fantasme 枫琴国际艺术" }), copy);
   aside.append(branding);
   const main = el("div", null, { class: "v-main" }),
     header = el("header", null, { class: "v-head" }),
@@ -805,14 +817,15 @@ function shell() {
     const item = button(g.label, () => navigate(g.tabs[0].key));
     item.classList.add("v-nav-item");
     item.dataset.group = g.key;
+    if (g.icon) (item.querySelector(".ui-button-face") || item).prepend(UI.icon(g.icon));
     return item;
   };
   if (dailyGroups.length) {
-    nav.append(el("p", "日常", { class: "v-nav-label" }));
+    nav.append(el("p", "Workspace", { class: "v-nav-label" }));
     for (const g of dailyGroups) nav.append(navButton(g));
   }
   if (manageGroups.length) {
-    nav.append(el("p", "机构管理", { class: "v-nav-label" }));
+    nav.append(el("p", "Management", { class: "v-nav-label" }));
     for (const g of manageGroups) nav.append(navButton(g));
   }
   aside.append(nav);
@@ -915,6 +928,10 @@ function shell() {
       ? groups.find((g) => g.key === "students")
       : groups.find((g) => g.tabs.some((t) => t.key === key));
     title.textContent = group?.label || route.label;
+    // 页名后的英文斜体（设计稿：今天 Today、学员 Students…），由 fq.css 用 attr(data-en) 显示。
+    const en = FQ_PAGE_EN[group?.key];
+    if (en) title.dataset.en = en;
+    else delete title.dataset.en;
     vHead.sub("");
     vHead.actions();
     vHead.bar();

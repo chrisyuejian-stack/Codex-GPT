@@ -19,43 +19,50 @@ const YX_SETTING_ROUTE = {
   yx_subjects: "inst-subjects",
   yx_changes: "inst-changes",
 };
+// 枫琴教务中心导航（2026-11 设计稿 v2，用户确认）：
+//   Workspace：今天 · 待办 · 课表 · 学员 · 线索
+//   Management：财务 · 老师（含课程与教室）· 设置（基本设置、账号、导入导出、AI 用量、操作记录）
+// 招生只保留线索；合作升学、推广中心、招生内容、课程方案、成长报告不再进入导航（后端已删除）。
 function yxNavRework(daily, manage, register) {
   const find = (list, k) => list.find((g) => g && g.key === k);
-  const yx = [
-    register("yx-content", "招生内容", "content", (c) => yxContentPage(c)),
-    register("yx-plans", "课程方案", "plans", (c) => yxPlansPage(c)),
-    yxIsTeacher() ? register("yx-feedback", "课后反馈", "schedule", (c) => yxFeedbackPage(c)) : null,
-    register("yx-reports", "成长报告", yxIsTeacher() ? "schedule" : "growth_reports", (c) => yxReportsPage(c)),
-  ].filter(Boolean);
+  const take = (list, k) => {
+    const i = list.findIndex((g) => g && g.key === k);
+    return i < 0 ? null : list.splice(i, 1)[0];
+  };
   register("yx-home", "工作台", "home", (c) => yxWorkbench(c)); // 保留地址，不放导航
-  const enrol = find(daily, "enrol");
-  if (enrol) enrol.tabs.push(...yx);
-  else if (yx.length) daily.splice(1, 0, { key: "enrol", label: "招生", icon: "link", tabs: yx });
-  const courses = find(manage, "courses");
-  if (courses) {
-    if (courses.tabs[0]) courses.tabs[0].label = "排课课程与教室";
-    courses.tabs.push(
-      register("courses-quote", "报价课程与价目表", "settings", (c) => yxSettingsPage(c, ["yx_subjects_bar", "yx_courses", "yx_assist", "yx_price_legend"])),
-      register("courses-stages", "阶段与节点", "settings", (c) => yxSettingsPage(c, ["yx_stages", "yx_calendar", "yx_assist"])),
-    );
+
+  // 线索：原“招生”分组只留线索一页，作为独立一级入口。
+  const enrol = take(daily, "enrol");
+  const leadTab = enrol?.tabs.find((t) => t && t.key === "enrol-leads");
+  if (leadTab) daily.push({ key: "leads", label: "线索", icon: "filter", tabs: [leadTab] });
+
+  // 老师上课后的反馈页暂时挂在课表下，后续并入点名。
+  const schedule = find(daily, "schedule");
+  if (schedule && yxIsTeacher()) schedule.tabs.push(register("yx-feedback", "课后反馈", "schedule", (c) => yxFeedbackPage(c)));
+
+  // 老师：从日常移到管理，课程与教室并进来。
+  const teachers = take(daily, "teachers");
+  const courses = take(manage, "courses");
+  if (teachers || courses) {
+    const tabs = [...(teachers?.tabs || []), ...(courses?.tabs || [])].filter(Boolean);
+    if (tabs[0] && teachers) tabs[0].label = "老师";
+    if (courses?.tabs[0]) courses.tabs[0].label = "课程与教室";
+    manage.unshift({ key: "teachers", label: "老师", icon: "users", tabs });
   }
-  const inst = find(manage, "institution");
-  if (inst) {
-    const base = inst.tabs[0];
-    if (base) base.label = "基本设置";
-    inst.tabs.splice(
-      0,
-      0,
-      register("inst-profile", "机构档案", "settings", (c) => yxSettingsPage(c, ["yx_profile"])),
-      register("inst-brand", "品牌与图库", "settings", (c) => yxSettingsPage(c, ["yx_gallery"])),
-      register("inst-dims", "成长报告维度", "settings", (c) => yxSettingsPage(c, ["yx_reports"])),
-      enabled("ai", "use") ? register("inst-ai", "AI 用量", "settings", (c) => yxAiUsagePage(c)) : null,
-    );
-    // 修改记录不占页签（设计稿 v3 只有 4 个）：从“用一句话改设置”和设置提醒进入。
-    register("inst-changes", "修改记录", "settings", (c) => yxSettingsPage(c, ["yx_changes"]));
-    // 学科模板不占页签：从“报价课程与价目表”顶部的“添加学科包”进入。
-    register("inst-subjects", "学科模板", "settings", (c) => yxSettingsPage(c, ["yx_subjects"]));
+
+  // 设置：机构设置、账号与权限、数据导入导出、操作记录合并为一个入口。
+  const settingsTabs = [];
+  for (const k of ["institution", "accounts", "import", "logs"]) {
+    const g = take(manage, k);
+    if (g) settingsTabs.push(...g.tabs);
   }
+  if (settingsTabs[0]?.key === "settings-institution") settingsTabs[0].label = "基本设置";
+  if (enabled("ai", "use")) settingsTabs.push(register("inst-ai", "AI 用量", "settings", (c) => yxAiUsagePage(c)));
+  if (settingsTabs.length) manage.push({ key: "settings", label: "设置", icon: "settings", tabs: settingsTabs });
+
+  // 财务排在管理的第一位。
+  const finance = take(daily, "finance") || take(manage, "finance");
+  if (finance) manage.unshift(finance);
 }
 // 一个导航页里放一个或几个设置区块。
 async function yxSettingsPage(c, keys) {

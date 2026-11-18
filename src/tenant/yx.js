@@ -77,7 +77,32 @@ function yxInput(form, label, name, type, attrs = {}) {
 
 // ---------- 登录 ----------
 // 根地址（edu.yijiexingtu.com/login）：主管、顾问、教务、财务；机构路径（/机构代号/login）：所有人，品牌只显示机构。
+// 枫琴教务中心登录页：左侧钢琴照片 + 系统名，右侧手机号密码。所有角色同一个入口。
 function yxLoginPage() {
+  root.replaceChildren();
+  document.title = "枫琴教务中心 · 登录";
+  const page = el("div", null, { class: "fq-login" }),
+    side = el("section", null, { class: "fq-login-side" }),
+    titleBox = el("div");
+  titleBox.append(
+    el("p", "MUSIC & PERFORMING ARTS", { class: "fq-login-kicker" }),
+    el("h1", "枫琴教务中心"),
+    el("div", null, { class: "fq-login-rule", "aria-hidden": "true" }),
+  );
+  side.append(
+    el("span", null, { class: "fq-logo", role: "img", "aria-label": "fantasme 枫琴国际艺术" }),
+    titleBox,
+    el("p", "FANTASME ACADEMY OF ARTS · SHANGHAI", { class: "fq-login-foot" }),
+  );
+  const main = el("main", null, { class: "fq-login-main" }),
+    card = el("div", null, { class: "yx-login-card" });
+  main.append(card);
+  page.append(side, main);
+  root.append(page);
+  yxLoginForm(card);
+}
+// 原艺界星途双入口登录页，单机构改造完成后删除。
+function yxLoginPageLegacy() {
   root.replaceChildren();
   const isRoot = yxIsRoot(),
     page = el("div", null, { class: "yx-login " + (isRoot ? "yx-login--root" : "yx-login--school") });
@@ -117,8 +142,7 @@ function yxLoginForm(card) {
   card.replaceChildren();
   const form = el("form", null, { class: "yx-login-form", novalidate: "" }),
     head = el("div", null, { class: "yx-login-head" });
-  if (isRoot) head.append(el("h2", "机构管理者登录"), el("p", "主管、顾问、教务、财务请在这里登录"));
-  else head.append(el("h2", brand.display_name), el("p", "老师、家长、学员和机构员工登录"));
+  head.append(el("p", "Welcome back", { class: "fq-welcome" }), el("h2", "登录"));
   form.append(head);
   const phone = yxInput(form, "手机号", "phone", "tel", {
     autocomplete: "username",
@@ -132,16 +156,7 @@ function yxLoginForm(card) {
   const error = el("p", "", { class: "yx-login-error", role: "alert", hidden: "" });
   const go = el("button", "登录", { type: "submit", class: "yx-btn yx-btn--primary yx-btn--block" });
   form.append(error, go);
-  if (isRoot)
-    form.append(
-      el("p", "老师和家长请使用机构发给你的专属地址登录，例如 " + location.host + "/你的机构代号", { class: "yx-login-tip" }),
-      el("p", "忘记密码？请联系机构主管在“账号与权限”里重置。", { class: "yx-login-note" }),
-    );
-  else
-    form.append(
-      el("p", "第一次登录请使用机构发给你的初始密码，登录后需要修改。忘记密码请联系机构老师。", { class: "yx-login-note" }),
-      el("p", "© " + brand.display_name, { class: "yx-login-copy" }),
-    );
+  form.append(el("p", "忘记密码请联系教务老师", { class: "yx-login-note" }));
   card.append(form);
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
