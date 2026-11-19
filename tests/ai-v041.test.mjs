@@ -2,7 +2,7 @@ import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFile, mkdir } from "node:fs/promises";
 import { school, call, ok, model, ai } from "./fixtures-ai.mjs";
-import { httpExamples, ops } from "./fixtures-v041.mjs";
+import { httpExamples } from "./fixtures-v041.mjs";
 import { aiFailureReason } from "../src/server/ai-policy.js";
 import { HttpError } from "../src/server/core.js";
 const usage=s=>s.f.db.raw.prepare('SELECT * FROM ai_usage WHERE tenant_id=? ORDER BY created_at,id').all(s.t.id);
@@ -41,12 +41,6 @@ test('V041 G1 协议错误、响应超大、其他异常分类，不额外计次
 test('V041 G1 提供方JSON包装损坏或超过2MiB受限，无真实网络',()=>school(async s=>{
  const old=globalThis.fetch;model(s);s.f.env.DEEPSEEK_API_KEY='local-test-key-not-live';delete s.f.env.AI_PROVIDER;
  try{for(const [body,reason] of [['not JSON','protocol_invalid'],['x'.repeat(2*1024*1024+1),'response_too_large']]){globalThis.fetch=async(url,init)=>String(url).startsWith('https://api.deepseek.com/')?new Response(body):old(url,init);ok(await ai(s,'settings/propose',{instruction:"调整设置"}),502);assert.equal(lastFailure(s),reason)}assert.equal(ok(await call(s,'ai/usage')).fast.used,0)}finally{globalThis.fetch=old}
-}));
-
-test('V041 G1 平台按day/tenant/tool附failure_reasons，旧失败归other',()=>school(async s=>{
- model(s,()=>{const e=Error('no body');e.ai_failure_reason='provider_http_402';throw e});ok(await ai(s,'settings/propose',{instruction:"调整设置"}),502);
- model(s,{content:'invalid'});ok(await ai(s,'settings/propose',{instruction:"调整设置"}),502);model(s);ok(await ai(s,'settings/propose',{instruction:"调整设置"}));
- const day=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Shanghai'});for(const group of ['day','tenant','tool']){const r=ok(await ops(s,'ai/usage?from='+day+'&to='+day+'&group='+group+'&tenant_id='+s.t.id));assert.equal(r.items.reduce((n,x)=>n+x.failed,0),2);const reasons=r.items[0].failure_reasons;assert.equal(reasons.provider_http_402,1);assert.equal(reasons.protocol_invalid,1);assert.equal(Object.values(reasons).reduce((n,x)=>n+x,0),r.items[0].failed)}
 }));
 
 after(async()=>{await mkdir('work/v041',{recursive:true});await writeFile('work/v041/http-ai-'+(process.env.TEST_BUNDLE==='1'?'bundle':'source')+'.json',JSON.stringify({local_only:true,examples:httpExamples},null,2)+'\n')});

@@ -6,11 +6,11 @@ import { body, json, fail, randomId, version, HttpError, b64, unb64 } from "./co
 
 import { can } from "./permissions.js";
 
-import { subjectPacks, stageRuleKeys } from "./subject-packs.js";
+import { manualSubjects, stageRuleKeys } from "./subject-keys.js";
 
 import { readWorkbook } from "./xlsx.js";
 
-export const toolSettingsPath = p => /^\/api\/(?:settings\/(?:subjects|courses(?:\/[^/]+)?|stage-types|stage-rules|calendar|course-rules|report-classes|profile|brand|changes(?:\/[^/]+\/(?:approve|reject|revert))?)|gallery(?:\/[^/]+(?:\/file)?)?)$/.test(p);
+export const toolSettingsPath = p => /^\/api\/(?:settings\/(?:courses(?:\/[^/]+)?|stage-types|stage-rules|calendar|course-rules|report-classes|profile|brand|changes(?:\/[^/]+\/(?:approve|reject|revert))?)|gallery(?:\/[^/]+(?:\/file)?)?)$/.test(p);
 
 const reply = (value, status = 200, headers = {}) => json(newDto(value), status, headers);
 
@@ -146,7 +146,7 @@ async function prepare(r, kind, input, id, allowRetired = false) {
   const d = obj(input), refs = [];
   let doc;
   if ([ "courses", "stage_types", "report_classes" ].includes(kind)) {
-    if (!Object.hasOwn(subjectPacks, d.subject)) error("学科未开放", "subject");
+    if (!Object.hasOwn(manualSubjects, d.subject)) error("学科未开放", "subject");
     doc = {
       subject: d.subject,
       name: str(d.name, "name", 100),
@@ -753,20 +753,7 @@ export async function toolSettingsApi(req, env, resolved, user, policy, url) {
     "report-classes": "report_classes",
     profile: "profile"
   }[resource.split("/")[0]];
-  if (resource === "subjects") {
-    allowed(user, policy, req.method === "GET" ? "read" : "write");
-    if (req.method === "POST") {
-      const d = await body(req);
-      if (!Object.hasOwn(subjectPacks, d.key)) error("学科未开放", "key");
-      await r.settingsImportSubject(d.key, user);
-    } else if (req.method !== "GET") fail(404, "不存在", "not_found");
-    return reply((await r.settingsSubjects()).map(x => ({
-      key: x.id,
-      name: x.name || subjectPacks[x.id]?.name || x.id,
-      ...(x.warnings?{warnings:x.warnings}:{}),
-      pack_version: x.pack_version
-    })));
-  }
+
   if (resource === "brand") {
     allowed(user, policy, req.method === "GET" ? "read" : "write");
     const row = await r.settingsBrand();

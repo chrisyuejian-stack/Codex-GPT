@@ -52,7 +52,7 @@ export const MODULE_LABELS = Object.freeze({
   settlements: "月度结算",
   reports: "统计报表",
      school_db: "院校库",
-  prices: "报价价格", feedback: "课后反馈", parents: "家长管理", ai: "AI工具", usage: "AI用量",
+  prices: "报价价格", feedback: "课后反馈",  ai: "AI工具", usage: "AI用量",
   exports: "导出",
   settings: "设置",
   accounts: "账号权限",

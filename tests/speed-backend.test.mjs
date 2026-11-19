@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fixture } from "./support.mjs";
 import { setup } from "./fixtures-credit.mjs";
-import { adminCall } from "./fixtures-admin.mjs";
 
 const tenant = "https://school.test";
 const consoleOrigin = "https://console.school.test";
@@ -28,9 +27,6 @@ test("速度 S1：仅成功白名单静态响应可缓存，合法版本号、HT
     const resources = [
       [tenant, "/assets/tenant.js"],
       [tenant, "/assets/tenant.css"],
-      [consoleOrigin, "/console-assets/console.js"],
-      [consoleOrigin, "/console-assets/console.css"],
-      [consoleOrigin, "/console-assets/pinyin-pro.js"],
     ];
     for (const [origin, path] of resources) {
       const normal = await f.request(origin + path);
@@ -88,7 +84,7 @@ test("速度 S1：仅成功白名单静态响应可缓存，合法版本号、HT
     const denied = await f.request(
       consoleOrigin + "/console-assets/console.js?v=01234567",
     );
-    assert.equal(denied.status, 403);
+    assert.equal(denied.status, 404);
     assert.equal(denied.headers.get("cache-control"), "no-store");
   } finally {
     f.restore();
@@ -104,12 +100,7 @@ test("速度 S2/S3：认证固定往返与实测 D1 次数，成功及失败的 
     // /me no longer reads the retired referrals feature switch.
     const me = await f.request(root + "me", { headers });
     assert.equal(me.status, 200);
-    assert.equal(verifyTiming(me), 1);
-    const logs = await f.request(consoleOrigin + "/api/logs", {
-      headers: { Cookie: f.adminCookie, "Cf-Access-Jwt-Assertion": f.access },
-    });
-    assert.equal(logs.status, 200);
-    assert.equal(verifyTiming(logs), 1 + 1);
+    assert.equal(verifyTiming(me), 2);
     const data = await f.request(root + "data/students", { headers });
     assert.equal(data.status, 200);
     assert.equal(verifyTiming(data), 3);
@@ -120,36 +111,10 @@ test("速度 S2/S3：认证固定往返与实测 D1 次数，成功及失败的 
       headers,
     });
     assert.equal(badScope.status, 404);
-    assert.equal(verifyTiming(badScope), 1);
+    assert.equal(verifyTiming(badScope), 0);
     const noAccess = await f.request(consoleOrigin + "/api/me");
-    assert.equal(noAccess.status, 403);
+    assert.equal(noAccess.status, 404);
     assert.equal(verifyTiming(noAccess), 0);
-    const limitKey = "request-get:" + s.t.id + ":" + s.user.id;
-    f.db.raw
-      .prepare(
-        "UPDATE security_limits SET count=240,window_start=? WHERE key=?",
-      )
-      .run(Date.now(), limitKey);
-    const limited = await f.request(root + "me", { headers });
-    assert.equal(limited.status, 429);
-    assert.equal(verifyTiming(limited), 1);
-    const alarm = f.db.raw
-      .prepare(
-        "SELECT COUNT(*) n FROM platform_audit WHERE tenant_id=? AND action='请求限流告警'",
-      )
-      .get(s.t.id);
-    assert.equal(alarm.n, 1);
-    const repeated = await f.request(root + "me", { headers });
-    assert.equal(repeated.status, 429);
-    verifyTiming(repeated);
-    assert.equal(
-      f.db.raw
-        .prepare(
-          "SELECT COUNT(*) n FROM platform_audit WHERE tenant_id=? AND action='请求限流告警'",
-        )
-        .get(s.t.id).n,
-      1,
-    );
   } finally {
     f.restore();
   }
@@ -172,7 +137,6 @@ test("速度预算样本：典型接口的独立 D1 往返统计", async () => {
       "todo/summary",
       "c2/home",
       "logs?kind=login",
-      "system-messages",
     ]) {
       const r = await f.request(root + path, { headers });
       assert.equal(r.status, 200, await r.text());
@@ -182,16 +146,7 @@ test("速度预算样本：典型接口的独立 D1 往返统计", async () => {
         trips: Number(r.headers.get("x-test-d1-queries")),
       });
     }
-    for (const path of [
-      "me",
-      "logs",
-      "tenants",
-      "platform/accounts",
-    ]) {
-      const r = await adminCall(f, path);
-      assert.equal(r.status, 200, r.text);
-      rows.push({ surface: "console", path, trips: r.queries });
-    }
+
     if (process.env.SPEED_BUDGET_SAMPLE === "1")
       console.log("SPEED_SAMPLE " + JSON.stringify(rows));
   } finally {

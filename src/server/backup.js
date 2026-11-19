@@ -1,3 +1,4 @@
+import { fixedTenant } from './tenant.js';
 import { repo } from "./repo.js";
 import { backupTables, restoreTables, BUSINESS_SETTINGS } from "./backup-model.js";
 import { bytes, unb64, textBytes, fail, now, randomId } from "./core.js";
@@ -228,12 +229,13 @@ export async function backupPage(env, id, table, offset, tenantId) {
 
 const worker = {
   async scheduled(controller, env, ctx) {
+    const tenant=await fixedTenant(env);if(!tenant)return;
     if (controller.cron === "0 19 * * *")
       await startBackup(env, controller.scheduledTime);
     try {
       if (controller.cron === "*/5 * * * *") {
 
-        await repo(env, null).aiCleanupPage(controller.scheduledTime);
+        await repo(env, tenant.id).aiCleanup(controller.scheduledTime);
       }
     } finally {
       await continueBackup(env, controller.scheduledTime);

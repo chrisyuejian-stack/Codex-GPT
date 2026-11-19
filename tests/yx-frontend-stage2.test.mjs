@@ -15,8 +15,9 @@ test('YXF 根地址：/ 转到 /login；/login 与 /app 给前端外壳（基础
     const home = await get(f, 'https://school.test/');
     assert.equal(home.status, 302);
     assert.equal(home.headers.get('location'), '/login');
+    const s=await schoolFixture(f,'shell');
     for (const path of ['/login', '/app', '/app/', '/app/students']) {
-      const page = await get(f, 'https://school.test' + path);
+      const page = await get(f, 'https://school.test' + path,'__Host-fengqin_session='+s.token);
       assert.equal(page.status, 200, path);
       const html = await page.text();
       assert.match(html, /<meta name="tenant-base" content="\/"/, path);
@@ -29,7 +30,7 @@ test('YXF 根地址：/ 转到 /login；/login 与 /app 给前端外壳（基础
   }
 });
 
-test('YXF 根会话的 me 带机构代号，供前端取品牌；机构路径的 me 同样带', async () => {
+test('YXF me 使用固定实例与根 API 路径', async () => {
   const f = await fixture();
   try {
     const s = await schoolFixture(f, 'yxf-me');
@@ -41,12 +42,13 @@ test('YXF 根会话的 me 带机构代号，供前端取品牌；机构路径的
     assert.equal(login.status, 200);
     const cookie = login.headers.get('set-cookie').split(';')[0];
     const me = await (await get(f, 'https://school.test/api/me', cookie)).json();
-    assert.equal(me.tenant_slug, s.t.slug);
+
     assert.equal(me.api_base, '/api');
-    const brand = await (await get(f, 'https://school.test/api/public/tenant-brand?slug=' + s.t.slug)).json();
-    assert.equal(brand.name, s.t.name);
+    const brand = await (await get(f, 'https://school.test/api/public/brand')).json();
+    assert.equal(brand.display_name, s.t.name);
+    assert.equal(me.tenant_slug,undefined);
     const path = await (await get(f, 'https://school.test/' + s.t.slug + '/api/me', 'channel_session=' + s.token)).json();
-    assert.equal(path.tenant_slug, s.t.slug);
+
   } finally {
     f.restore();
   }

@@ -552,7 +552,7 @@ export async function timetableApi(env, tenant, user, policy, url) {
     fail(404, "不存在");
   if ((!teacher && !student) || (teacher && student))
     fail(400, "请选择一位教师或学员");
-  requireCan(user, policy, "exports", "export", {
+  if (!user.roles.includes("student")) requireCan(user, policy, "exports", "export", {
     teacher_id: teacher,
     student_id: student,
   });

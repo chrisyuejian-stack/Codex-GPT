@@ -1,20 +1,8 @@
-import { invalid } from "./tool-validation.js";
+import { effectiveAIConfig } from './ai-config.js';
 
-import { subjectPacks } from "./subject-packs.js";
-import { decrypt, platformPhoneIndex } from "./crypto.js";
-import { PURGE_TABLES } from "./purge-schema.js";
-import { boundedText, storedRecord, auditChunks, jsonChunks, checkBindings, assertPattern, MANIFEST_BUDGET, D1_VALUE_BUDGET, D1_RECORD_BUDGET, SNAPSHOT_SAFE_ASCII_PATTERN } from "./d1-limits.js";
-import { backupTables, creditTables, restoreTables, BUSINESS_SETTINGS, BACKUP_STATUS_LABELS } from "./backup-model.js";
+import { boundedText, storedRecord, auditChunks, checkBindings, assertPattern, MANIFEST_BUDGET, D1_VALUE_BUDGET, SNAPSHOT_SAFE_ASCII_PATTERN } from "./d1-limits.js";
+import { backupTables, creditTables, BACKUP_STATUS_LABELS } from "./backup-model.js";
 import { randomId, now, fail } from "./core.js";
-
-function purgeFilter(table, id) {
-  const scopedKey = "instr(key, 'login:'||?||':')=1 OR instr(key, 'read:'||?||':')=1 OR instr(key, 'request:'||?||':')=1 OR instr(key, 'request-get:'||?||':')=1 OR instr(key, 'city:'||?||':')=1";
-  if (table === "security_limits")
-    return { where: scopedKey, values: [id,id,id,id,id] };
-  if (table === "backup_snapshot_rows")
-    return { where: "tenant_id=? OR (table_name='tenants' AND source_id=json_array(?)) OR (table_name='security_limits' AND instr(source_id, ':'||?||':')>0)", values: [id,id,id] };
-  return { where: "tenant_id=?", values: [id] };
-}
 
 const stage6ReferenceSql = {
   students:
@@ -155,478 +143,8 @@ const creditTableSql = (build) =>
     table,
     build(table, columns),
   ]));
-const businessExportSql = {
-  ...creditTableSql((table) => `SELECT * FROM ${table} WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?`),
-  renewal_reminders:
-    "SELECT * FROM renewal_reminders WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  students:
-    "SELECT * FROM students WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  teachers:
-    "SELECT * FROM teachers WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  course_categories:
-    "SELECT * FROM course_categories WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  course_types:
-    "SELECT * FROM course_types WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  locations:
-    "SELECT * FROM locations WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  student_stages:
-    "SELECT * FROM student_stages WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  classes:
-    "SELECT * FROM classes WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  class_members:
-    "SELECT * FROM class_members WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  student_schedule_blocks:
-    "SELECT * FROM student_schedule_blocks WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  student_routines:
-    "SELECT * FROM student_routines WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  schedule_templates:
-    "SELECT * FROM schedule_templates WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  schedule_enrollments:
-    "SELECT * FROM schedule_enrollments WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  packages:
-    "SELECT * FROM packages WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  lessons:
-    "SELECT * FROM lessons WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  lesson_participants:
-    "SELECT * FROM lesson_participants WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  package_transactions:
-    "SELECT * FROM package_transactions WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  student_payments:
-    "SELECT * FROM student_payments WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  makeup_links:
-    "SELECT * FROM makeup_links WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  settlements:
-    "SELECT * FROM settlements WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  credit_operations:
-    "SELECT * FROM credit_operations WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  teacher_rates:
-    "SELECT * FROM teacher_rates WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  teacher_payments:
-    "SELECT * FROM teacher_payments WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  teacher_adjustments:
-    "SELECT * FROM teacher_adjustments WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  other_costs:
-    "SELECT * FROM other_costs WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  payroll_snapshots:
-    "SELECT * FROM payroll_snapshots WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  lesson_submissions:
-    "SELECT * FROM lesson_submissions WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  submission_people:
-    "SELECT * FROM submission_people WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  lesson_comments:
-    "SELECT * FROM lesson_comments WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  followup_notes:
-    "SELECT * FROM followup_notes WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  followup_tasks:
-    "SELECT * FROM followup_tasks WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
-  leads: "SELECT * FROM leads WHERE tenant_id=? ORDER BY id LIMIT 200 OFFSET ?",
 
-  tenant_settings:
-    "SELECT * FROM tenant_settings WHERE tenant_id=? AND id IN ('absence_policies','low_balance_threshold','expiry_warning_days','default_unit_minutes') ORDER BY id LIMIT 200 OFFSET ?",
-};
-const emptyBusinessSql = [
-  "SELECT COUNT(*) n FROM students WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM teachers WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM course_categories WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM course_types WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM locations WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM student_stages WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM classes WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM class_members WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM student_schedule_blocks WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM student_routines WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM schedule_templates WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM schedule_enrollments WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM packages WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM lessons WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM lesson_participants WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM package_transactions WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM student_payments WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM makeup_links WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM settlements WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM credit_operations WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM teacher_rates WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM teacher_payments WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM teacher_adjustments WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM other_costs WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM payroll_snapshots WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM lesson_submissions WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM submission_people WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM lesson_comments WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM renewal_reminders WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM followup_notes WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM followup_tasks WHERE tenant_id=?",
-  "SELECT COUNT(*) n FROM leads WHERE tenant_id=?",
-
-];
-const snapshotCaptureSql = [
-  ...Object.values(creditTableSql((table, columns) =>
-    `INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json)
-      SELECT tenant_id,'brow_'||lower(hex(randomblob(12))),?,'${table}',json_array(tenant_id,id),
-      json_object(${columns.map((column) => `'${column}',${column}`).join(",")}) FROM ${table}`,
-  )),
-
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT tenant_id,'brow_'||lower(hex(randomblob(12))),?,'renewal_reminders',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'student_id',student_id,'course_type_id',course_type_id,'scope_kind',scope_kind,'scope_id',scope_id,'package_ids_json',package_ids_json,'channel',channel,'sent_at',sent_at,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM renewal_reminders",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT 'platform','brow_'||lower(hex(randomblob(12))),?, 'tenants',json_array(id),json_object('id',id,'slug',slug,'name',name,'type',type,'city',city,'status',status,'expires_at',expires_at,'staff_seat_limit',staff_seat_limit,'student_seat_limit',student_seat_limit,'contact_enc',contact_enc,'disabled_at',disabled_at,'disabled_by',disabled_by,'disabled_reason',disabled_reason,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at,'gallery_storage_limit',gallery_storage_limit) FROM tenants",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'tenant_slug_aliases',json_array(slug),json_object('slug',slug,'tenant_id',tenant_id,'expires_at',expires_at) FROM tenant_slug_aliases",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'tenant_domains',json_array(domain),json_object('domain',domain,'tenant_id',tenant_id,'kind',kind,'verified',verified) FROM tenant_domains",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'tenant_branding',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'display_name',display_name,'logo',logo,'login_bg',login_bg,'theme_color',theme_color,'welcome_text',welcome_text,'consultant_qr',consultant_qr,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at,'contact_text',contact_text) FROM tenant_branding",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'tenant_modules',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'enabled',enabled,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM tenant_modules",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'tenant_settings',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'value',value,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM tenant_settings",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'tenant_role_rights',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'role',role,'module',module,'action',action,'allowed',allowed,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM tenant_role_rights",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'users',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'phone_hmac',phone_hmac,'phone_enc',phone_enc,'phone_last4',phone_last4,'name',name,'roles',roles,'teacher_id',teacher_id,'student_id',student_id,'salt',salt,'digest',digest,'iterations',iterations,'must_change',must_change,'active',active,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM users",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'sessions',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'token_hash',token_hash,'user_id',user_id,'expires_at',expires_at,'last_seen_at',last_seen_at,'idle_ms',idle_ms,'ip',ip,'ua',ua,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM sessions",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT 'platform','brow_'||lower(hex(randomblob(12))),?, 'security_limits',json_array(key),json_object('key',key,'count',count,'window_start',window_start,'locked_until',locked_until) FROM security_limits",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'auth_log',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'at',at,'user_id',user_id,'phone_last4',phone_last4,'event',event,'ip',ip,'ua',ua) FROM auth_log",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'audit_log',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'at',at,'actor_id',actor_id,'actor_label',actor_label,'module',module,'action',action,'entity_id',entity_id,'summary',summary,'before_json',before_json,'after_json',after_json,'money_version',money_version) FROM audit_log",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT 'platform','brow_'||lower(hex(randomblob(12))),?, 'platform_admins',json_array(id),json_object('id',id,'username',username,'salt',salt,'digest',digest,'totp_enc',totp_enc,'last_totp_step',last_totp_step,'active',active,'created_at',created_at,'role',role) FROM platform_admins",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT 'platform','brow_'||lower(hex(randomblob(12))),?, 'platform_sessions',json_array(token_hash),json_object('token_hash',token_hash,'admin_id',admin_id,'expires_at',expires_at,'last_seen_at',last_seen_at,'ip',ip,'ua',ua) FROM platform_sessions",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'platform_audit',json_array(id),json_object('id',id,'at',at,'admin_id',admin_id,'action',action,'tenant_id',tenant_id,'target',target,'detail',detail,'reason',reason,'ip',ip) FROM platform_audit",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT 'platform','brow_'||lower(hex(randomblob(12))),?, 'platform_state',json_array(id),json_object('id',id,'value',value) FROM platform_state",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'students',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'name',name,'gender',gender,'birth_year',birth_year,'school',school,'grade',grade,'direction',direction,'phone_enc',phone_enc,'parent_name',parent_name,'parent_phone_enc',parent_phone_enc,'status',status,'notes',notes,'sort_order',sort_order,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at,'billing_mode',billing_mode) FROM students",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'teachers',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'name',name,'phone_enc',phone_enc,'subjects',subjects,'employment',employment,'show_in_timetable',show_in_timetable,'status',status,'sort_order',sort_order,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM teachers",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'course_categories',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'name',name,'color',color,'active',active,'sort_order',sort_order,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM course_categories",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'course_types',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'name',name,'category_id',category_id,'format',format,'default_minutes',default_minutes,'units_per_lesson',units_per_lesson,'capacity',capacity,'active',active,'sort_order',sort_order,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM course_types",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'locations',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'name',name,'campus',campus,'offsite',offsite,'capacity',capacity,'active',active,'sort_order',sort_order,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM locations",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'student_schedule_blocks',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'student_id',student_id,'weekday',weekday,'start_time',start_time,'end_time',end_time,'label',label,'active',active,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM student_schedule_blocks",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'schedule_templates',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'teacher_id',teacher_id,'assistant_id',assistant_id,'course_type_id',course_type_id,'location_id',location_id,'weekday',weekday,'start_time',start_time,'duration',duration,'units',units,'mode',mode,'date_from',date_from,'date_to',date_to,'active',active,'note',note,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at,'class_id',class_id) FROM schedule_templates",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'schedule_enrollments',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'template_id',template_id,'student_id',student_id,'date_from',date_from,'date_to',date_to,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM schedule_enrollments",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'lessons',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'start_at',start_at,'duration',duration,'units',units,'teacher_id',teacher_id,'assistant_id',assistant_id,'course_type_id',course_type_id,'location_id',location_id,'mode',mode,'status',status,'template_id',template_id,'occurrence_date',occurrence_date,'note',note,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at,'teacher_paid',teacher_paid,'format',format,'override_rate',override_rate,'override_basis',override_basis,'locked_rate',locked_rate,'current_submission_id',current_submission_id,'class_id',class_id) FROM lessons",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'lesson_participants',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'lesson_id',lesson_id,'student_id',student_id,'attendance',attendance,'deducted',deducted,'package_id',package_id,'makeup_for',makeup_for,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM lesson_participants",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'packages',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'student_id',student_id,'course_type_id',course_type_id,'units_total',units_total,'valid_from',valid_from,'valid_to',valid_to,'status',status,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at,'stage_id',stage_id,'purchase_date',purchase_date,'scope_kind',scope_kind,'category_id',category_id,'unit_price',unit_price,'amount',amount) FROM packages",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'tenant_data_versions',json_array(tenant_id),json_object('tenant_id',tenant_id,'version',version) FROM tenant_data_versions",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'student_stages',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'student_id',student_id,'name',name,'date_from',date_from,'date_to',date_to,'goal',goal,'status',status,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM student_stages",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'package_transactions',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'package_id',package_id,'student_id',student_id,'delta',delta,'type',type,'date',date,'participant_id',participant_id,'reference_id',reference_id,'note',note,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM package_transactions",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'student_payments',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'student_id',student_id,'package_id',package_id,'paid_at',paid_at,'method',method,'note',note,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at,'amount',amount) FROM student_payments",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'makeup_links',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'original_participant_id',original_participant_id,'target_participant_id',target_participant_id,'target_lesson_id',target_lesson_id,'note',note,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM makeup_links",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'settlements',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'month',month,'locked',locked,'summary',summary,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at,'status',status,'submitted_by',submitted_by,'submitted_at',submitted_at,'submitted_revision',submitted_revision,'approved_by',approved_by,'approved_at',approved_at,'snapshot_token',snapshot_token,'reason',reason,'total_amount',total_amount,'tuition_amount',tuition_amount,'cost_amount',cost_amount,'profit_amount',profit_amount,'submitted_fingerprint',submitted_fingerprint) FROM settlements",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'credit_operations',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'actor_id',actor_id,'request_hash',request_hash,'response_json',response_json,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM credit_operations",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'teacher_rates',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'teacher_id',teacher_id,'course_type_id',course_type_id,'format',format,'rate_basis',rate_basis,'rate',rate,'effective_from',effective_from,'effective_to',effective_to,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM teacher_rates",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'teacher_payments',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'teacher_id',teacher_id,'month',month,'amount',amount,'paid_at',paid_at,'note',note,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM teacher_payments",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'teacher_adjustments',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'teacher_id',teacher_id,'month',month,'amount',amount,'reason',reason,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM teacher_adjustments",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'other_costs',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'date',date,'category',category,'amount',amount,'note',note,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM other_costs",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'payroll_snapshots',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'month',month,'snapshot_token',snapshot_token,'lesson_id',lesson_id,'teacher_id',teacher_id,'rate',rate,'rate_basis',rate_basis,'quantity',quantity,'amount',amount,'lesson_json',lesson_json,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM payroll_snapshots",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'lesson_submissions',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'lesson_id',lesson_id,'kind',kind,'status',status,'public_text',public_text,'homework',homework,'base_fingerprint',base_fingerprint,'comment_fingerprint',comment_fingerprint,'submitted_by',submitted_by,'submitted_at',submitted_at,'reviewed_by',reviewed_by,'reviewed_at',reviewed_at,'reason',reason,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM lesson_submissions",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'submission_people',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'submission_id',submission_id,'participant_id',participant_id,'student_id',student_id,'attendance',attendance,'comment',comment,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM submission_people",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'lesson_comments',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'lesson_id',lesson_id,'student_id',student_id,'text',text,'homework',homework,'published_by',published_by,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM lesson_comments",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'classes',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'name',name,'course_type_id',course_type_id,'teacher_id',teacher_id,'location_id',location_id,'date_from',date_from,'date_to',date_to,'status',status,'note',note,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM classes",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'class_members',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'class_id',class_id,'student_id',student_id,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM class_members",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'followup_notes',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'student_id',student_id,'at',at,'content',content,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM followup_notes",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'followup_tasks',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'student_id',student_id,'title',title,'due_date',due_date,'assignee_id',assignee_id,'legacy_owner',legacy_owner,'done',done,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM followup_tasks",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'student_routines',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'student_id',student_id,'weekday',weekday,'time',time,'content',content,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM student_routines",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'leads',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'name',name,'phone_enc',phone_enc,'parent_phone_enc',parent_phone_enc,'phone_last4',phone_last4,'source',source,'stage',stage,'next_followup',next_followup,'trial_at',trial_at,'grade',grade,'direction',direction,'note',note,'student_id',student_id,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM leads",
-
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'announcement_reads',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'announcement_id',announcement_id,'user_id',user_id,'created_at',created_at,'created_by',created_by,'updated_at',updated_at,'updated_by',updated_by,'version',version,'deleted_at',deleted_at) FROM announcement_reads",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT 'platform','brow_'||lower(hex(randomblob(12))),?, 'platform_announcements',json_array(id),json_object('id',id,'title',title,'content',content,'roles',roles,'starts_at',starts_at,'ends_at',ends_at,'created_at',created_at,'created_by',created_by,'withdrawn_at',withdrawn_at,'withdrawn_by',withdrawn_by,'withdrawal_reason',withdrawal_reason) FROM platform_announcements",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT COALESCE(tenant_id,'platform'),'brow_'||lower(hex(randomblob(12))),?, 'announcement_targets',json_array(tenant_id,id),json_object('tenant_id',tenant_id,'id',id,'announcement_id',announcement_id) FROM announcement_targets",
-  "INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT 'platform','brow_'||lower(hex(randomblob(12))),?, 'backup_runs',json_array(id),json_object('id',id,'at',at,'status',status,'detail',detail) FROM backup_runs",
-
-];
-// Identity additions extend the full snapshot; all SQL remains in this repository.
-const identityBackupNames = ['subject_packs','subject_pack_versions','setting_template_refs','style_version_meta','style_version_tenants','style_assets','style_defaults','lesson_submissions', 'lesson_comments', 'growth_repertoire', 'growth_feedback_copies',       'ai_settings', 'ai_quota_daily', 'ai_requests', 'ai_quota_holds', 'ai_usage',      'style_packs', 'style_pack_versions', 'style_pack_scopes', 'compliance_terms', 'tenant_compliance_terms', 'offer_courses', 'stage_types', 'report_classes', 'stage_rules', 'calendar_nodes', 'course_rules', 'tenant_profile', 'tenant_price_lists', 'report_dimensions', 'tenant_brand', 'gallery_images', 'setting_asset_refs', 'setting_imports', 'ai_suggestions', 'setting_changes', 'guardian_links', 'login_choices', 'platform_phone_index', 'tenant_subjects', 'tenant_ai_overrides', 'users', 'sessions', 'students'];
-for (let i=snapshotCaptureSql.length-1;i>=0;i--) {
-  if (identityBackupNames.some(name => new RegExp("\\?,\\s*'"+name+"',").test(snapshotCaptureSql[i]))) snapshotCaptureSql.splice(i,1);
-}
-for (const table of identityBackupNames) {
-  const spec=backupTables[table], keys=spec.pk || ['tenant_id','id'];
-  snapshotCaptureSql.push(`INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json)
-    SELECT ${spec.tenant?'tenant_id':"'platform'"},'brow_'||lower(hex(randomblob(12))),?,'${table}',json_array(${keys.join(',')}),
-    json_object(${spec.columns.map(c=>`'${c}',${c}`).join(',')}) FROM ${table}`);
-}
-const snapshotSql = {
-
-  tenants: "SELECT * FROM tenants",
-  tenant_slug_aliases: "SELECT * FROM tenant_slug_aliases WHERE tenant_id=?",
-  tenant_domains: "SELECT * FROM tenant_domains WHERE tenant_id=?",
-  tenant_branding: "SELECT * FROM tenant_branding WHERE tenant_id=?",
-  tenant_modules: "SELECT * FROM tenant_modules WHERE tenant_id=?",
-  tenant_settings: "SELECT * FROM tenant_settings WHERE tenant_id=?",
-  tenant_role_rights: "SELECT * FROM tenant_role_rights WHERE tenant_id=?",
-  users: "SELECT * FROM users WHERE tenant_id=?",
-  sessions: "SELECT * FROM sessions WHERE tenant_id=?",
-  security_limits: "SELECT * FROM security_limits",
-  auth_log: "SELECT * FROM auth_log WHERE tenant_id=?",
-  audit_log: "SELECT * FROM audit_log WHERE tenant_id=?",
-  platform_admins: "SELECT * FROM platform_admins",
-  platform_sessions: "SELECT * FROM platform_sessions",
-  platform_audit: "SELECT * FROM platform_audit WHERE tenant_id=?",
-  platform_state: "SELECT * FROM platform_state",
-  students: "SELECT * FROM students WHERE tenant_id=?",
-  teachers: "SELECT * FROM teachers WHERE tenant_id=?",
-  course_categories: "SELECT * FROM course_categories WHERE tenant_id=?",
-  course_types: "SELECT * FROM course_types WHERE tenant_id=?",
-  locations: "SELECT * FROM locations WHERE tenant_id=?",
-  student_schedule_blocks:
-    "SELECT * FROM student_schedule_blocks WHERE tenant_id=?",
-  schedule_templates: "SELECT * FROM schedule_templates WHERE tenant_id=?",
-  schedule_enrollments: "SELECT * FROM schedule_enrollments WHERE tenant_id=?",
-  lessons: "SELECT * FROM lessons WHERE tenant_id=?",
-  lesson_participants: "SELECT * FROM lesson_participants WHERE tenant_id=?",
-  packages: "SELECT * FROM packages WHERE tenant_id=?",
-  tenant_data_versions: "SELECT * FROM tenant_data_versions WHERE tenant_id=?",
-  student_stages: "SELECT * FROM student_stages WHERE tenant_id=?",
-  package_transactions: "SELECT * FROM package_transactions WHERE tenant_id=?",
-  student_payments: "SELECT * FROM student_payments WHERE tenant_id=?",
-  makeup_links: "SELECT * FROM makeup_links WHERE tenant_id=?",
-  settlements: "SELECT * FROM settlements WHERE tenant_id=?",
-  credit_operations: "SELECT * FROM credit_operations WHERE tenant_id=?",
-  teacher_rates: "SELECT * FROM teacher_rates WHERE tenant_id=?",
-  teacher_payments: "SELECT * FROM teacher_payments WHERE tenant_id=?",
-  teacher_adjustments: "SELECT * FROM teacher_adjustments WHERE tenant_id=?",
-  other_costs: "SELECT * FROM other_costs WHERE tenant_id=?",
-  payroll_snapshots: "SELECT * FROM payroll_snapshots WHERE tenant_id=?",
-  lesson_submissions: "SELECT * FROM lesson_submissions WHERE tenant_id=?",
-  submission_people: "SELECT * FROM submission_people WHERE tenant_id=?",
-  lesson_comments: "SELECT * FROM lesson_comments WHERE tenant_id=?",
-  classes: "SELECT * FROM classes WHERE tenant_id=?",
-  class_members: "SELECT * FROM class_members WHERE tenant_id=?",
-  renewal_reminders: "SELECT * FROM renewal_reminders WHERE tenant_id=?",
-  followup_notes: "SELECT * FROM followup_notes WHERE tenant_id=?",
-  followup_tasks: "SELECT * FROM followup_tasks WHERE tenant_id=?",
-  student_routines: "SELECT * FROM student_routines WHERE tenant_id=?",
-  leads: "SELECT * FROM leads WHERE tenant_id=?",
-
-  announcement_reads: "SELECT * FROM announcement_reads WHERE tenant_id=?",
-  platform_announcements: "SELECT * FROM platform_announcements",
-  announcement_targets: "SELECT * FROM announcement_targets WHERE tenant_id=?",
-  backup_runs: "SELECT * FROM backup_runs",
-};
-const restoreSql = {
-  ...creditTableSql((table) => ({ clear: `DELETE FROM ${table} WHERE tenant_id=?` })),
-  renewal_reminders: {
-    clear: "DELETE FROM renewal_reminders WHERE tenant_id=?",
-    insert:
-      "INSERT INTO renewal_reminders(tenant_id,id,student_id,course_type_id,scope_kind,scope_id,package_ids_json,channel,sent_at,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.student_id'),json_extract(value,'$.course_type_id'),json_extract(value,'$.scope_kind'),json_extract(value,'$.scope_id'),json_extract(value,'$.package_ids_json'),json_extract(value,'$.channel'),json_extract(value,'$.sent_at'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  students: {
-    clear: "DELETE FROM students WHERE tenant_id=?",
-    insert:
-      "INSERT INTO students(tenant_id,id,name,gender,birth_year,school,grade,direction,phone_enc,parent_name,parent_phone_enc,status,notes,sort_order,created_at,created_by,updated_at,updated_by,version,deleted_at,billing_mode,report_class_id,source_lead_id,nickname,parent_consent_media) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.name'),json_extract(value,'$.gender'),json_extract(value,'$.birth_year'),json_extract(value,'$.school'),json_extract(value,'$.grade'),json_extract(value,'$.direction'),json_extract(value,'$.phone_enc'),json_extract(value,'$.parent_name'),json_extract(value,'$.parent_phone_enc'),json_extract(value,'$.status'),json_extract(value,'$.notes'),json_extract(value,'$.sort_order'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at'),json_extract(value,'$.billing_mode'),json_extract(value,'$.report_class_id'),json_extract(value,'$.source_lead_id'),COALESCE(json_extract(value,'$.nickname'),'X 同学'),COALESCE(json_extract(value,'$.parent_consent_media'),0) FROM json_each(?)",
-  },
-  teachers: {
-    clear: "DELETE FROM teachers WHERE tenant_id=?",
-    insert:
-      "INSERT INTO teachers(tenant_id,id,name,phone_enc,subjects,employment,status,sort_order,created_at,created_by,updated_at,updated_by,version,deleted_at,show_in_timetable) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.name'),json_extract(value,'$.phone_enc'),json_extract(value,'$.subjects'),json_extract(value,'$.employment'),json_extract(value,'$.status'),json_extract(value,'$.sort_order'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at'),COALESCE(json_extract(value,'$.show_in_timetable'),1) FROM json_each(?)",
-  },
-  course_categories: {
-    clear: "DELETE FROM course_categories WHERE tenant_id=?",
-    insert:
-      "INSERT INTO course_categories(tenant_id,id,name,color,active,sort_order,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.name'),json_extract(value,'$.color'),json_extract(value,'$.active'),json_extract(value,'$.sort_order'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  course_types: {
-    clear: "DELETE FROM course_types WHERE tenant_id=?",
-    insert:
-      "INSERT INTO course_types(tenant_id,id,name,category_id,format,default_minutes,units_per_lesson,capacity,active,sort_order,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.name'),json_extract(value,'$.category_id'),json_extract(value,'$.format'),json_extract(value,'$.default_minutes'),json_extract(value,'$.units_per_lesson'),json_extract(value,'$.capacity'),json_extract(value,'$.active'),json_extract(value,'$.sort_order'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  locations: {
-    clear: "DELETE FROM locations WHERE tenant_id=?",
-    insert:
-      "INSERT INTO locations(tenant_id,id,name,campus,offsite,capacity,active,sort_order,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.name'),json_extract(value,'$.campus'),json_extract(value,'$.offsite'),json_extract(value,'$.capacity'),json_extract(value,'$.active'),json_extract(value,'$.sort_order'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  student_schedule_blocks: {
-    clear: "DELETE FROM student_schedule_blocks WHERE tenant_id=?",
-    insert:
-      "INSERT INTO student_schedule_blocks(tenant_id,id,student_id,weekday,start_time,end_time,label,active,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.student_id'),json_extract(value,'$.weekday'),json_extract(value,'$.start_time'),json_extract(value,'$.end_time'),json_extract(value,'$.label'),json_extract(value,'$.active'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  schedule_templates: {
-    clear: "DELETE FROM schedule_templates WHERE tenant_id=?",
-    insert:
-      "INSERT INTO schedule_templates(tenant_id,id,teacher_id,assistant_id,course_type_id,location_id,weekday,start_time,duration,units,mode,date_from,date_to,active,note,created_at,created_by,updated_at,updated_by,version,deleted_at,class_id) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.teacher_id'),json_extract(value,'$.assistant_id'),json_extract(value,'$.course_type_id'),json_extract(value,'$.location_id'),json_extract(value,'$.weekday'),json_extract(value,'$.start_time'),json_extract(value,'$.duration'),json_extract(value,'$.units'),json_extract(value,'$.mode'),json_extract(value,'$.date_from'),json_extract(value,'$.date_to'),json_extract(value,'$.active'),json_extract(value,'$.note'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at'),json_extract(value,'$.class_id') FROM json_each(?)",
-  },
-  schedule_enrollments: {
-    clear: "DELETE FROM schedule_enrollments WHERE tenant_id=?",
-    insert:
-      "INSERT INTO schedule_enrollments(tenant_id,id,template_id,student_id,date_from,date_to,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.template_id'),json_extract(value,'$.student_id'),json_extract(value,'$.date_from'),json_extract(value,'$.date_to'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  lessons: {
-    clear: "DELETE FROM lessons WHERE tenant_id=?",
-    insert:
-      "INSERT INTO lessons(tenant_id,id,start_at,duration,units,teacher_id,assistant_id,course_type_id,location_id,mode,status,template_id,occurrence_date,note,created_at,created_by,updated_at,updated_by,version,deleted_at,teacher_paid,format,override_rate,override_basis,locked_rate,current_submission_id,class_id) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.start_at'),json_extract(value,'$.duration'),json_extract(value,'$.units'),json_extract(value,'$.teacher_id'),json_extract(value,'$.assistant_id'),json_extract(value,'$.course_type_id'),json_extract(value,'$.location_id'),json_extract(value,'$.mode'),json_extract(value,'$.status'),json_extract(value,'$.template_id'),json_extract(value,'$.occurrence_date'),json_extract(value,'$.note'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at'),json_extract(value,'$.teacher_paid'),json_extract(value,'$.format'),json_extract(value,'$.override_rate'),json_extract(value,'$.override_basis'),json_extract(value,'$.locked_rate'),json_extract(value,'$.current_submission_id'),json_extract(value,'$.class_id') FROM json_each(?)",
-  },
-  lesson_participants: {
-    clear: "DELETE FROM lesson_participants WHERE tenant_id=?",
-    insert:
-      "INSERT INTO lesson_participants(tenant_id,id,lesson_id,student_id,attendance,deducted,package_id,makeup_for,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.lesson_id'),json_extract(value,'$.student_id'),json_extract(value,'$.attendance'),json_extract(value,'$.deducted'),json_extract(value,'$.package_id'),json_extract(value,'$.makeup_for'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  packages: {
-    clear: "DELETE FROM packages WHERE tenant_id=?",
-    insert:
-      "INSERT INTO packages(tenant_id,id,student_id,course_type_id,units_total,valid_from,valid_to,status,created_at,created_by,updated_at,updated_by,version,deleted_at,stage_id,purchase_date,scope_kind,category_id,unit_price,amount) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.student_id'),json_extract(value,'$.course_type_id'),json_extract(value,'$.units_total'),json_extract(value,'$.valid_from'),json_extract(value,'$.valid_to'),json_extract(value,'$.status'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at'),json_extract(value,'$.stage_id'),json_extract(value,'$.purchase_date'),json_extract(value,'$.scope_kind'),json_extract(value,'$.category_id'),json_extract(value,'$.unit_price'),json_extract(value,'$.amount') FROM json_each(?)",
-  },
-  student_stages: {
-    clear: "DELETE FROM student_stages WHERE tenant_id=?",
-    insert:
-      "INSERT INTO student_stages(tenant_id,id,student_id,name,date_from,date_to,goal,status,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.student_id'),json_extract(value,'$.name'),json_extract(value,'$.date_from'),json_extract(value,'$.date_to'),json_extract(value,'$.goal'),json_extract(value,'$.status'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  package_transactions: {
-    clear: "DELETE FROM package_transactions WHERE tenant_id=?",
-    insert:
-      "INSERT INTO package_transactions(tenant_id,id,package_id,student_id,delta,type,date,participant_id,reference_id,note,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.package_id'),json_extract(value,'$.student_id'),json_extract(value,'$.delta'),json_extract(value,'$.type'),json_extract(value,'$.date'),json_extract(value,'$.participant_id'),json_extract(value,'$.reference_id'),json_extract(value,'$.note'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  student_payments: {
-    clear: "DELETE FROM student_payments WHERE tenant_id=?",
-    insert:
-      "INSERT INTO student_payments(tenant_id,id,student_id,package_id,paid_at,method,note,created_at,created_by,updated_at,updated_by,version,deleted_at,amount) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.student_id'),json_extract(value,'$.package_id'),json_extract(value,'$.paid_at'),json_extract(value,'$.method'),json_extract(value,'$.note'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at'),json_extract(value,'$.amount') FROM json_each(?)",
-  },
-  makeup_links: {
-    clear: "DELETE FROM makeup_links WHERE tenant_id=?",
-    insert:
-      "INSERT INTO makeup_links(tenant_id,id,original_participant_id,target_participant_id,target_lesson_id,note,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.original_participant_id'),json_extract(value,'$.target_participant_id'),json_extract(value,'$.target_lesson_id'),json_extract(value,'$.note'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  settlements: {
-    clear: "DELETE FROM settlements WHERE tenant_id=?",
-    insert:
-      "INSERT INTO settlements(tenant_id,id,month,locked,summary,created_at,created_by,updated_at,updated_by,version,deleted_at,status,submitted_by,submitted_at,submitted_revision,approved_by,approved_at,snapshot_token,reason,total_amount,tuition_amount,cost_amount,profit_amount,submitted_fingerprint) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.month'),json_extract(value,'$.locked'),json_extract(value,'$.summary'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at'),json_extract(value,'$.status'),json_extract(value,'$.submitted_by'),json_extract(value,'$.submitted_at'),json_extract(value,'$.submitted_revision'),json_extract(value,'$.approved_by'),json_extract(value,'$.approved_at'),json_extract(value,'$.snapshot_token'),json_extract(value,'$.reason'),json_extract(value,'$.total_amount'),json_extract(value,'$.tuition_amount'),json_extract(value,'$.cost_amount'),json_extract(value,'$.profit_amount'),json_extract(value,'$.submitted_fingerprint') FROM json_each(?)",
-  },
-  credit_operations: {
-    clear: "DELETE FROM credit_operations WHERE tenant_id=?",
-    insert:
-      "INSERT INTO credit_operations(tenant_id,id,actor_id,request_hash,response_json,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.actor_id'),json_extract(value,'$.request_hash'),json_extract(value,'$.response_json'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  teacher_rates: {
-    clear: "DELETE FROM teacher_rates WHERE tenant_id=?",
-    insert:
-      "INSERT INTO teacher_rates(tenant_id,id,teacher_id,course_type_id,format,rate_basis,rate,effective_from,effective_to,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.teacher_id'),json_extract(value,'$.course_type_id'),json_extract(value,'$.format'),json_extract(value,'$.rate_basis'),json_extract(value,'$.rate'),json_extract(value,'$.effective_from'),json_extract(value,'$.effective_to'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  teacher_payments: {
-    clear: "DELETE FROM teacher_payments WHERE tenant_id=?",
-    insert:
-      "INSERT INTO teacher_payments(tenant_id,id,teacher_id,month,amount,paid_at,note,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.teacher_id'),json_extract(value,'$.month'),json_extract(value,'$.amount'),json_extract(value,'$.paid_at'),json_extract(value,'$.note'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  teacher_adjustments: {
-    clear: "DELETE FROM teacher_adjustments WHERE tenant_id=?",
-    insert:
-      "INSERT INTO teacher_adjustments(tenant_id,id,teacher_id,month,amount,reason,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.teacher_id'),json_extract(value,'$.month'),json_extract(value,'$.amount'),json_extract(value,'$.reason'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  other_costs: {
-    clear: "DELETE FROM other_costs WHERE tenant_id=?",
-    insert:
-      "INSERT INTO other_costs(tenant_id,id,date,category,amount,note,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.date'),json_extract(value,'$.category'),json_extract(value,'$.amount'),json_extract(value,'$.note'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  payroll_snapshots: {
-    clear: "DELETE FROM payroll_snapshots WHERE tenant_id=?",
-    insert:
-      "INSERT INTO payroll_snapshots(tenant_id,id,month,snapshot_token,lesson_id,teacher_id,rate,rate_basis,quantity,amount,lesson_json,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.month'),json_extract(value,'$.snapshot_token'),json_extract(value,'$.lesson_id'),json_extract(value,'$.teacher_id'),json_extract(value,'$.rate'),json_extract(value,'$.rate_basis'),json_extract(value,'$.quantity'),json_extract(value,'$.amount'),json_extract(value,'$.lesson_json'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  lesson_submissions: {
-    clear: "DELETE FROM lesson_submissions WHERE tenant_id=?",
-    insert:
-      "INSERT INTO lesson_submissions(tenant_id,id,lesson_id,kind,status,public_text,homework,base_fingerprint,comment_fingerprint,submitted_by,submitted_at,reviewed_by,reviewed_at,reason,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.lesson_id'),json_extract(value,'$.kind'),json_extract(value,'$.status'),json_extract(value,'$.public_text'),json_extract(value,'$.homework'),json_extract(value,'$.base_fingerprint'),json_extract(value,'$.comment_fingerprint'),json_extract(value,'$.submitted_by'),json_extract(value,'$.submitted_at'),json_extract(value,'$.reviewed_by'),json_extract(value,'$.reviewed_at'),json_extract(value,'$.reason'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  submission_people: {
-    clear: "DELETE FROM submission_people WHERE tenant_id=?",
-    insert:
-      "INSERT INTO submission_people(tenant_id,id,submission_id,participant_id,student_id,attendance,comment,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.submission_id'),json_extract(value,'$.participant_id'),json_extract(value,'$.student_id'),json_extract(value,'$.attendance'),json_extract(value,'$.comment'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  lesson_comments: {
-    clear: "DELETE FROM lesson_comments WHERE tenant_id=?",
-    insert:
-      "INSERT INTO lesson_comments(tenant_id,id,lesson_id,student_id,text,homework,published_by,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.lesson_id'),json_extract(value,'$.student_id'),json_extract(value,'$.text'),json_extract(value,'$.homework'),json_extract(value,'$.published_by'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  classes: {
-    clear: "DELETE FROM classes WHERE tenant_id=?",
-    insert:
-      "INSERT INTO classes(tenant_id,id,name,course_type_id,teacher_id,location_id,date_from,date_to,status,note,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.name'),json_extract(value,'$.course_type_id'),json_extract(value,'$.teacher_id'),json_extract(value,'$.location_id'),json_extract(value,'$.date_from'),json_extract(value,'$.date_to'),json_extract(value,'$.status'),json_extract(value,'$.note'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  class_members: {
-    clear: "DELETE FROM class_members WHERE tenant_id=?",
-    insert:
-      "INSERT INTO class_members(tenant_id,id,class_id,student_id,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.class_id'),json_extract(value,'$.student_id'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  followup_notes: {
-    clear: "DELETE FROM followup_notes WHERE tenant_id=?",
-    insert:
-      "INSERT INTO followup_notes(tenant_id,id,student_id,at,content,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.student_id'),json_extract(value,'$.at'),json_extract(value,'$.content'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  followup_tasks: {
-    clear: "DELETE FROM followup_tasks WHERE tenant_id=?",
-    insert:
-      "INSERT INTO followup_tasks(tenant_id,id,student_id,title,due_date,assignee_id,legacy_owner,done,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.student_id'),json_extract(value,'$.title'),json_extract(value,'$.due_date'),json_extract(value,'$.assignee_id'),json_extract(value,'$.legacy_owner'),json_extract(value,'$.done'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  student_routines: {
-    clear: "DELETE FROM student_routines WHERE tenant_id=?",
-    insert:
-      "INSERT INTO student_routines(tenant_id,id,student_id,weekday,time,content,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.student_id'),json_extract(value,'$.weekday'),json_extract(value,'$.time'),json_extract(value,'$.content'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-  leads: {
-    clear: "DELETE FROM leads WHERE tenant_id=?",
-    insert:
-      "INSERT INTO leads(tenant_id,id,name,phone_enc,parent_phone_enc,phone_last4,source,stage,next_followup,trial_at,grade,direction,note,student_id,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.name'),json_extract(value,'$.phone_enc'),json_extract(value,'$.parent_phone_enc'),json_extract(value,'$.phone_last4'),json_extract(value,'$.source'),json_extract(value,'$.stage'),json_extract(value,'$.next_followup'),json_extract(value,'$.trial_at'),json_extract(value,'$.grade'),json_extract(value,'$.direction'),json_extract(value,'$.note'),json_extract(value,'$.student_id'),json_extract(value,'$.created_at'),json_extract(value,'$.created_by'),json_extract(value,'$.updated_at'),json_extract(value,'$.updated_by'),json_extract(value,'$.version'),json_extract(value,'$.deleted_at') FROM json_each(?)",
-  },
-
-};
-const stagedRestoreSql = {
-  ...creditTableSql((table, columns) =>
-    `INSERT INTO ${table}(${columns.join(",")})
-      SELECT ?,${columns.slice(1).map((column) => `json_extract(row_json,'$.${column}')`).join(",")}
-      FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='${table}'`,
-  ),
-  renewal_reminders:
-    "INSERT INTO renewal_reminders(tenant_id,id,student_id,course_type_id,scope_kind,scope_id,package_ids_json,channel,sent_at,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.course_type_id'),json_extract(row_json,'$.scope_kind'),json_extract(row_json,'$.scope_id'),json_extract(row_json,'$.package_ids_json'),json_extract(row_json,'$.channel'),json_extract(row_json,'$.sent_at'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='renewal_reminders'",
-  students:
-    "INSERT INTO students(tenant_id,id,name,gender,birth_year,school,grade,direction,phone_enc,parent_name,parent_phone_enc,status,notes,sort_order,created_at,created_by,updated_at,updated_by,version,deleted_at,billing_mode,report_class_id,source_lead_id,nickname,parent_consent_media) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.name'),json_extract(row_json,'$.gender'),json_extract(row_json,'$.birth_year'),json_extract(row_json,'$.school'),json_extract(row_json,'$.grade'),json_extract(row_json,'$.direction'),json_extract(row_json,'$.phone_enc'),json_extract(row_json,'$.parent_name'),json_extract(row_json,'$.parent_phone_enc'),json_extract(row_json,'$.status'),json_extract(row_json,'$.notes'),json_extract(row_json,'$.sort_order'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at'),json_extract(row_json,'$.billing_mode'),json_extract(row_json,'$.report_class_id'),json_extract(row_json,'$.source_lead_id'),COALESCE(json_extract(row_json,'$.nickname'),'X 同学'),COALESCE(json_extract(row_json,'$.parent_consent_media'),0) FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='students'",
-  teachers:
-    "INSERT INTO teachers(tenant_id,id,name,phone_enc,subjects,employment,status,sort_order,created_at,created_by,updated_at,updated_by,version,deleted_at,show_in_timetable) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.name'),json_extract(row_json,'$.phone_enc'),json_extract(row_json,'$.subjects'),json_extract(row_json,'$.employment'),json_extract(row_json,'$.status'),json_extract(row_json,'$.sort_order'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at'),COALESCE(json_extract(row_json,'$.show_in_timetable'),1) FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='teachers'",
-  course_categories:
-    "INSERT INTO course_categories(tenant_id,id,name,color,active,sort_order,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.name'),json_extract(row_json,'$.color'),json_extract(row_json,'$.active'),json_extract(row_json,'$.sort_order'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='course_categories'",
-  course_types:
-    "INSERT INTO course_types(tenant_id,id,name,category_id,format,default_minutes,units_per_lesson,capacity,active,sort_order,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.name'),json_extract(row_json,'$.category_id'),json_extract(row_json,'$.format'),json_extract(row_json,'$.default_minutes'),json_extract(row_json,'$.units_per_lesson'),json_extract(row_json,'$.capacity'),json_extract(row_json,'$.active'),json_extract(row_json,'$.sort_order'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='course_types'",
-  locations:
-    "INSERT INTO locations(tenant_id,id,name,campus,offsite,capacity,active,sort_order,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.name'),json_extract(row_json,'$.campus'),json_extract(row_json,'$.offsite'),json_extract(row_json,'$.capacity'),json_extract(row_json,'$.active'),json_extract(row_json,'$.sort_order'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='locations'",
-  student_schedule_blocks:
-    "INSERT INTO student_schedule_blocks(tenant_id,id,student_id,weekday,start_time,end_time,label,active,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.weekday'),json_extract(row_json,'$.start_time'),json_extract(row_json,'$.end_time'),json_extract(row_json,'$.label'),json_extract(row_json,'$.active'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='student_schedule_blocks'",
-  schedule_templates:
-    "INSERT INTO schedule_templates(tenant_id,id,teacher_id,assistant_id,course_type_id,location_id,weekday,start_time,duration,units,mode,date_from,date_to,active,note,created_at,created_by,updated_at,updated_by,version,deleted_at,class_id) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.teacher_id'),json_extract(row_json,'$.assistant_id'),json_extract(row_json,'$.course_type_id'),json_extract(row_json,'$.location_id'),json_extract(row_json,'$.weekday'),json_extract(row_json,'$.start_time'),json_extract(row_json,'$.duration'),json_extract(row_json,'$.units'),json_extract(row_json,'$.mode'),json_extract(row_json,'$.date_from'),json_extract(row_json,'$.date_to'),json_extract(row_json,'$.active'),json_extract(row_json,'$.note'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at'),json_extract(row_json,'$.class_id') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='schedule_templates'",
-  schedule_enrollments:
-    "INSERT INTO schedule_enrollments(tenant_id,id,template_id,student_id,date_from,date_to,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.template_id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.date_from'),json_extract(row_json,'$.date_to'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='schedule_enrollments'",
-  lessons:
-    "INSERT INTO lessons(tenant_id,id,start_at,duration,units,teacher_id,assistant_id,course_type_id,location_id,mode,status,template_id,occurrence_date,note,created_at,created_by,updated_at,updated_by,version,deleted_at,teacher_paid,format,override_rate,override_basis,locked_rate,current_submission_id,class_id) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.start_at'),json_extract(row_json,'$.duration'),json_extract(row_json,'$.units'),json_extract(row_json,'$.teacher_id'),json_extract(row_json,'$.assistant_id'),json_extract(row_json,'$.course_type_id'),json_extract(row_json,'$.location_id'),json_extract(row_json,'$.mode'),json_extract(row_json,'$.status'),json_extract(row_json,'$.template_id'),json_extract(row_json,'$.occurrence_date'),json_extract(row_json,'$.note'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at'),json_extract(row_json,'$.teacher_paid'),json_extract(row_json,'$.format'),json_extract(row_json,'$.override_rate'),json_extract(row_json,'$.override_basis'),json_extract(row_json,'$.locked_rate'),json_extract(row_json,'$.current_submission_id'),json_extract(row_json,'$.class_id') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='lessons'",
-  lesson_participants:
-    "INSERT INTO lesson_participants(tenant_id,id,lesson_id,student_id,attendance,deducted,package_id,makeup_for,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.lesson_id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.attendance'),json_extract(row_json,'$.deducted'),json_extract(row_json,'$.package_id'),json_extract(row_json,'$.makeup_for'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='lesson_participants'",
-  packages:
-    "INSERT INTO packages(tenant_id,id,student_id,course_type_id,units_total,valid_from,valid_to,status,created_at,created_by,updated_at,updated_by,version,deleted_at,stage_id,purchase_date,scope_kind,category_id,unit_price,amount) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.course_type_id'),json_extract(row_json,'$.units_total'),json_extract(row_json,'$.valid_from'),json_extract(row_json,'$.valid_to'),json_extract(row_json,'$.status'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at'),json_extract(row_json,'$.stage_id'),json_extract(row_json,'$.purchase_date'),json_extract(row_json,'$.scope_kind'),json_extract(row_json,'$.category_id'),json_extract(row_json,'$.unit_price'),json_extract(row_json,'$.amount') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='packages'",
-  student_stages:
-    "INSERT INTO student_stages(tenant_id,id,student_id,name,date_from,date_to,goal,status,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.name'),json_extract(row_json,'$.date_from'),json_extract(row_json,'$.date_to'),json_extract(row_json,'$.goal'),json_extract(row_json,'$.status'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='student_stages'",
-  package_transactions:
-    "INSERT INTO package_transactions(tenant_id,id,package_id,student_id,delta,type,date,participant_id,reference_id,note,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.package_id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.delta'),json_extract(row_json,'$.type'),json_extract(row_json,'$.date'),json_extract(row_json,'$.participant_id'),json_extract(row_json,'$.reference_id'),json_extract(row_json,'$.note'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='package_transactions'",
-  student_payments:
-    "INSERT INTO student_payments(tenant_id,id,student_id,package_id,paid_at,method,note,created_at,created_by,updated_at,updated_by,version,deleted_at,amount) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.package_id'),json_extract(row_json,'$.paid_at'),json_extract(row_json,'$.method'),json_extract(row_json,'$.note'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at'),json_extract(row_json,'$.amount') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='student_payments'",
-  makeup_links:
-    "INSERT INTO makeup_links(tenant_id,id,original_participant_id,target_participant_id,target_lesson_id,note,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.original_participant_id'),json_extract(row_json,'$.target_participant_id'),json_extract(row_json,'$.target_lesson_id'),json_extract(row_json,'$.note'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='makeup_links'",
-  settlements:
-    "INSERT INTO settlements(tenant_id,id,month,locked,summary,created_at,created_by,updated_at,updated_by,version,deleted_at,status,submitted_by,submitted_at,submitted_revision,approved_by,approved_at,snapshot_token,reason,total_amount,tuition_amount,cost_amount,profit_amount,submitted_fingerprint) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.month'),json_extract(row_json,'$.locked'),json_extract(row_json,'$.summary'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at'),json_extract(row_json,'$.status'),json_extract(row_json,'$.submitted_by'),json_extract(row_json,'$.submitted_at'),json_extract(row_json,'$.submitted_revision'),json_extract(row_json,'$.approved_by'),json_extract(row_json,'$.approved_at'),json_extract(row_json,'$.snapshot_token'),json_extract(row_json,'$.reason'),json_extract(row_json,'$.total_amount'),json_extract(row_json,'$.tuition_amount'),json_extract(row_json,'$.cost_amount'),json_extract(row_json,'$.profit_amount'),json_extract(row_json,'$.submitted_fingerprint') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='settlements'",
-  credit_operations:
-    "INSERT INTO credit_operations(tenant_id,id,actor_id,request_hash,response_json,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.actor_id'),json_extract(row_json,'$.request_hash'),json_extract(row_json,'$.response_json'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='credit_operations'",
-  teacher_rates:
-    "INSERT INTO teacher_rates(tenant_id,id,teacher_id,course_type_id,format,rate_basis,rate,effective_from,effective_to,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.teacher_id'),json_extract(row_json,'$.course_type_id'),json_extract(row_json,'$.format'),json_extract(row_json,'$.rate_basis'),json_extract(row_json,'$.rate'),json_extract(row_json,'$.effective_from'),json_extract(row_json,'$.effective_to'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='teacher_rates'",
-  teacher_payments:
-    "INSERT INTO teacher_payments(tenant_id,id,teacher_id,month,amount,paid_at,note,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.teacher_id'),json_extract(row_json,'$.month'),json_extract(row_json,'$.amount'),json_extract(row_json,'$.paid_at'),json_extract(row_json,'$.note'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='teacher_payments'",
-  teacher_adjustments:
-    "INSERT INTO teacher_adjustments(tenant_id,id,teacher_id,month,amount,reason,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.teacher_id'),json_extract(row_json,'$.month'),json_extract(row_json,'$.amount'),json_extract(row_json,'$.reason'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='teacher_adjustments'",
-  other_costs:
-    "INSERT INTO other_costs(tenant_id,id,date,category,amount,note,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.date'),json_extract(row_json,'$.category'),json_extract(row_json,'$.amount'),json_extract(row_json,'$.note'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='other_costs'",
-  payroll_snapshots:
-    "INSERT INTO payroll_snapshots(tenant_id,id,month,snapshot_token,lesson_id,teacher_id,rate,rate_basis,quantity,amount,lesson_json,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.month'),json_extract(row_json,'$.snapshot_token'),json_extract(row_json,'$.lesson_id'),json_extract(row_json,'$.teacher_id'),json_extract(row_json,'$.rate'),json_extract(row_json,'$.rate_basis'),json_extract(row_json,'$.quantity'),json_extract(row_json,'$.amount'),json_extract(row_json,'$.lesson_json'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='payroll_snapshots'",
-  lesson_submissions:
-    "INSERT INTO lesson_submissions(tenant_id,id,lesson_id,kind,status,public_text,homework,base_fingerprint,comment_fingerprint,submitted_by,submitted_at,reviewed_by,reviewed_at,reason,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.lesson_id'),json_extract(row_json,'$.kind'),json_extract(row_json,'$.status'),json_extract(row_json,'$.public_text'),json_extract(row_json,'$.homework'),json_extract(row_json,'$.base_fingerprint'),json_extract(row_json,'$.comment_fingerprint'),json_extract(row_json,'$.submitted_by'),json_extract(row_json,'$.submitted_at'),json_extract(row_json,'$.reviewed_by'),json_extract(row_json,'$.reviewed_at'),json_extract(row_json,'$.reason'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='lesson_submissions'",
-  submission_people:
-    "INSERT INTO submission_people(tenant_id,id,submission_id,participant_id,student_id,attendance,comment,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.submission_id'),json_extract(row_json,'$.participant_id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.attendance'),json_extract(row_json,'$.comment'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='submission_people'",
-  lesson_comments:
-    "INSERT INTO lesson_comments(tenant_id,id,lesson_id,student_id,text,homework,published_by,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.lesson_id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.text'),json_extract(row_json,'$.homework'),json_extract(row_json,'$.published_by'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='lesson_comments'",
-  classes:
-    "INSERT INTO classes(tenant_id,id,name,course_type_id,teacher_id,location_id,date_from,date_to,status,note,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.name'),json_extract(row_json,'$.course_type_id'),json_extract(row_json,'$.teacher_id'),json_extract(row_json,'$.location_id'),json_extract(row_json,'$.date_from'),json_extract(row_json,'$.date_to'),json_extract(row_json,'$.status'),json_extract(row_json,'$.note'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='classes'",
-  class_members:
-    "INSERT INTO class_members(tenant_id,id,class_id,student_id,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.class_id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='class_members'",
-  followup_notes:
-    "INSERT INTO followup_notes(tenant_id,id,student_id,at,content,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.at'),json_extract(row_json,'$.content'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='followup_notes'",
-  followup_tasks:
-    "INSERT INTO followup_tasks(tenant_id,id,student_id,title,due_date,assignee_id,legacy_owner,done,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.title'),json_extract(row_json,'$.due_date'),json_extract(row_json,'$.assignee_id'),json_extract(row_json,'$.legacy_owner'),json_extract(row_json,'$.done'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='followup_tasks'",
-  student_routines:
-    "INSERT INTO student_routines(tenant_id,id,student_id,weekday,time,content,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.weekday'),json_extract(row_json,'$.time'),json_extract(row_json,'$.content'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='student_routines'",
-  leads:
-    "INSERT INTO leads(tenant_id,id,name,phone_enc,parent_phone_enc,phone_last4,source,stage,next_followup,trial_at,grade,direction,note,student_id,created_at,created_by,updated_at,updated_by,version,deleted_at) SELECT ?,json_extract(row_json,'$.id'),json_extract(row_json,'$.name'),json_extract(row_json,'$.phone_enc'),json_extract(row_json,'$.parent_phone_enc'),json_extract(row_json,'$.phone_last4'),json_extract(row_json,'$.source'),json_extract(row_json,'$.stage'),json_extract(row_json,'$.next_followup'),json_extract(row_json,'$.trial_at'),json_extract(row_json,'$.grade'),json_extract(row_json,'$.direction'),json_extract(row_json,'$.note'),json_extract(row_json,'$.student_id'),json_extract(row_json,'$.created_at'),json_extract(row_json,'$.created_by'),json_extract(row_json,'$.updated_at'),json_extract(row_json,'$.updated_by'),json_extract(row_json,'$.version'),json_extract(row_json,'$.deleted_at') FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name='leads'",
-
-};
+const snapshotCaptureSql=Object.entries(backupTables).map(([table,spec])=>{const keys=spec.pk||spec.columns.slice(0,1);const where=table==='tenants'?'id=?2':spec.tenant?'tenant_id=?2':'?2 IS NOT NULL';return `INSERT INTO backup_snapshot_rows(tenant_id,id,snapshot_id,table_name,source_id,row_json) SELECT ${spec.tenant?'tenant_id':"'app'"},'brow_'||lower(hex(randomblob(12))),?1,'${table}',json_array(${keys.join(',')}),json_object(${spec.columns.map(c=>"'"+c+"',"+c).join(',')}) FROM ${table} WHERE ${where}`;});
 const toolListSql = {
   classes:
     "SELECT * FROM classes WHERE tenant_id=? AND deleted_at IS NULL AND (? IS NULL OR id=?) ORDER BY created_at DESC,id LIMIT 200 OFFSET ?",
@@ -796,26 +314,6 @@ const businessSql = {
       "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?,?,?,COALESCE((SELECT version FROM leads WHERE tenant_id=? AND id=? AND deleted_at IS NULL),-1)",
   },
 
-  announcement_reads: {
-    columns: [
-      "announcement_id",
-      "user_id",
-      "created_at",
-      "created_by",
-      "updated_at",
-      "updated_by",
-      "version",
-      "deleted_at",
-    ],
-    insert:
-      "INSERT INTO announcement_reads(tenant_id,id,announcement_id,user_id,created_at,created_by,updated_at,updated_by,version,deleted_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-    update:
-      "UPDATE announcement_reads SET announcement_id=?,user_id=?,created_at=?,created_by=?,updated_at=?,updated_by=?,version=?,deleted_at=? WHERE tenant_id=? AND id=?",
-    get: "SELECT * FROM announcement_reads WHERE tenant_id=? AND id=? AND deleted_at IS NULL",
-    list: "SELECT * FROM announcement_reads WHERE tenant_id=? AND deleted_at IS NULL ORDER BY created_at DESC,id LIMIT 200 OFFSET ?",
-    guard:
-      "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?,?,?,COALESCE((SELECT version FROM announcement_reads WHERE tenant_id=? AND id=? AND deleted_at IS NULL),-1)",
-  },
   lesson_submissions: {
     columns: [
       "lesson_id",
@@ -1562,7 +1060,7 @@ const snapshotPreflightSql = Object.entries(backupTables).map(
       );
     });
     return (
-      "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT 'platform',?||':" +
+      "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT 'backup',?||':" +
       table +
       "',1,CASE WHEN EXISTS(SELECT 1 FROM " +
       table +
@@ -1592,17 +1090,7 @@ const referenceSql = {
 };
 const studentHistorySql =
   "SELECT l.id,l.start_at,l.duration,l.status,p.attendance,p.deducted,c.name course_name,t.name teacher_name,o.name location_name,pub.text public_text,priv.text private_comment FROM lessons l JOIN lesson_participants p ON p.tenant_id=l.tenant_id AND p.lesson_id=l.id JOIN course_types c ON c.tenant_id=l.tenant_id AND c.id=l.course_type_id JOIN teachers t ON t.tenant_id=l.tenant_id AND t.id=l.teacher_id LEFT JOIN locations o ON o.tenant_id=l.tenant_id AND o.id=l.location_id LEFT JOIN lesson_comments pub ON pub.tenant_id=l.tenant_id AND pub.lesson_id=l.id AND pub.student_id IS NULL AND pub.deleted_at IS NULL LEFT JOIN lesson_comments priv ON priv.tenant_id=l.tenant_id AND priv.lesson_id=l.id AND priv.student_id=p.student_id AND priv.deleted_at IS NULL WHERE l.tenant_id=? AND p.student_id=? AND p.deleted_at IS NULL AND l.deleted_at IS NULL AND strftime('%s',l.start_at)*1000<=? ORDER BY l.start_at DESC,l.id LIMIT ? OFFSET ?";
-const tenantRouteSql = (host, slug, at) => `WITH candidates AS (
-  SELECT t.*,0 route_priority FROM tenants t JOIN tenant_domains d ON d.tenant_id=t.id WHERE d.domain=${host} AND d.verified=1
-  UNION ALL SELECT t.*,1 route_priority FROM tenants t WHERE t.slug=${slug} COLLATE NOCASE
-  UNION ALL SELECT t.*,2 route_priority FROM tenants t JOIN tenant_slug_aliases a ON a.tenant_id=t.id
-    WHERE a.slug=${slug} COLLATE NOCASE AND a.expires_at>${at}
-) SELECT * FROM candidates ORDER BY route_priority LIMIT 1`;
-function tenantRoute(row, auth) {
-  if (!row) return null;
-  const { route_priority, ...tenant } = row;
-  return { tenant, domain: route_priority === 0, alias: route_priority === 2, auth };
-}
+
 function policyRows(modules, settings, rights) {
   return {
     modules: Object.fromEntries(modules.map((x) => [x.id, !!x.enabled])),
@@ -1611,8 +1099,6 @@ function policyRows(modules, settings, rights) {
   };
 }
 
-const announcementUnreadSql = "SELECT COUNT(*) n FROM announcement_targets t JOIN platform_announcements a ON a.id=t.announcement_id AND a.withdrawn_at IS NULL WHERE t.tenant_id=? AND a.starts_at<=? AND (a.ends_at IS NULL OR a.ends_at>?) AND EXISTS(SELECT 1 FROM json_each(a.roles) r WHERE r.value IN(SELECT value FROM json_each(?))) AND NOT EXISTS(SELECT 1 FROM announcement_reads x WHERE x.tenant_id=t.tenant_id AND x.announcement_id=a.id AND x.user_id=? AND x.deleted_at IS NULL)";
-const announcementPageSql = "SELECT a.id,a.title,a.content,a.starts_at,EXISTS(SELECT 1 FROM announcement_reads r WHERE r.tenant_id=t.tenant_id AND r.announcement_id=a.id AND r.user_id=? AND r.deleted_at IS NULL) is_read FROM announcement_targets t JOIN platform_announcements a ON a.id=t.announcement_id AND a.withdrawn_at IS NULL WHERE t.tenant_id=? AND a.starts_at<=? AND (a.ends_at IS NULL OR a.ends_at>?) AND EXISTS(SELECT 1 FROM json_each(a.roles) r WHERE r.value IN (SELECT value FROM json_each(?))) ORDER BY a.starts_at DESC,a.id LIMIT 200 OFFSET ?";
 const weekCountsSql = "SELECT SUBSTR(start_at,1,10) date,COUNT(*) n FROM lessons WHERE tenant_id=? AND deleted_at IS NULL AND start_at>=? AND start_at<? GROUP BY SUBSTR(start_at,1,10)";
 const expiredStagesSql = "SELECT x.*,s.name student_name FROM student_stages x JOIN students s ON s.tenant_id=x.tenant_id AND s.id=x.student_id WHERE x.tenant_id=? AND x.deleted_at IS NULL AND s.deleted_at IS NULL AND x.status='active' AND x.date_to<? ORDER BY x.date_to,x.id LIMIT 50 OFFSET ?";
 const dueLeadsSql = "SELECT id,name FROM leads WHERE tenant_id=? AND deleted_at IS NULL AND next_followup=? AND stage NOT IN ('enrolled','lost') ORDER BY id LIMIT 6";
@@ -1806,78 +1292,15 @@ export function repo(env, tenantId) {
         window_start=CASE WHEN window_start<=?3 AND locked_until<=?2 THEN ?2 ELSE window_start END`,
     key, at, at - window,
   );
-  const platform = () => {
-    if (tenantId !== null) throw Error("platform scope required");
+  const globalScope = () => {
+    if (tenantId !== null) throw Error("global backup scope required");
   };
-  const conflict = async (id) => {
-    const row = tenantId
-      ? await first(
-          "SELECT actor.name FROM users target LEFT JOIN users actor ON actor.tenant_id=target.tenant_id AND actor.id=target.updated_by WHERE target.tenant_id=? AND target.id=?",
-          tenantId,
-          id,
-        )
-      : await first(
-          "SELECT a.username AS name FROM tenants t LEFT JOIN platform_admins a ON a.id=t.updated_by WHERE t.id=?",
-          id,
-        );
-    fail(409, "这条记录刚被" + (row?.name || "系统维护") + "修改，请刷新");
-  };
-  async function authentication(hash, route = null) {
-    const at = now();
-    const target = route
-      ? `(SELECT id FROM (${tenantRouteSql("?5", "?6", "?3")}) t
-        WHERE t.deleted_at IS NULL
-          AND CASE t.route_priority WHEN 0 THEN ?7 WHEN 1 THEN ?8 ELSE 0 END)`
-      : "?1";
-    const eligible = `SELECT s.id AS session_id,s.expires_at,s.last_seen_at,s.idle_ms,u.*
-      FROM sessions s JOIN users u ON u.tenant_id=s.tenant_id AND u.id=s.user_id
-      WHERE s.tenant_id=${target} AND s.token_hash=?2 ${route ? "AND s.kind='path'" : ""} AND u.active=1 AND u.deleted_at IS NULL
-        AND s.expires_at>?3 AND (COALESCE(s.idle_ms,0)=0 OR s.last_seen_at+s.idle_ms>?3)`;
-    const countable = `${eligible} AND EXISTS(SELECT 1 FROM tenants t WHERE t.id=s.tenant_id AND t.status='active'
-      AND (t.expires_at IS NULL OR unixepoch(t.expires_at||'T23:59:59+08:00')*1000>?3))`;
-    const prefix = env.__readRequest ? "'request-get:'" : "'request:'";
-    const key = prefix + "||tenant_id||':'||id";
-    const max = env.__readRequest ? "240" :
-      "CASE WHEN EXISTS(SELECT 1 FROM json_each(e.roles) WHERE value IN ('teacher','student','parent')) THEN 60 ELSE 120 END";
-    const incident = randomId("pa");
-    const args = route
-      ? [null, hash, at, incident, route.host, route.slug, Number(route.domainAuth), Number(route.slugAuth)]
-      : [tenantId, hash, at];
-    const query = (text) => sql(text, ...args);
-    const policyTarget = "(SELECT tenant_id FROM (" + eligible + "))";
-    const ops = [
-      query(eligible),
-      query("SELECT id,enabled FROM tenant_modules WHERE tenant_id=" + policyTarget + " AND deleted_at IS NULL"),
-      query("SELECT id,value FROM tenant_settings WHERE tenant_id=" + policyTarget + " AND deleted_at IS NULL"),
-      query("SELECT role,module,action,allowed FROM tenant_role_rights WHERE tenant_id=" + policyTarget + " AND deleted_at IS NULL"),
-      query(`INSERT INTO security_limits(key,count,window_start,locked_until)
-        SELECT ${key},1,?3,0 FROM (${countable}) WHERE 1
-        ON CONFLICT(key) DO UPDATE SET count=CASE WHEN window_start<=?3-60000 THEN 1 ELSE count+1 END,
-        window_start=CASE WHEN window_start<=?3-60000 THEN ?3 ELSE window_start END`),
-      query(`SELECT l.count,${max} maximum FROM (${countable}) e JOIN security_limits l
-        ON l.key=(${prefix}||e.tenant_id||':'||e.id)`),
-      sql(`INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,ip)
-        SELECT ?4,?3,'system','请求限流告警',e.tenant_id,e.id,'账号一分钟请求超过'||(${max})||'次',''
-        FROM (${countable}) e JOIN security_limits l ON l.key=(${prefix}||e.tenant_id||':'||e.id)
-        WHERE l.count=(${max})+1`, ...(route ? args : [...args, incident])),
-      query(`UPDATE sessions SET last_seen_at=?3,updated_at=?3 WHERE tenant_id=${target} AND token_hash=?2
-        AND last_seen_at<=?3-60000 AND EXISTS(SELECT 1 FROM (${eligible}))
-        AND EXISTS(SELECT 1 FROM tenants t WHERE t.id=sessions.tenant_id AND t.status='active'
-          AND (t.expires_at IS NULL OR unixepoch(t.expires_at||'T23:59:59+08:00')*1000>?3))`),
-    ];
-    if (route) ops.push(sql(tenantRouteSql("?1", "?2", "?3"), route.host, route.slug, at));
-    const [users, modules, settings, rights, , limits, , , routed] =
-      (await db.batch(ops)).map((item) => item.results || []);
-    const user = users[0] || null;
-    if (user && limits[0] && limits[0].count > limits[0].maximum)
-      fail(429, "操作太频繁，请稍后再试");
-    if (user) {
-      // Create the request-local scope before filling its policy snapshot.
-      if (!scopes.has(user.tenant_id)) repo(env, user.tenant_id);
-      scopes.get(user.tenant_id).policy = policyRows(modules, settings, rights);
-    }
-    return route ? tenantRoute(routed[0], user) : user;
-  }
+  const conflict=async(id)=>{const row=await first('SELECT actor.name FROM users target LEFT JOIN users actor ON actor.tenant_id=target.tenant_id AND actor.id=target.updated_by WHERE target.tenant_id=? AND target.id=?',tenantId,id);fail(409,'这条记录刚被'+(row?.name||'系统维护')+'修改，请刷新');};
+  async function authentication(hash) {
+ scoped(); const at=now(), eligible="SELECT s.id session_id,s.expires_at,s.last_seen_at,s.idle_ms,u.* FROM sessions s JOIN users u ON u.tenant_id=s.tenant_id AND u.id=s.user_id WHERE s.tenant_id=?1 AND s.token_hash=?2 AND u.active=1 AND u.deleted_at IS NULL AND s.expires_at>?3 AND (s.idle_ms IS NULL OR s.last_seen_at+s.idle_ms>?3)", selected='(SELECT tenant_id FROM ('+eligible+'))';
+ const result=await db.batch([sql(eligible,tenantId,hash,at),sql('SELECT id,enabled FROM tenant_modules WHERE tenant_id='+selected+' AND deleted_at IS NULL',tenantId,hash,at),sql('SELECT id,value FROM tenant_settings WHERE tenant_id='+selected+' AND deleted_at IS NULL',tenantId,hash,at),sql('SELECT role,module,action,allowed FROM tenant_role_rights WHERE tenant_id='+selected+' AND deleted_at IS NULL',tenantId,hash,at),sql('UPDATE sessions SET last_seen_at=?3,updated_at=?3 WHERE tenant_id=?1 AND token_hash=?2 AND last_seen_at<=?3-60000 AND EXISTS('+eligible+')',tenantId,hash,at)]);
+ const user=result[0].results[0]||null;if(user)cache.policy=policyRows(result[1].results,result[2].results,result[3].results);return user;
+}
   const auditStmt = (actor, module, action, id, summary) => {
     scoped();
     return sql(
@@ -1893,28 +1316,7 @@ export function repo(env, tenantId) {
       summary,
     );
   };
-  const platformStmt = (
-    actor,
-    action,
-    target,
-    detail,
-    ip = "",
-    reason = "",
-  ) => {
-    platform();
-    return sql(
-      "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,reason,ip) VALUES(?,?,?,?,?,?,?,?,?)",
-      randomId("pa"),
-      now(),
-      actor,
-      action,
-      target,
-      target,
-      detail,
-      reason,
-      ip,
-    );
-  };
+
   const settingTables={courses:'offer_courses',stage_types:'stage_types',report_classes:'report_classes',stage_rules:'stage_rules',calendar:'calendar_nodes',course_rules:'course_rules',profile:'tenant_profile',prices:'tenant_price_lists'};
   function settingTable(kind) {if(!Object.hasOwn(settingTables,kind))throw Error('invalid setting kind');return settingTables[kind];}
   const settingAudit=(tid,actor,action,id,before,after)=>sql('INSERT INTO audit_log(tenant_id,id,at,actor_id,actor_label,module,action,entity_id,summary,before_json,after_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)',tid,randomId('aud'),now(),actor.id,actor.name||actor.username||'系统维护','settings',action,id,'机构工具设置变更',before?JSON.stringify(before):null,after?JSON.stringify(after):null);
@@ -1939,53 +1341,32 @@ export function repo(env, tenantId) {
       sql(`INSERT INTO report_dimensions(tenant_id,id,class_id,dim_key,retired) SELECT ?,'dim_'||lower(hex(randomblob(12))),?,json_extract(value,'$.key'),0 FROM json_each(?) WHERE 1 ON CONFLICT(tenant_id,class_id,dim_key) DO UPDATE SET retired=CASE WHEN ?=1 THEN 0 ELSE report_dimensions.retired END`,tid,id,JSON.stringify(dimensions),Number(allowRetired)),
     ];
   }
-  const platformMethods=platformRepo(db,tenantId);
-  async function subjectOps(keys,actor,tid=tenantId,explicit=false) {
-    if(await platformMethods.available()) return platformMethods.subjectStatements(keys,actor,tid,explicit);
-    const ops=[],at=now();
-    if(!keys.length)return ops;
-    const state=await db.batch(['stage_rules','calendar','course_rules'].map(k=>sql(`SELECT * FROM ${settingTable(k)} WHERE tenant_id=? AND id='main'`,tid)));
-    const old=Object.fromEntries(['stage_rules','calendar','course_rules'].map((k,i)=>[k,state[i].results[0]||null]));
-    const docs={stage_rules:old.stage_rules?JSON.parse(old.stage_rules.doc_json):{rules:{}},calendar:old.calendar?JSON.parse(old.calendar.doc_json):{region:null,items:[]},course_rules:old.course_rules?JSON.parse(old.course_rules.doc_json):{items:[]}};
-    for(const key of keys) {
-      const pack=subjectPacks[key];if(!pack)fail(422,'学科包不存在','validation_failed');
-      const existing=await first('SELECT imported_at FROM tenant_subjects WHERE tenant_id=? AND id=?',tid,key);
-      if(existing?.imported_at)continue;
-      for(const [kind,rows,prefix] of [['courses',pack.courses,'crs'],['stage_types',pack.stages.map((x,i)=>({...x,order:(i+1)*10})),'stg'],['report_classes',pack.classes,'rcl']]) {
-        const table=settingTable(kind),payload=JSON.stringify(rows.map(x=>({...x,subject:key})));
-        ops.push(sql(`INSERT INTO ${table}(tenant_id,id,subject,name,active,source,doc_json,created_at,created_by,updated_at,updated_by) SELECT ?1,?2||'_'||lower(hex(randomblob(12))),?3,json_extract(j.value,'$.name'),1,'template',j.value,?4,?5,?4,?5 FROM json_each(?6) j WHERE NOT EXISTS(SELECT 1 FROM ${table} x WHERE x.tenant_id=?1 AND x.subject=?3 AND x.name=json_extract(j.value,'$.name') AND x.deleted_at IS NULL)`,tid,prefix,key,at,actor.id,payload));
-      }
-      ops.push(sql(`INSERT OR IGNORE INTO report_dimensions(tenant_id,id,class_id,dim_key) SELECT ?1,'dim_'||lower(hex(randomblob(12))),c.id,json_extract(d.value,'$.key') FROM report_classes c,json_each(c.doc_json,'$.dimensions') d WHERE c.tenant_id=?1 AND c.subject=?2`,tid,key));
-      docs.stage_rules.rules={...pack.rules,...docs.stage_rules.rules};
-      const seen=new Set(docs.calendar.items.map(x=>x.key));for(const node of pack.calendar)if(!seen.has(node.key)){docs.calendar.items.push(node);seen.add(node.key);}
-      ops.push(sql(`INSERT INTO tenant_subjects(tenant_id,id,pack_version,created_at,created_by,imported_at,content_json) VALUES(?,?,?,?,?,?,?) ON CONFLICT(tenant_id,id) DO UPDATE SET imported_at=excluded.imported_at,content_json=excluded.content_json`,tid,key,pack.version,at,actor.id,at,JSON.stringify({content_types:pack.content_types,constraints:pack.constraints,tone:pack.tone})));
-      ops.push(settingAudit(tid,actor,'import_template',key,null,{key,pack_version:pack.version}));
-    }
-    if(!ops.length)return ops;
-    for(const kind of ['stage_rules','calendar','course_rules']) {
-      ops.push(settingGuard(kind,'main',old[kind]?.version||1,tid,true));
-      const row=old[kind];
-      // Template initialization is version 1; later imports increment the existing collection.
-      ops.push(sql(`INSERT INTO ${settingTable(kind)}(tenant_id,id,doc_json,created_at,created_by,updated_at,updated_by,version) VALUES(?,'main',?,?,?,?,?,1) ON CONFLICT(tenant_id,id) DO UPDATE SET doc_json=excluded.doc_json,updated_at=excluded.updated_at,updated_by=excluded.updated_by,version=${settingTable(kind)}.version+1`,tid,JSON.stringify(docs[kind]),at,actor.id,at,actor.id));
-    }
-    ops.push(sql(`INSERT INTO tenant_price_lists(tenant_id,id,doc_json,created_at,created_by,updated_at,updated_by,version) VALUES(?,'main','{}',?,?,?,?,2) ON CONFLICT(tenant_id,id) DO UPDATE SET version=tenant_price_lists.version+1,updated_at=excluded.updated_at,updated_by=excluded.updated_by`,tid,at,actor.id,at,actor.id));
-    return ops;
-  }
+
   function settingReferenceGuards(refs,tid=tenantId) {
     const groups=new Map();for(const [kind,id,version] of refs||[]) {const table=settingTables[kind]||({course_types:'course_types',teachers:'teachers',gallery:'gallery_images'}[kind]);if(!table)throw Error('invalid setting reference');if(!groups.has(table))groups.set(table,[]);if(!groups.get(table).some(x=>x[0]===id))groups.get(table).push([id,version??null]);}
     return [...groups].map(([table,ids])=>sql(`INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?1,?2,1,CASE WHEN COUNT(*)=json_array_length(?3) THEN 1 ELSE 0 END FROM ${table} t JOIN json_each(?3) j ON t.id=json_extract(j.value,'$[0]') WHERE t.tenant_id=?1 AND t.deleted_at IS NULL AND (json_extract(j.value,'$[1]') IS NULL OR t.version=json_extract(j.value,'$[1]'))`,tid,randomId('guard'),JSON.stringify(ids)));
   }
 
   return {
-    platformOps:platformMethods,
-async feedbackFeed(studentId,offset,limit){scoped();const query=`SELECT 'feedback' type,f.id,'confirmed' status,f.student_id,f.id revision_id,'课后反馈' title,f.confirmed_at at,f.doc_json,f.lesson_id FROM growth_feedback f JOIN lessons l ON l.tenant_id=f.tenant_id AND l.id=f.lesson_id AND l.deleted_at IS NULL WHERE f.tenant_id=?1 AND f.student_id=?2 AND f.status='confirmed' AND f.deleted_at IS NULL AND f.seq=(SELECT MAX(x.seq) FROM growth_feedback x WHERE x.tenant_id=?1 AND x.lesson_id=f.lesson_id AND x.student_id=f.student_id AND x.status='confirmed' AND x.deleted_at IS NULL)`;const legacy=` UNION ALL SELECT 'feedback','legacy_'||l.id||'_'||p.student_id,'confirmed',p.student_id,NULL,'课后反馈',MAX(c.updated_at),json_object('message',json_object('learned',GROUP_CONCAT(c.text,char(10)),'good','','attention','','homework',MAX(c.homework)),'tags',json('[]'),'image_ids',json('[]')),l.id FROM lesson_participants p JOIN lessons l ON l.tenant_id=p.tenant_id AND l.id=p.lesson_id AND l.deleted_at IS NULL JOIN lesson_comments c ON c.tenant_id=p.tenant_id AND c.lesson_id=l.id AND c.deleted_at IS NULL AND (c.student_id=p.student_id OR c.student_id IS NULL) WHERE p.tenant_id=?1 AND p.student_id=?2 AND p.deleted_at IS NULL AND p.deducted=1 AND NOT EXISTS(SELECT 1 FROM growth_feedback f WHERE f.tenant_id=?1 AND f.lesson_id=l.id AND f.student_id=p.student_id AND f.status='confirmed' AND f.deleted_at IS NULL) GROUP BY l.id,p.student_id`;const combined=query+legacy;const results=await db.batch([sql('SELECT * FROM ('+combined+') ORDER BY at DESC,id LIMIT ?3 OFFSET ?4',tenantId,studentId,limit,offset),sql('SELECT COUNT(*) n FROM ('+combined+')',tenantId,studentId)]);return {items:results[0].results,total:results[1].results[0].n};},
-async feedbackParentMedia(image,children) { scoped(); return first(`SELECT a.* FROM gallery_images a WHERE a.tenant_id=?1 AND a.id=?2 AND a.deleted_at IS NULL AND EXISTS(SELECT 1 FROM growth_feedback f JOIN students s ON s.tenant_id=f.tenant_id AND s.id=f.student_id AND s.parent_consent_media=1 AND s.deleted_at IS NULL WHERE f.tenant_id=?1 AND f.student_id IN(SELECT value FROM json_each(?3)) AND f.status='confirmed' AND f.deleted_at IS NULL AND a.id IN(SELECT value FROM json_each(f.doc_json,'$.image_ids')) AND f.seq=(SELECT MAX(x.seq) FROM growth_feedback x WHERE x.tenant_id=?1 AND x.lesson_id=f.lesson_id AND x.student_id=f.student_id AND x.status='confirmed' AND x.deleted_at IS NULL))`,tenantId,image,JSON.stringify(children)); },
 
-async feedbackChildIds(user) {
-      scoped();if(user.roles.includes('student'))return (await all('SELECT id FROM students WHERE tenant_id=? AND id=? AND deleted_at IS NULL',tenantId,user.student_id)).map(x=>x.id);
-      if(!user.roles.includes('parent'))return [];
-      return (await all('SELECT s.id FROM guardian_links g JOIN students s ON s.tenant_id=g.tenant_id AND s.id=g.student_id WHERE g.tenant_id=? AND g.parent_user_id=? AND g.revoked_at IS NULL AND s.deleted_at IS NULL',tenantId,user.id)).map(x=>x.id);
+async studentFeedback(studentId,offset,limit){scoped();const query=`SELECT 'feedback' type,f.id,'confirmed' status,f.student_id,f.id revision_id,'课后反馈' title,f.confirmed_at at,f.doc_json,f.lesson_id FROM growth_feedback f JOIN lessons l ON l.tenant_id=f.tenant_id AND l.id=f.lesson_id AND l.deleted_at IS NULL WHERE f.tenant_id=?1 AND f.student_id=?2 AND f.status='confirmed' AND f.deleted_at IS NULL AND f.seq=(SELECT MAX(x.seq) FROM growth_feedback x WHERE x.tenant_id=?1 AND x.lesson_id=f.lesson_id AND x.student_id=f.student_id AND x.status='confirmed' AND x.deleted_at IS NULL)`;const legacy=` UNION ALL SELECT 'feedback','legacy_'||l.id||'_'||p.student_id,'confirmed',p.student_id,NULL,'课后反馈',MAX(c.updated_at),json_object('message',json_object('learned',GROUP_CONCAT(c.text,char(10)),'good','','attention','','homework',MAX(c.homework)),'tags',json('[]'),'image_ids',json('[]')),l.id FROM lesson_participants p JOIN lessons l ON l.tenant_id=p.tenant_id AND l.id=p.lesson_id AND l.deleted_at IS NULL JOIN lesson_comments c ON c.tenant_id=p.tenant_id AND c.lesson_id=l.id AND c.deleted_at IS NULL AND (c.student_id=p.student_id OR c.student_id IS NULL) WHERE p.tenant_id=?1 AND p.student_id=?2 AND p.deleted_at IS NULL AND p.deducted=1 AND NOT EXISTS(SELECT 1 FROM growth_feedback f WHERE f.tenant_id=?1 AND f.lesson_id=l.id AND f.student_id=p.student_id AND f.status='confirmed' AND f.deleted_at IS NULL) GROUP BY l.id,p.student_id`;const combined=query+legacy;const results=await db.batch([sql('SELECT * FROM ('+combined+') ORDER BY at DESC,id LIMIT ?3 OFFSET ?4',tenantId,studentId,limit,offset),sql('SELECT COUNT(*) n FROM ('+combined+')',tenantId,studentId)]);return {items:results[0].results,total:results[1].results[0].n};},
+async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* FROM gallery_images a WHERE a.tenant_id=?1 AND a.id=?2 AND a.deleted_at IS NULL AND EXISTS(SELECT 1 FROM growth_feedback f JOIN students s ON s.tenant_id=f.tenant_id AND s.id=f.student_id AND s.parent_consent_media=1 AND s.deleted_at IS NULL WHERE f.tenant_id=?1 AND f.student_id IN(SELECT value FROM json_each(?3)) AND f.status='confirmed' AND f.deleted_at IS NULL AND a.id IN(SELECT value FROM json_each(f.doc_json,'$.image_ids')) AND f.seq=(SELECT MAX(x.seq) FROM growth_feedback x WHERE x.tenant_id=?1 AND x.lesson_id=f.lesson_id AND x.student_id=f.student_id AND x.status='confirmed' AND x.deleted_at IS NULL))`,tenantId,image,JSON.stringify(children)); },
+    async instanceTenant(){return first("SELECT t.*,i.tenant_id instance_tenant_id FROM app_instance i JOIN tenants t ON t.id=i.tenant_id WHERE i.id='main'");},
+    async instance(){return first("SELECT tenant_id,initialized_at FROM app_instance WHERE id='main'");},
+    async initializeInstance(tenant,user,moduleIds) {
+      const at=now(),tid=tenant.id,actor=user.id;
+      const ops=[sql("INSERT INTO tenants(id,slug,name,type,city,status,staff_seat_limit,student_seat_limit,created_at,created_by,updated_at,updated_by) VALUES(?,'fengqin',?,'其他','','active',1000000,1000000,?,?,?,?)",tid,tenant.name,at,actor,at,actor),
+       sql("INSERT INTO app_instance(id,tenant_id,initialized_at) VALUES('main',?,?)",tid,at),
+       sql('INSERT INTO tenant_data_versions(tenant_id,version) VALUES(?,1)',tid),
+       sql("INSERT INTO tenant_branding(tenant_id,id,display_name,theme_color,welcome_text,created_at,created_by,updated_at,updated_by) VALUES(?,'brand',?,'#6A35B8','欢迎来到枫琴教务中心',?,?,?,?)",tid,tenant.name,at,actor,at,actor),
+       sql("INSERT INTO users(tenant_id,id,name,phone_hmac,phone_enc,phone_last4,roles,salt,digest,must_change,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,?,?,?,'[\"supervisor\"]',?,?,0,?,?,?,?)",tid,user.id,user.name,user.phone_hmac,user.phone_enc,user.phone_last4,user.salt,user.digest,at,actor,at,actor),
+       sql("INSERT INTO audit_log(tenant_id,id,at,actor_id,actor_label,module,action,entity_id,summary) VALUES(?,?,?,?,?,'accounts','initialize',?,'初始化首个主管账号')",tid,randomId('aud'),at,user.id,user.name,user.id)];
+      for(const id of moduleIds)ops.push(sql('INSERT INTO tenant_modules(tenant_id,id,enabled,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,?,?,?,?)',tid,id,id==='school_db'?0:1,at,actor,at,actor));
+      for(const [id,value] of Object.entries({student_view_balance:true,student_view_payments:false}))ops.push(sql('INSERT INTO tenant_settings(tenant_id,id,value,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,?,?,?,?)',tid,id,JSON.stringify(value),at,actor,at,actor));
+      await db.batch(ops);
     },
+    async aiSettings(){return first("SELECT id,fast_daily_limit,deep_daily_limit,fast_model,deep_model,version,configured FROM ai_settings WHERE id='main'");},
+    async saveAISettings(data,actor){scoped();const result=await db.batch([sql("UPDATE ai_settings SET configured=?,fast_daily_limit=?,deep_daily_limit=?,fast_model=?,deep_model=?,version=version+1,updated_at=?,updated_by=? WHERE id='main' AND version=?",Number(data.configured),data.fast_daily_limit,data.deep_daily_limit,data.fast_model,data.deep_model,now(),actor.id,data.version),sql("INSERT INTO audit_log(tenant_id,id,at,actor_id,actor_label,module,action,summary) SELECT ?,?,?,?,?,'ai','settings','修改内部AI模型与额度（不含密钥）' WHERE changes()=1",tenantId,randomId('aud'),now(),actor.id,actor.name)]);if(!result[0].meta.changes)fail(409,'AI设置已变化，请刷新','version_conflict');},
 
     async aiCatalog() {
  scoped(); const data=await db.batch([
@@ -1996,15 +1377,14 @@ async feedbackChildIds(user) {
  return {courses:data[0].results,stages:data[1].results,settings:Object.fromEntries(data[2].results.map(x=>[x.kind,{...JSON.parse(x.doc_json),version:x.version}])),report_classes:data[3].results};
 },
 
-    async aiConfig(){scoped();return first("SELECT s.*,COALESCE(o.fast_daily_limit,s.fast_daily_limit) fast_limit,COALESCE(o.deep_daily_limit,s.deep_daily_limit) deep_limit FROM ai_settings s LEFT JOIN tenant_ai_overrides o ON o.tenant_id=? AND o.id='limits' WHERE s.id='main'",tenantId);},
-    async aiPlatformSettings(){platform();return first("SELECT * FROM ai_settings WHERE id='main'");},
-    async aiSaveSettings(data,actor){platform();await db.batch([sql("INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES('platform',?,?,(SELECT version FROM ai_settings WHERE id='main'))",randomId('guard'),data.version),sql("UPDATE ai_settings SET fast_daily_limit=?,deep_daily_limit=?,fast_model=?,deep_model=?,version=version+1,updated_at=?,updated_by=? WHERE id='main'",data.fast_daily_limit,data.deep_daily_limit,data.fast_model,data.deep_model,now(),actor.id),sql('INSERT INTO platform_audit(id,admin_id,action,tenant_id,detail,at,ip) VALUES(?,?,?,?,?,?,?)',randomId('pa'),actor.id,'ai_settings',null,'修改AI模型与每日上限',now(),'')]);},
+    async aiConfig(){scoped();return effectiveAIConfig(env,await this.aiSettings());},
+
     async aiRequest(userId,key){scoped();return first('SELECT * FROM ai_requests WHERE tenant_id=? AND user_id=? AND idem_key=?',tenantId,userId,key);},
     async aiRequestId(id){scoped();return first('SELECT * FROM ai_requests WHERE tenant_id=? AND id=?',tenantId,id);},
     async aiReplay(record){scoped();if(record.response&&record.cache_expires_at>now())return JSON.parse(record.response);const receipt=JSON.parse(record.receipt_json);const rows=await all('SELECT id,doc_json FROM ai_suggestions WHERE tenant_id=? AND id IN(SELECT value FROM json_each(?))',tenantId,JSON.stringify(receipt.ids));const byId=new Map(rows.map(x=>[x.id,JSON.parse(x.doc_json)]));if(receipt.ids.some(id=>!byId.has(id)))throw Error('AI_REPLAY_MISSING');return {...(receipt.extra||{}),suggestions:receipt.ids.map(id=>{const s=byId.get(id);return {id:s.id,kind:s.kind,target:s.target,payload:s.payload,basis:s.basis,warnings:s.warnings,...(s.flags?{flags:s.flags}:{})}}),warnings:receipt.warnings,usage:receipt.usage};},
     async aiCapacity(userId,date,tier,limit,at,excludeHold=null){scoped();return first(`SELECT COALESCE((SELECT used FROM ai_quota_daily WHERE tenant_id=?1 AND date=?2 AND tier=?3),0) used,(SELECT COUNT(*) FROM ai_quota_holds WHERE tenant_id=?1 AND date=?2 AND tier=?3 AND status='held' AND expires_at>?4 AND (?6 IS NULL OR id<>?6)) held,(SELECT COUNT(*) FROM ai_requests WHERE tenant_id=?1 AND user_id=?5 AND batch_parent_id IS NULL AND status='pending' AND deadline_at>?4) pending`,tenantId,date,tier,at,userId,excludeHold);},
     async aiAcquire(record,old,limit,at){scoped();const state=old?`(SELECT version FROM ai_requests WHERE tenant_id=?1 AND id=?2 AND (status='failed' OR status='pending' AND deadline_at<=?3))=${old.version}`:`NOT EXISTS(SELECT 1 FROM ai_requests WHERE tenant_id=?1 AND user_id=?4 AND idem_key=?5)`;
-      const guard=`INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?1,?6,1,CASE WHEN ${state} AND EXISTS(SELECT 1 FROM tenants t WHERE t.id=?1 AND t.status='active' AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR strftime('%s',t.expires_at||'T23:59:59+08:00')*1000>?3)) AND (SELECT COUNT(*) FROM ai_requests WHERE tenant_id=?1 AND user_id=?4 AND batch_parent_id IS NULL AND status='pending' AND deadline_at>?3)<2 AND COALESCE((SELECT used FROM ai_quota_daily WHERE tenant_id=?1 AND date=?7 AND tier=?8),0)+(SELECT COUNT(*) FROM ai_quota_holds WHERE tenant_id=?1 AND date=?7 AND tier=?8 AND status='held' AND expires_at>?3 AND (?9 IS NULL OR id<>?9))<?10 THEN 1 ELSE 0 END`;
+      const guard=`INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?1,?6,1,CASE WHEN ${state} AND (SELECT COUNT(*) FROM ai_requests WHERE tenant_id=?1 AND user_id=?4 AND batch_parent_id IS NULL AND status='pending' AND deadline_at>?3)<2 AND COALESCE((SELECT used FROM ai_quota_daily WHERE tenant_id=?1 AND date=?7 AND tier=?8),0)+(SELECT COUNT(*) FROM ai_quota_holds WHERE tenant_id=?1 AND date=?7 AND tier=?8 AND status='held' AND expires_at>?3 AND (?9 IS NULL OR id<>?9))<?10 THEN 1 ELSE 0 END`;
       const ops=[sql(guard,tenantId,record.id,at,record.user_id,record.idem_key,randomId('guard'),record.date,record.tier,old?.hold_id??null,limit)];
       if(old){ops.push(sql("UPDATE ai_quota_holds SET status='released' WHERE tenant_id=? AND id=? AND status='held'",tenantId,old.hold_id));ops.push(sql("UPDATE ai_requests SET status='pending',hold_id=?,deadline_at=?,response=NULL,receipt_json=NULL,finished_at=NULL,retain_until=?,version=version+1 WHERE tenant_id=? AND id=?",record.hold_id,record.deadline_at,at+2*86400000,tenantId,record.id));}
       else ops.push(sql("INSERT INTO ai_requests(tenant_id,id,user_id,idem_key,request_hash,path,status,hold_id,deadline_at,created_at,retain_until) VALUES(?,?,?,?,?,?,'pending',?,?,?,?)",tenantId,record.id,record.user_id,record.idem_key,record.request_hash,record.path,record.hold_id,record.deadline_at,at,at+2*86400000));
@@ -2022,7 +1402,7 @@ async feedbackChildIds(user) {
     async aiCompleteBatch(parent,response,at){scoped();const receipt={ids:response.suggestions.map(x=>x.id),warnings:response.warnings,usage:response.usage,extra:{processed:response.processed,skipped:response.skipped}};storedRecord({response:JSON.stringify(response)},'批量AI响应');await sql("UPDATE ai_requests SET status='done',response=?,cache_expires_at=?,receipt_json=?,finished_at=?,retain_until=?,version=version+1 WHERE tenant_id=? AND id=? AND status='pending'",JSON.stringify(response),at+600000,JSON.stringify(receipt),at,at+2*86400000,tenantId,parent.id).run();},
     async aiHold(id){scoped();return first('SELECT * FROM ai_quota_holds WHERE tenant_id=? AND id=?',tenantId,id);},
     async aiFinish(record,response,suggestions,metrics,limit,at){scoped();const current=await this.aiRequestId(record.id),hold=await this.aiHold(record.hold_id);if(current.status==='done'&&hold?.status==='settled')return {replay:true,request:current};if(current.hold_id!==record.hold_id||current.status!=='pending'||hold?.status!=='held')return {lost:true};
-      const receipt={ids:suggestions.map(x=>x.id),warnings:response.warnings,usage:response.usage,...record.reference_audit?{internal_reference_audit:record.reference_audit}:{}};storedRecord({response:JSON.stringify(response)},'AI响应');const guard=sql(`INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?1,?2,1,CASE WHEN EXISTS(SELECT 1 FROM ai_requests q JOIN ai_quota_holds h ON h.tenant_id=q.tenant_id AND h.id=q.hold_id WHERE q.tenant_id=?1 AND q.id=?3 AND EXISTS(SELECT 1 FROM tenants t WHERE t.id=?1 AND t.status='active' AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR strftime('%s',t.expires_at||'T23:59:59+08:00')*1000>?5)) AND q.status='pending' AND h.id=?4 AND h.status='held' AND (h.expires_at>?5 OR COALESCE((SELECT used FROM ai_quota_daily d WHERE d.tenant_id=?1 AND d.date=h.date AND d.tier=h.tier),0)+(SELECT COUNT(*) FROM ai_quota_holds x WHERE x.tenant_id=?1 AND x.date=h.date AND x.tier=h.tier AND x.status='held' AND x.expires_at>?5)<?6)) THEN 1 ELSE 0 END`,tenantId,randomId('guard'),record.id,record.hold_id,at,limit);
+      const receipt={ids:suggestions.map(x=>x.id),warnings:response.warnings,usage:response.usage,...record.reference_audit?{internal_reference_audit:record.reference_audit}:{}};storedRecord({response:JSON.stringify(response)},'AI响应');const guard=sql(`INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?1,?2,1,CASE WHEN EXISTS(SELECT 1 FROM ai_requests q JOIN ai_quota_holds h ON h.tenant_id=q.tenant_id AND h.id=q.hold_id WHERE q.tenant_id=?1 AND q.id=?3 AND q.status='pending' AND h.id=?4 AND h.status='held' AND (h.expires_at>?5 OR COALESCE((SELECT used FROM ai_quota_daily d WHERE d.tenant_id=?1 AND d.date=h.date AND d.tier=h.tier),0)+(SELECT COUNT(*) FROM ai_quota_holds x WHERE x.tenant_id=?1 AND x.date=h.date AND x.tier=h.tier AND x.status='held' AND x.expires_at>?5)<?6)) THEN 1 ELSE 0 END`,tenantId,randomId('guard'),record.id,record.hold_id,at,limit);
       const ops=[guard,sql("UPDATE ai_quota_holds SET status='settled',settled_at=? WHERE tenant_id=? AND id=? AND status='held'",at,tenantId,record.hold_id),sql('INSERT INTO ai_quota_daily(tenant_id,id,date,tier,used) VALUES(?,?,?,?,1) ON CONFLICT(tenant_id,date,tier) DO UPDATE SET used=ai_quota_daily.used+1',tenantId,hold.date+':'+hold.tier,hold.date,hold.tier)];
       for(const suggestion of suggestions){storedRecord(suggestion,'AI建议');ops.push(sql('INSERT INTO ai_suggestions(tenant_id,id,user_id,kind,doc_json,created_at,expires_at) VALUES(?,?,?,?,?,?,?)',tenantId,suggestion.id,record.user_id,suggestion.kind,JSON.stringify(suggestion),at,at+7*86400000));}
       ops.push(sql('INSERT INTO ai_usage(tenant_id,id,hold_id,request_id,user_id,date,tool,action,tier,model,prompt_tokens,completion_tokens,duration_ms,result,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',tenantId,randomId('aiu'),record.hold_id,record.id,record.user_id,hold.date,metrics.tool,metrics.action,hold.tier,metrics.model,metrics.prompt_tokens,metrics.completion_tokens,metrics.duration_ms,'ok',at));
@@ -2031,7 +1411,7 @@ async feedbackChildIds(user) {
     },
     async aiFailure(record,metrics,at,status='released'){scoped();const h=await this.aiHold(record.hold_id);if(!h||h.status!=='held')return;await db.batch([sql('UPDATE ai_quota_holds SET status=? WHERE tenant_id=? AND id=? AND status=\'held\'',status,tenantId,record.hold_id),sql("UPDATE ai_requests SET status='failed',finished_at=?,version=version+1 WHERE tenant_id=? AND id=? AND hold_id=? AND status='pending'",at,tenantId,record.id,record.hold_id),sql(`INSERT INTO ai_usage(tenant_id,id,hold_id,request_id,user_id,date,tool,action,tier,model,prompt_tokens,completion_tokens,duration_ms,result,created_at) SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15 WHERE NOT EXISTS(SELECT 1 FROM ai_usage WHERE tenant_id=?1 AND hold_id=?3)`,tenantId,randomId('aiu'),record.hold_id,record.id,record.user_id,h.date,metrics.tool,metrics.action,h.tier,metrics.model,metrics.prompt_tokens,metrics.completion_tokens,metrics.duration_ms,metrics.result||metrics.failure_reason||'other',at)]);},
     async aiRejected(record,metrics,at){scoped();await db.batch([sql("INSERT OR IGNORE INTO ai_requests(tenant_id,id,user_id,idem_key,request_hash,path,status,hold_id,deadline_at,created_at,finished_at,retain_until) VALUES(?,?,?,?,?,?,'failed',?,?,?,?,?)",tenantId,record.id,record.user_id,record.idem_key,record.request_hash,record.path,record.hold_id,record.deadline_at,at,at,at+2*86400000),sql("INSERT INTO ai_usage(tenant_id,id,hold_id,request_id,user_id,date,tool,action,tier,model,duration_ms,result,created_at) VALUES(?,?,NULL,?,?,?,?,?,?,?,0,'blocked',?)",tenantId,randomId('aiu'),record.id,record.user_id,record.date,metrics.tool,metrics.action,record.tier,metrics.model,at)]);},
-    async aiCleanupPage(at){platform();const state=await first("SELECT value FROM platform_state WHERE id='ai_cleanup_cursor'"),rows=await all('SELECT id FROM tenants WHERE id>? ORDER BY id LIMIT 20',state?.value||'');const ids=JSON.stringify(rows.map(x=>x.id)),scope='tenant_id IN(SELECT value FROM json_each(?1))';await db.batch([sql(`UPDATE ai_requests SET response=NULL WHERE ${scope} AND status='done' AND cache_expires_at<=?2`,ids,at),sql(`DELETE FROM ai_quota_holds WHERE ${scope} AND EXISTS(SELECT 1 FROM ai_requests q WHERE q.tenant_id=ai_quota_holds.tenant_id AND q.id=ai_quota_holds.request_id AND q.retain_until<=?2)`,ids,at),sql(`DELETE FROM ai_requests WHERE ${scope} AND retain_until<=?2`,ids,at),sql(`DELETE FROM ai_suggestions WHERE ${scope} AND expires_at<=?2 AND NOT EXISTS(SELECT 1 FROM setting_changes c WHERE c.tenant_id=ai_suggestions.tenant_id AND c.suggestion_id=ai_suggestions.id)`,ids,at),sql("INSERT INTO platform_state(id,value) VALUES('ai_cleanup_cursor',?) ON CONFLICT(id) DO UPDATE SET value=excluded.value",rows.length===20?rows.at(-1).id:'')]);return {institutions:rows.length};},
+
     async aiDayUsed(date,tier){scoped();return (await first('SELECT used FROM ai_quota_daily WHERE tenant_id=? AND date=? AND tier=?',tenantId,date,tier))?.used||0;},
     async aiUsage(date,supervisor){scoped();const daily=await all('SELECT tier,used FROM ai_quota_daily WHERE tenant_id=? AND date=?',tenantId,date);if(!supervisor)return {daily};const data=await db.batch([sql("SELECT tool,SUM(CASE WHEN tier='fast' AND result='ok' THEN 1 ELSE 0 END) fast,SUM(CASE WHEN tier='deep' AND result='ok' THEN 1 ELSE 0 END) deep FROM ai_usage WHERE tenant_id=? AND date=? GROUP BY tool ORDER BY tool",tenantId,date),sql("SELECT a.user_id,u.name,SUM(CASE WHEN a.tier='fast' AND result='ok' THEN 1 ELSE 0 END) fast,SUM(CASE WHEN a.tier='deep' AND result='ok' THEN 1 ELSE 0 END) deep FROM ai_usage a LEFT JOIN users u ON u.tenant_id=a.tenant_id AND u.id=a.user_id WHERE a.tenant_id=? AND a.date=? GROUP BY a.user_id ORDER BY a.user_id",tenantId,date)]);return {daily,by_tool:data[0].results,by_user:data[1].results};},
     async aiCleanup(at){scoped();await db.batch([sql("UPDATE ai_requests SET response=NULL WHERE tenant_id=? AND status='done' AND cache_expires_at<=?",tenantId,at),sql('DELETE FROM ai_quota_holds WHERE tenant_id=?1 AND request_id IN(SELECT id FROM ai_requests WHERE tenant_id=?1 AND retain_until<=?2)',tenantId,at),sql('DELETE FROM ai_requests WHERE tenant_id=? AND retain_until<=?',tenantId,at),sql('DELETE FROM ai_suggestions WHERE tenant_id=?1 AND expires_at<=?2 AND NOT EXISTS(SELECT 1 FROM setting_changes c WHERE c.tenant_id=?1 AND c.suggestion_id=ai_suggestions.id)',tenantId,at)]);},
@@ -2069,8 +1449,7 @@ async feedbackChildIds(user) {
       ops.push(settingAudit(tenantId,actor,action,id,old?{version:old.version,doc:JSON.parse(old.doc_json)}:null,{doc,applied_suggestion_ids:doc.applied_suggestion_ids||[]}));
       await db.batch(ops);
     },
-    async settingsSubjects() {scoped();if(await platformMethods.available()){const rows=await all('SELECT t.id,t.pack_version,t.imported_at,p.name FROM tenant_subjects t JOIN subject_packs p ON p.key=t.id WHERE t.tenant_id=? ORDER BY t.id',tenantId),warnings=await platformMethods.importWarnings();return rows.map(x=>({...x,...warnings.some(w=>w.subject===x.id)?{warnings:['部分历史模板条目无法可靠映射，已保留，请在机构设置维护']}: {}}));}return all('SELECT id,pack_version,imported_at FROM tenant_subjects WHERE tenant_id=? ORDER BY id',tenantId);},
-    async settingsImportSubject(key,actor) {scoped();const ops=await subjectOps([key],actor,tenantId,true);if(ops.length)try{await db.batch(ops);}catch(e){if(await platformMethods.available()&&await platformMethods.currentImport(key))return;if(/UNIQUE constraint|expected=actual/.test(String(e)))fail(422,'导入发生并发变更，请刷新后重试','validation_failed');throw e;}},
+
     async settingsBrand() {scoped();return first(`SELECT b.display_name,b.logo,b.login_bg,b.theme_color,b.version,x.qr_image_id FROM tenant_branding b LEFT JOIN tenant_brand x ON x.tenant_id=b.tenant_id AND x.id='brand' WHERE b.tenant_id=? AND b.id='brand'`,tenantId);},
     async settingsBrandWrite(data,old,actor) {
       scoped();const ops=settingReferenceGuards(data.qr_image_id?[['gallery',data.qr_image_id]]:[]);
@@ -2082,7 +1461,7 @@ async feedbackChildIds(user) {
     async galleryUnmeasured(limit=20){scoped();return all('SELECT id,r2_key FROM gallery_images WHERE tenant_id=? AND bytes=0 ORDER BY id LIMIT ?',tenantId,limit);},
     async gallerySetSizes(rows){scoped();await db.batch(rows.map(x=>sql('UPDATE gallery_images SET bytes=? WHERE tenant_id=? AND id=? AND bytes=0',x.bytes,tenantId,x.id)));},
     async galleryStorage(){scoped();const row=await first(`SELECT t.gallery_storage_limit AS "limit",COALESCE(SUM(g.bytes),0) used,COALESCE(SUM(CASE WHEN g.bytes=0 THEN 1 ELSE 0 END),0) pending,COALESCE(SUM(CASE WHEN g.id IS NOT NULL AND g.deleted_at IS NULL AND g.bytes IS NULL THEN 1 ELSE 0 END),0) missing,t.version FROM tenants t LEFT JOIN gallery_images g ON g.tenant_id=t.id WHERE t.id=? GROUP BY t.id`,tenantId);if(!row)fail(404,'不存在','not_found');return {...row,complete:row.pending===0};},
-    async galleryStorageSetLimit(limit,expected,actor){scoped();await db.batch([sql('INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?,?,?,COALESCE((SELECT version FROM tenants WHERE id=? AND deleted_at IS NULL),-1)',tenantId,randomId('guard'),expected,tenantId),sql('UPDATE tenants SET gallery_storage_limit=?,version=version+1,updated_at=?,updated_by=? WHERE id=?',limit,now(),actor.id,tenantId),sql('INSERT INTO platform_audit(id,admin_id,action,tenant_id,detail,at,ip) VALUES(?,?,?,?,?,?,?)',randomId('pa'),actor.id,'gallery_storage_limit',tenantId,JSON.stringify({limit}),now(),'')]);return this.galleryStorage();},
+
     async galleryReleaseBytes(id){scoped();await sql('UPDATE gallery_images SET bytes=NULL WHERE tenant_id=? AND id=? AND deleted_at IS NOT NULL',tenantId,id).run();},
     async settingsGallery(id,includeDeleted=false) {scoped();return first('SELECT * FROM gallery_images WHERE tenant_id=? AND id=? AND (?=1 OR deleted_at IS NULL)',tenantId,id,Number(includeDeleted));},
     async settingsGalleryList(tag,offset,limit) {
@@ -2167,49 +1546,9 @@ async feedbackChildIds(user) {
         existing: result[3].results.map((x) => x.id),
       };
     },
-    async businessExport(table, offset) {
-      scoped();
-      const q = businessExportSql[table];
-      if (!q) throw Error("invalid export table");
-      return all(q, tenantId, offset);
-    },
-    async updateJobManifest(id, previous, manifest) {
-      scoped();
-      const out = await sql(
-        "UPDATE data_jobs SET manifest_json=? WHERE tenant_id=? AND id=? AND status='staging' AND manifest_json=?",
-        boundedText(JSON.stringify(manifest), MANIFEST_BUDGET, "作业/备份清单"),
-        tenantId,
-        id,
-        previous,
-      ).run();
-      if (!out.meta.changes) fail(409, "作业进度已变更，请刷新后重试");
-    },
-    async stageConverted(id, rows) {
-      scoped();
-      const ops = [
-        sql(
-          "DELETE FROM data_job_rows WHERE tenant_id=? AND job_id=? AND table_name NOT LIKE 'raw:%'",
-          tenantId,
-          id,
-        ),
-      ];
-      for (const table of restoreTables)
-        for (const row of rows[table] || [])
-          ops.push(
-            sql(
-              "INSERT INTO data_job_rows(tenant_id,id,job_id,table_name,row_id,row_json) VALUES(?,?,?,?,?,?)",
-              tenantId,
-              randomId("row"),
-              id,
-              table,
-              row.id,
-              JSON.stringify(storedRecord(row, "导入记录")),
-            ),
-          );
-      await db.batch(ops);
-    },
+
     async beginBackup(id, at, manifest) {
-      platform();
+      globalScope();
       const ops = [
         sql(
           "INSERT INTO backup_snapshots(id,at,status,manifest_json) VALUES(?,?,'running',?)",
@@ -2224,10 +1563,11 @@ async feedbackChildIds(user) {
       ];
       for (const statement of snapshotPreflightSql)
         ops.push(sql(statement, id));
-      for (const statement of snapshotCaptureSql) ops.push(sql(statement, id));
+      const selected=env.TENANT_ID||(await this.instance())?.tenant_id;if(!selected)fail(503,"请先初始化系统","setup_required");
+      for (const statement of snapshotCaptureSql) ops.push(sql(statement, id,selected));
       ops.push(
         sql(
-          "DELETE FROM mutation_guards WHERE tenant_id='platform' AND id>=? AND id<?",
+          "DELETE FROM mutation_guards WHERE tenant_id='backup' AND id>=? AND id<?",
           id + ":",
           id + ":" + String.fromCharCode(127),
         ),
@@ -2252,20 +1592,20 @@ async feedbackChildIds(user) {
       }
     },
     async activeBackup() {
-      platform();
+      globalScope();
       return first(
         "SELECT * FROM backup_snapshots WHERE status='running' ORDER BY at LIMIT 1",
       );
     },
     async backupCounts(id) {
-      platform();
+      globalScope();
       return all(
         "SELECT table_name,COUNT(*) n FROM backup_snapshot_rows WHERE snapshot_id=? GROUP BY table_name",
         id,
       );
     },
     async snapshotPage(id, table, offset) {
-      platform();
+      globalScope();
       return (
         await all(
           "WITH candidates AS (SELECT source_id,tenant_id,row_json FROM backup_snapshot_rows WHERE snapshot_id=? AND table_name=? ORDER BY source_id,tenant_id LIMIT 200 OFFSET ?), sized AS (SELECT row_json,source_id,tenant_id,SUM(length(CAST(row_json AS BLOB))) OVER(ORDER BY source_id,tenant_id) bytes,ROW_NUMBER() OVER(ORDER BY source_id,tenant_id) seq FROM candidates) SELECT row_json FROM sized WHERE bytes<=1048576 OR seq=1 ORDER BY source_id,tenant_id",
@@ -2276,7 +1616,7 @@ async feedbackChildIds(user) {
       ).map((x) => JSON.parse(x.row_json));
     },
     async advanceBackup(id, previous, manifest, done = false) {
-      platform();
+      globalScope();
       const ops = [
         sql(
           "UPDATE backup_snapshots SET manifest_json=?,status=? WHERE id=? AND status='running' AND manifest_json=?",
@@ -2313,25 +1653,10 @@ async feedbackChildIds(user) {
       const result = await db.batch(ops);
       return !!result[0].meta.changes;
     },
-    async backupGcCursor() {
-      platform();
-      return (
-        (
-          await first(
-            "SELECT value FROM platform_state WHERE id='backup_gc_cursor'",
-          )
-        )?.value || undefined
-      );
-    },
-    async saveBackupGcCursor(cursor) {
-      platform();
-      await sql(
-        "INSERT INTO platform_state(id,value) VALUES('backup_gc_cursor',?) ON CONFLICT(id) DO UPDATE SET value=excluded.value",
-        cursor || "",
-      ).run();
-    },
+    async backupGcCursor(){return (await first("SELECT value FROM app_state WHERE id='backup_gc_cursor'"))?.value||'';},
+    async saveBackupGcCursor(cursor){await sql("INSERT INTO app_state(id,value) VALUES('backup_gc_cursor',?) ON CONFLICT(id) DO UPDATE SET value=excluded.value",cursor||'').run();},
     async backupLog(id, status, detail) {
-      platform();
+      globalScope();
       await sql(
         "INSERT INTO backup_runs(id,at,status,detail) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,detail=excluded.detail",
         id,
@@ -2341,7 +1666,7 @@ async feedbackChildIds(user) {
       ).run();
     },
     async backupRuns() {
-      platform();
+      globalScope();
       return (
         await all(
           "SELECT id,at,status,detail FROM backup_runs ORDER BY at DESC LIMIT 200",
@@ -2351,404 +1676,7 @@ async feedbackChildIds(user) {
         status_label: BACKUP_STATUS_LABELS[row.status] || "未知状态",
       }));
     },
-    async jobs() {
-      scoped();
-      return all(
-        "SELECT id,kind,status,created_at,reason FROM data_jobs WHERE tenant_id=? ORDER BY created_at DESC LIMIT 200",
-        tenantId,
-      );
-    },
-    async job(id) {
-      scoped();
-      return first(
-        "SELECT * FROM data_jobs WHERE tenant_id=? AND id=?",
-        tenantId,
-        id,
-      );
-    },
-    async createJob(job, admin, revision) {
-      scoped();
-      await db.batch([
-        sql(
-          "INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES(?,?,?,COALESCE((SELECT version FROM tenant_data_versions WHERE tenant_id=?),0))",
-          tenantId,
-          randomId("guard"),
-          revision,
-          tenantId,
-        ),
-        sql("DELETE FROM mutation_guards WHERE tenant_id=?", tenantId),
-        sql(
-          "INSERT INTO data_jobs(tenant_id,id,kind,status,source_tenant,manifest_json,created_at,admin_id,reason) VALUES(?,?,?,'staging',?,?,?,?,?)",
-          tenantId,
-          job.id,
-          job.kind,
-          job.source_tenant,
-          boundedText(
-            JSON.stringify(job.manifest),
-            MANIFEST_BUDGET,
-            "作业清单",
-          ),
-          now(),
-          admin.id,
-          job.reason,
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,reason,ip) VALUES(?,?,?,?,?,?,?,?,?)",
-          randomId("pa"),
-          now(),
-          admin.id,
-          "data_job_start",
-          tenantId,
-          job.id,
-          "创建数据导入/恢复作业",
-          job.reason,
-          "",
-        ),
-      ]);
-    },
-    async stageJob(id, table, rows) {
-      scoped();
-      if (rows.length > 200) fail(400, "每批最多200行");
-      await db.batch(
-        rows.map((row) =>
-          sql(
-            "INSERT INTO data_job_rows(tenant_id,id,job_id,table_name,row_id,row_json) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM data_jobs WHERE tenant_id=? AND id=? AND status='staging') ON CONFLICT(tenant_id,job_id,table_name,row_id) DO UPDATE SET row_json=excluded.row_json",
-            tenantId,
-            randomId("row"),
-            id,
-            table,
-            String(row.id),
-            table.startsWith("raw:")
-              ? boundedText(
-                  JSON.stringify(row),
-                  D1_RECORD_BUDGET,
-                  "加密导入暂存行",
-                )
-              : JSON.stringify(storedRecord(row, "导入记录")),
-            tenantId,
-            id,
-          ),
-        ),
-      );
-    },
-    async stagedRows(id) {
-      scoped();
-      return all(
-        "SELECT table_name,row_json FROM data_job_rows WHERE tenant_id=? AND job_id=? ORDER BY table_name,row_id LIMIT 20001",
-        tenantId,
-        id,
-      );
-    },
-    async cancelJob(id, admin) {
-      scoped();
-      await db.batch([
-        sql(
-          "UPDATE data_jobs SET status='cancelled' WHERE tenant_id=? AND id=? AND status IN ('staging','ready')",
-          tenantId,
-          id,
-        ),
-        sql(
-          "DELETE FROM data_job_rows WHERE tenant_id=? AND job_id=? AND EXISTS(SELECT 1 FROM data_jobs WHERE tenant_id=? AND id=? AND status='cancelled')",
-          tenantId,
-          id,
-          tenantId,
-          id,
-        ),
-      ]);
-      await sql(
-        "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,ip) VALUES(?,?,?,?,?,?,?,?)",
-        randomId("pa"),
-        now(),
-        admin.id,
-        "data_job_cancel",
-        tenantId,
-        id,
-        "取消导入/恢复作业",
-        "",
-      ).run();
-    },
-    async emptyBusiness() {
-      scoped();
-      const result = await db.batch(
-        emptyBusinessSql.map((q) => sql(q, tenantId)),
-      );
-      return result.every((x) => !x.results[0]?.n);
-    },
 
-    async restoreReferences(id) {
-      scoped();
-      return all(
-        "SELECT u.name,u.teacher_id,u.student_id FROM users u WHERE u.tenant_id=? AND u.deleted_at IS NULL AND ((u.teacher_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM data_job_rows r WHERE r.tenant_id=u.tenant_id AND r.job_id=? AND r.table_name='teachers' AND r.row_id=u.teacher_id AND json_extract(r.row_json,'$.deleted_at') IS NULL AND (u.active=0 OR json_extract(r.row_json,'$.status')='active'))) OR (u.student_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM data_job_rows r WHERE r.tenant_id=u.tenant_id AND r.job_id=? AND r.table_name='students' AND r.row_id=u.student_id AND json_extract(r.row_json,'$.deleted_at') IS NULL AND (u.active=0 OR json_extract(r.row_json,'$.status')='active'))))",
-        tenantId,
-        id,
-        id,
-      );
-    },
-    async finalizeJob(id, admin, kind, settings, expectedCounts) {
-      scoped();
-      const operations = [
-        sql(
-          "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?,?,1,CASE WHEN status='staging' THEN 1 ELSE 0 END FROM data_jobs WHERE tenant_id=? AND id=?",
-          tenantId,
-          randomId("guard"),
-          tenantId,
-          id,
-        ),
-        sql(
-          "INSERT INTO trusted_imports(tenant_id,id) VALUES(?,?)",
-          tenantId,
-          id,
-        ),
-      ];
-      // FK deferral is transaction-local; never disable FK validation.
-      operations.push(sql("PRAGMA defer_foreign_keys=ON"));
-      operations.push(
-        sql(
-          "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?,?,0,COUNT(*) FROM users u WHERE u.tenant_id=? AND u.deleted_at IS NULL AND ((u.teacher_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM data_job_rows r WHERE r.tenant_id=u.tenant_id AND r.job_id=? AND r.table_name='teachers' AND r.row_id=u.teacher_id AND json_extract(r.row_json,'$.deleted_at') IS NULL AND (u.active=0 OR json_extract(r.row_json,'$.status')='active'))) OR (u.student_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM data_job_rows r WHERE r.tenant_id=u.tenant_id AND r.job_id=? AND r.table_name='students' AND r.row_id=u.student_id AND json_extract(r.row_json,'$.deleted_at') IS NULL AND (u.active=0 OR json_extract(r.row_json,'$.status')='active'))))",
-          tenantId,
-          randomId("guard"),
-          tenantId,
-          id,
-          id,
-        ),
-      );
-
-      // 合作课程属于平台当前状态：在同一恢复事务中保留，而非回滚旧备份排期。
-
-      for (const table of [...restoreTables].reverse())
-        operations.push(sql(restoreSql[table].clear, tenantId));
-      for (const table of restoreTables)
-        operations.push(sql(stagedRestoreSql[table], tenantId, tenantId, id));
-      // A pre-0018 backup or a legacy import has no frozen valuation records.
-      operations.push(sql(`INSERT INTO credit_income_entries
-        SELECT e.* FROM credit_income_legacy_estimates e WHERE e.tenant_id=?
-          AND NOT EXISTS(SELECT 1 FROM credit_income_entries x WHERE x.tenant_id=e.tenant_id AND x.id=e.id)`, tenantId));
-      for (const key of BUSINESS_SETTINGS) {
-        operations.push(
-          sql(
-            "DELETE FROM tenant_settings WHERE tenant_id=? AND id=?",
-            tenantId,
-            key,
-          ),
-        );
-        if (settings[key] !== undefined)
-          operations.push(
-            sql(
-              "INSERT INTO tenant_settings(tenant_id,id,value,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,?,?,?,?)",
-              tenantId,
-              key,
-              JSON.stringify(settings[key]),
-              now(),
-              admin.id,
-              now(),
-              admin.id,
-            ),
-          );
-      }
-      operations.push(
-        sql("DELETE FROM sessions WHERE tenant_id=?", tenantId),
-        sql(
-          "UPDATE tenant_data_versions SET version=version+1 WHERE tenant_id=?",
-          tenantId,
-        ),
-        sql(
-          "DELETE FROM trusted_imports WHERE tenant_id=? AND id=?",
-          tenantId,
-          id,
-        ),
-        sql(
-          "UPDATE data_jobs SET status='completed' WHERE tenant_id=? AND id=?",
-          tenantId,
-          id,
-        ),
-        sql(
-          "DELETE FROM data_job_rows WHERE tenant_id=? AND job_id=?",
-          tenantId,
-          id,
-        ),
-        sql("DELETE FROM mutation_guards WHERE tenant_id=?", tenantId),
-        sql(
-          "INSERT INTO audit_log(tenant_id,id,at,actor_id,actor_label,module,action,entity_id,summary) VALUES(?,?,?,?,?,?,?,?,?)",
-          tenantId,
-          randomId("aud"),
-          now(),
-          admin.id,
-          "系统维护",
-          "imports",
-          kind,
-          id,
-          "按机构" +
-            (kind === "restore" ? "恢复" : "旧版导入") +
-            "，保留当前账号、权限、品牌及审计",
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,reason,ip) SELECT ?,?,?,?,?,?,?,reason,? FROM data_jobs WHERE tenant_id=? AND id=?",
-          randomId("pa"),
-          now(),
-          admin.id,
-          kind,
-          tenantId,
-          id,
-          JSON.stringify(expectedCounts),
-          "",
-          tenantId,
-          id,
-        ),
-      );
-      await db.batch(operations);
-    },
-    async overview(offset = 0) {
-      platform();
-      return all(
-        "SELECT t.id,t.name,t.slug,t.status,t.expires_at,t.type,t.city,t.staff_seat_limit,t.student_seat_limit,(SELECT COUNT(*) FROM students s WHERE s.tenant_id=t.id AND s.deleted_at IS NULL AND s.status='active') student_count,(SELECT COUNT(*) FROM lessons l WHERE l.tenant_id=t.id AND l.deleted_at IS NULL AND SUBSTR(l.start_at,1,7)=strftime('%Y-%m','now','+8 hours')) lesson_count,(SELECT MAX(at) FROM auth_log a WHERE a.tenant_id=t.id AND a.event='login_success') last_active,(SELECT COUNT(*) FROM auth_log a WHERE a.tenant_id=t.id AND a.at>? AND a.event IN ('login_failed','login_locked')) login_failures FROM tenants t ORDER BY t.created_at DESC,t.id LIMIT 200 OFFSET ?",
-        now() - 86400000,
-        offset,
-      );
-    },
-
-    async announcements(offset = 0, status = "") {
-      platform();
-      return all(
-        `SELECT a.*,CASE WHEN a.withdrawn_at IS NULL THEN 'published' ELSE 'withdrawn' END status,
-         (SELECT json_group_array(tenant_id) FROM announcement_targets t WHERE t.announcement_id=a.id) tenants
-         FROM platform_announcements a WHERE ?1='' OR (a.withdrawn_at IS NULL)= (?1='published')
-         ORDER BY a.created_at DESC,a.id LIMIT 200 OFFSET ?2`,
-        status, offset,
-      );
-    },
-    async withdrawAnnouncement(id, op, actor, reason) {
-      platform();
-      const prior = await this.platformOperation(op.id, op.fingerprint);
-      if (prior) return prior;
-      const row = await first("SELECT title,withdrawn_at FROM platform_announcements WHERE id=?", id);
-      if (!row) fail(404, "不存在");
-      const at = now(), result = { id, status: "withdrawn", withdrawn_at: at };
-      const out = await db.batch([
-        sql("UPDATE platform_announcements SET withdrawn_at=?,withdrawn_by=?,withdrawal_reason=? WHERE id=? AND withdrawn_at IS NULL", at, actor.id, reason, id),
-        sql("INSERT INTO platform_audit(id,at,admin_id,action,target,detail,reason,ip) SELECT ?,?,?,'withdraw_announcement',?,?,?,? WHERE changes()=1",
-          op.id, at, actor.id, id, JSON.stringify({ fingerprint: op.fingerprint, result, title: row.title }), reason, actor.ip || ""),
-      ]);
-      if (!out[0].meta.changes) {
-        const replay = await this.platformOperation(op.id, op.fingerprint);
-        if (replay) return replay;
-        fail(409, "公告已撤回");
-      }
-      return result;
-    },
-
-    async publishAnnouncement(row, tenants, admin) {
-      platform();
-      const ops = [
-        sql(
-          "INSERT INTO platform_announcements(id,title,content,roles,starts_at,ends_at,created_at,created_by) VALUES(?,?,?,?,?,?,?,?)",
-          row.id,
-          row.title,
-          row.content,
-          JSON.stringify(row.roles),
-          row.starts_at,
-          row.ends_at,
-          now(),
-          admin.id,
-        ),
-      ];
-      for (const id of tenants)
-        ops.push(
-          sql(
-            "INSERT INTO announcement_targets(tenant_id,id,announcement_id) VALUES(?,?,?)",
-            id,
-            randomId("rec"),
-            row.id,
-          ),
-        );
-      ops.push(
-        platformStmt(
-          admin.id,
-          "announcement",
-          null,
-          "发布系统消息，" + tenants.length + "个机构",
-        ),
-      );
-      await db.batch(ops);
-    },
-    async endMaintenance(id, admin) {
-      scoped();
-      await db.batch([
-        sql(
-          "UPDATE maintenance_leases SET revoked=1 WHERE tenant_id=? AND id=? AND admin_id=?",
-          tenantId,
-          id,
-          admin.id,
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,ip) SELECT ?,?,?,?,?,?,?,? WHERE changes()=1",
-          randomId("pa"),
-          now(),
-          admin.id,
-          "maintenance_end",
-          tenantId,
-          id,
-          "退出代管",
-          "",
-        ),
-      ]);
-    },
-    async lookupNames(rows) {
-      scoped();
-      const ids = JSON.stringify([
-        ...new Set(
-          rows
-            .flatMap((row) => [
-              row.student_id,
-              row.teacher_id,
-              row.course_type_id,
-              row.location_id,
-              row.class_id,
-              row.assignee_id,
-            ])
-            .filter(Boolean),
-        ),
-      ]);
-      return all(
-        "SELECT 'student' kind,id,name FROM students WHERE tenant_id=?1 AND id IN(SELECT value FROM json_each(?2)) UNION ALL SELECT 'teacher',id,name FROM teachers WHERE tenant_id=?1 AND id IN(SELECT value FROM json_each(?2)) UNION ALL SELECT 'course',id,name FROM course_types WHERE tenant_id=?1 AND id IN(SELECT value FROM json_each(?2)) UNION ALL SELECT 'location',id,name FROM locations WHERE tenant_id=?1 AND id IN(SELECT value FROM json_each(?2)) UNION ALL SELECT 'class',id,name FROM classes WHERE tenant_id=?1 AND id IN(SELECT value FROM json_each(?2)) UNION ALL SELECT 'assignee',id,name FROM users WHERE tenant_id=?1 AND id IN(SELECT value FROM json_each(?2))",
-        tenantId,
-        ids,
-      );
-    },
-    async maintenanceLease(id, admin) {
-      scoped();
-      return first(
-        "SELECT * FROM maintenance_leases WHERE tenant_id=? AND id=? AND admin_id=? AND expires_at>? AND revoked=0",
-        tenantId,
-        id,
-        admin.id,
-        now(),
-      );
-    },
-    async startMaintenance(lease, admin) {
-      scoped();
-      await db.batch([
-        sql(
-          "INSERT INTO maintenance_leases(tenant_id,id,admin_id,reason,expires_at) VALUES(?,?,?,?,?)",
-          tenantId,
-          lease.id,
-          admin.id,
-          lease.reason,
-          now() + 30 * 60000,
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,reason,ip) VALUES(?,?,?,?,?,?,?,?,?)",
-          randomId("pa"),
-          now(),
-          admin.id,
-          "maintenance_start",
-          tenantId,
-          lease.id,
-          "开启30分钟代管",
-          lease.reason,
-          "",
-        ),
-      ]);
-    },
     async toolList(kind, offset, filter = null) {
       scoped();
       const q = toolListSql[kind];
@@ -3337,38 +2265,7 @@ async feedbackChildIds(user) {
         leads: rows[homeSlots.leads] || [],
       };
     },
-    async systemMessagePage(user, offset) {
- scoped(); const at=now(); const result=await db.batch([sql(announcementPageSql,user.id,tenantId,at,at,JSON.stringify(user.roles),offset),sql(announcementUnreadSql,tenantId,at,at,JSON.stringify(user.roles),user.id)]);
- return {items:result[0].results,unread:result[1].results[0].n};
-},
-    async readMessage(id, user) {
-      scoped();
-      const result = await db.batch([
-        sql(
-          "INSERT OR IGNORE INTO announcement_reads(tenant_id,id,announcement_id,user_id,created_at,created_by,updated_at,updated_by) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM announcement_targets t JOIN platform_announcements a ON a.id=t.announcement_id AND a.withdrawn_at IS NULL WHERE t.tenant_id=? AND a.id=? AND a.starts_at<=? AND (a.ends_at IS NULL OR a.ends_at>?) AND EXISTS(SELECT 1 FROM json_each(a.roles) r WHERE r.value IN(SELECT value FROM json_each(?))))",
-          tenantId,
-          randomId("rec"),
-          id,
-          user.id,
-          now(),
-          user.id,
-          now(),
-          user.id,
-          tenantId,
-          id,
-          now(),
-          now(),
-          JSON.stringify(user.roles),
-        ),
-        sql(
-          "SELECT id FROM announcement_targets WHERE tenant_id=? AND announcement_id=?",
-          tenantId,
-          id,
-        ),
-      ]);
-      if (!result[0].meta.changes && !result[1].results.length)
-        fail(404, "不存在");
-    },
+
     async reviewContext(
       lessonId,
       studentId = null,
@@ -4249,18 +3146,7 @@ async feedbackChildIds(user) {
             tenantId,
           ),
         ];
-      if (env.__maintenance?.tenantId === tenantId)
-        ops.push(
-          sql(
-            "INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES(?,?,1,COALESCE((SELECT 1 FROM maintenance_leases WHERE tenant_id=? AND id=? AND admin_id=? AND revoked=0 AND expires_at>?),0))",
-            tenantId,
-            randomId("guard"),
-            tenantId,
-            env.__maintenance.id,
-            env.__maintenance.adminId,
-            now(),
-          ),
-        );
+
       for (const change of changes) {
         const q = businessSql[change.resource];
         if (!q) throw Error("invalid resource");
@@ -4379,11 +3265,7 @@ async feedbackChildIds(user) {
         throw e;
       }
     },
-    async resolve(host, slug, auth = null) {
-      platform();
-      if (auth) return authentication(auth.hash, { host, slug, ...auth });
-      return tenantRoute(await first(tenantRouteSql("?1", "?2", "?3"), host, slug, now()));
-    },
+
     async tenant() {
       scoped();
       return first("SELECT * FROM tenants WHERE id=?", tenantId);
@@ -4458,56 +3340,9 @@ async feedbackChildIds(user) {
         offset,
       );
     },
-    async createUser(data, actor) {
-      scoped();
-      const t = now(),
-        student = JSON.parse(data.roles).includes("student");
-      const platformHash = data.platform_phone_hmac ??
-        (data.phone_enc?.startsWith("v1.") && env.PLATFORM_PHONE_HMAC_KEY
-          ? await platformPhoneIndex(env, await decrypt(env, data.phone_enc, tenantId + ":phone")) : null);
-      let result;
-      try { result = await db.batch([
-        sql(
-          `INSERT INTO users(tenant_id,id,name,phone_hmac,phone_enc,phone_last4,roles,teacher_id,student_id,salt,digest,created_at,created_by,updated_at,updated_by,platform_phone_hmac)
- SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ?=0 OR (SELECT COUNT(*) FROM users WHERE tenant_id=? AND deleted_at IS NULL AND instr(roles,'"student"')>0) < (SELECT student_seat_limit FROM tenants WHERE id=?)`,
-          tenantId,
-          data.id,
-          data.name,
-          data.phone_hmac,
-          data.phone_enc,
-          data.phone_last4,
-          data.roles,
-          data.teacher_id || null,
-          data.student_id || null,
-          data.salt,
-          data.digest,
-          t,
-          actor.id,
-          t,
-          actor.id,
-          platformHash,
-          student ? 1 : 0,
-          tenantId,
-          tenantId,
-        ),
-        sql(
-          "INSERT INTO audit_log(tenant_id,id,at,actor_id,actor_label,module,action,entity_id,summary) SELECT ?,?,?,?,?,?,?,?,? WHERE changes()=1",
-          tenantId,
-          randomId("aud"),
-          t,
-          actor.id,
-          actor.name,
-          "accounts",
-          "create",
-          data.id,
-          "创建账号（手机号已脱敏）",
-        ),
-      ]); } catch (e) {
-        if (/staff_seat_limit/.test(String(e.message))) fail(409, "账号数量已达到上限", "seat_limit_reached");
-        throw e;
-      }
-      if (!result[0].meta.changes) fail(409, "账号数量已达到上限", "seat_limit_reached");
-    },
+    async createUser(data,actor) {
+ scoped();const at=now();await db.batch([sql('INSERT INTO users(tenant_id,id,name,phone_hmac,phone_enc,phone_last4,roles,teacher_id,student_id,salt,digest,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',tenantId,data.id,data.name,data.phone_hmac,data.phone_enc,data.phone_last4,data.roles,data.teacher_id||null,data.student_id||null,data.salt,data.digest,at,actor.id,at,actor.id),auditStmt(actor,'accounts','create',data.id,'创建账号（手机号已脱敏）')]);
+},
     async updateUser(id, v, data, actor) {
       scoped();
       const previous = await first(
@@ -4517,7 +3352,7 @@ async feedbackChildIds(user) {
       );
       const result = await db.batch([
         sql(
-          "UPDATE users SET name=?,roles=?,active=?,disabled_reason=CASE WHEN ?=0 THEN 'manual' ELSE NULL END,phone_hmac=COALESCE(?,phone_hmac),phone_enc=COALESCE(?,phone_enc),phone_last4=COALESCE(?,phone_last4),platform_phone_hmac=COALESCE(?,platform_phone_hmac),version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id=? AND version=? AND deleted_at IS NULL",
+          "UPDATE users SET name=?,roles=?,active=?,disabled_reason=CASE WHEN ?=0 THEN 'manual' ELSE NULL END,phone_hmac=COALESCE(?,phone_hmac),phone_enc=COALESCE(?,phone_enc),phone_last4=COALESCE(?,phone_last4),version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id=? AND version=? AND deleted_at IS NULL",
           data.name,
           data.roles,
           data.active,
@@ -4525,7 +3360,6 @@ async feedbackChildIds(user) {
           data.phone_hmac ?? null,
           data.phone_enc ?? null,
           data.phone_last4 ?? null,
-          data.platform_phone_hmac ?? null,
           now(),
           actor.id,
           tenantId,
@@ -4578,128 +3412,15 @@ async feedbackChildIds(user) {
       ]);
       if (!result[0].meta.changes) await conflict(id);
     },
-    async createSession(hash, user, info, tenantVersion = null, kind = "path") {
-      scoped();
-      const personal = JSON.parse(user.roles).some((x) =>
-          ["teacher", "student", "parent"].includes(x),
-        ),
-        t = now();
-      const result = await sql(
-        "INSERT INTO sessions(tenant_id,id,token_hash,user_id,expires_at,last_seen_at,idle_ms,ip,ua,created_at,created_by,updated_at,updated_by,kind) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.tenant_id=? AND u.id=? AND u.version=? AND u.digest=? AND u.active=1 AND u.deleted_at IS NULL AND t.status=? AND (? IS NULL OR t.version=?) AND (t.expires_at IS NULL OR unixepoch(t.expires_at||?) * 1000 > ?))",
-        tenantId,
-        randomId("ses"),
-        hash,
-        user.id,
-        t + (personal ? 14 * 86400000 : 43200000),
-        t,
-        personal ? null : 7200000,
-        info.ip,
-        info.ua,
-        t,
-        user.id,
-        t,
-        user.id,
-        kind,
-        tenantId,
-        user.id,
-        user.version || 1,
-        user.digest,
-        "active",
-        tenantVersion,
-        tenantVersion,
-        "T23:59:59+08:00",
-        t,
-      ).run();
-      if (!result.meta.changes) fail(401, "手机号或密码不正确", "LOGIN_FAILED");
-    },
+    async createSession(hash,user,info) {
+ scoped();const at=now(),personal=JSON.parse(user.roles).some(x=>['teacher','student'].includes(x));const result=await sql("INSERT INTO sessions(tenant_id,id,token_hash,user_id,expires_at,last_seen_at,idle_ms,ip,ua,created_at,created_by,updated_at,updated_by,kind) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,'root' WHERE EXISTS(SELECT 1 FROM users WHERE tenant_id=? AND id=? AND version=? AND digest=? AND active=1 AND deleted_at IS NULL)",tenantId,randomId('ses'),hash,user.id,at+(personal?14*86400000:43200000),at,personal?null:7200000,info.ip,info.ua,at,user.id,at,user.id,tenantId,user.id,user.version||1,user.digest).run();if(!result.meta.changes)fail(401,'手机号或密码不正确','LOGIN_FAILED');
+},
     async authenticateRequest(hash) {
       scoped();
       return authentication(hash);
     },
     // 固定自然小时计数，告警与拦截分开；不会撤销任何会话。
-    async recordReads(user, counts) {
-      scoped();
-      if (!counts.some(Boolean)) return counts.map(() => null);
-      const t = now(),
-        start = Math.floor(t / 3600000) * 3600000,
-        key = "read:" + tenantId + ":" + user.id,
-        personal = (
-          Array.isArray(user.roles) ? user.roles : JSON.parse(user.roles)
-        ).some((role) => ["teacher", "student", "parent"].includes(role)),
-        warning = personal ? 5001 : 20000,
-        blocking = personal ? 5001 : 50000;
-      const statements = counts.flatMap((count) => !count ? [] : [
-        sql(
-          "INSERT INTO security_limits(key,count,window_start,locked_until) VALUES(?,?,?,0) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN window_start<>excluded.window_start THEN excluded.count ELSE count+excluded.count END,window_start=excluded.window_start",
-          key,
-          count,
-          start,
-        ),
-        sql("SELECT count FROM security_limits WHERE key=?", key),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,ip) SELECT ?,?,'system','读取量告警',?,?,'本小时累计读取 '||count||' 条；告警线 '||?||' 条，拦截线 '||?||' 条','' FROM security_limits WHERE key=? AND count>=? AND count-?<?",
-          randomId("pa"),
-          t,
-          tenantId,
-          user.id,
-          personal ? 5000 : warning,
-          personal ? 5000 : blocking,
-          key,
-          warning,
-          count,
-          warning,
-        ),
-      ]);
-      const result = await db.batch(statements);
-      let index = 0;
-      return counts.map((count) => {
-        if (!count) return null;
-        const total = result[index + 1].results[0].count;
-        index += 3;
-        if (total >= blocking) {
-        const resume = new Intl.DateTimeFormat("sv-SE", {
-          timeZone: "Asia/Shanghai",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        }).format(new Date(start + 3600000));
-        return { status: 429, body: { error:
-          "本小时读取量已达安全上限，将在 " + resume + " 后恢复", code: "READ_LIMIT" } };
-        }
-        return null;
-      });
-    },
-    async recordRead(user, count) {
-      const [error] = await this.recordReads(user, [count]);
-      if (error) fail(error.status, error.body.error, error.body.code);
-    },
-    async loginCity(user, cityHash, ip) {
-      scoped();
-      const t = now(),
-        prefix = "city:" + tenantId + ":" + user + ":";
-      await db.batch([
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,ip) SELECT ?,?,'system','异地登录告警',?,?,?,? WHERE EXISTS(SELECT 1 FROM security_limits WHERE key>=? AND key<? AND key<>? AND window_start>?) AND NOT EXISTS(SELECT 1 FROM security_limits WHERE key=? AND window_start>?)",
-          randomId("pa"),
-          t,
-          tenantId,
-          user,
-          "一小时内出现不同城市的成功登录，请核对设备",
-          ip,
-          prefix,
-          prefix + String.fromCharCode(127),
-          prefix + cityHash,
-          t - 3600000,
-          prefix + cityHash,
-          t - 3600000,
-        ),
-        sql(
-          "INSERT INTO security_limits(key,count,window_start,locked_until) VALUES(?,1,?,0) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start",
-          prefix + cityHash,
-          t,
-        ),
-      ]);
-    },
+
     async session(hash) {
       scoped();
       return first(
@@ -4747,36 +3468,7 @@ async feedbackChildIds(user) {
         auditStmt(actor, "accounts", "revoke_device", user, "强制设备下线"),
       ]);
     },
-    async authEvent(user, last4, event, info) {
-      scoped();
-      const t = now();
-      await db.batch([
-        sql(
-          "INSERT INTO auth_log(tenant_id,id,at,user_id,phone_last4,event,ip,ua) VALUES(?,?,?,?,?,?,?,?)",
-          tenantId,
-          randomId("auth"),
-          t,
-          user || null,
-          last4 || null,
-          event,
-          info.ip,
-          info.ua,
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,ip) SELECT ?,?,'system','登录失败告警',?,?,?,? WHERE ? IN ('login_failed','login_locked') AND (SELECT COUNT(*) FROM auth_log WHERE tenant_id=? AND ip=? AND at>? AND event IN ('login_failed','login_locked'))%5=0",
-          randomId("pa"),
-          t,
-          tenantId,
-          user || null,
-          "同机构同IP一小时内连续累计5次失败，请核对登录",
-          info.ip,
-          event,
-          tenantId,
-          info.ip,
-          t - 3600000,
-        ),
-      ]);
-    },
+    async authEvent(user,last4,event,info){scoped();await sql('INSERT INTO auth_log(tenant_id,id,at,user_id,phone_last4,event,ip,ua) VALUES(?,?,?,?,?,?,?,?)',tenantId,randomId('auth'),now(),user||null,last4||null,event,info.ip,info.ua).run();},
     async audit(actor, module, action, id, summary) {
       scoped();
       await auditStmt(actor, module, action, id, summary).run();
@@ -4941,1024 +3633,11 @@ async feedbackChildIds(user) {
     async clearLimit(key) {
       await sql("DELETE FROM security_limits WHERE key=?", key).run();
     },
-    async initialized() {
-      platform();
-      return !!(await first(
-        "SELECT id FROM platform_state WHERE id=?",
-        "initialized",
-      ));
-    },
-    async initAdmin(data, ip) {
-      platform();
-      const result = await db.batch([
-        sql(
-          "INSERT INTO platform_admins(id,username,salt,digest,totp_enc,last_totp_step,created_at) SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM platform_state WHERE id=?)",
-          data.id,
-          data.username,
-          data.salt,
-          data.digest,
-          data.totp_enc,
-          data.step,
-          now(),
-          "initialized",
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,detail,ip) SELECT ?,?,?,?,?,? WHERE changes()=1",
-          randomId("pa"),
-          now(),
-          data.id,
-          "initialize",
-          "首个超管已创建",
-          ip,
-        ),
-      ]);
-      if (!result[0].meta.changes) fail(404, "页面不存在");
-    },
 
-    async platformAccounts(offset) {
-      platform();
-      return all(
-        "SELECT id,username,role,active,created_at FROM platform_admins ORDER BY created_at,id LIMIT 200 OFFSET ?",
-        offset,
-      );
-    },
-    async createConsultant(data, actor, ip) {
-      platform();
-      const res = await db.batch([
-        sql(
-          "INSERT INTO platform_admins(id,username,salt,digest,totp_enc,last_totp_step,created_at,role) VALUES(?,?,?,?,?,?,?,'consultant') ON CONFLICT(username) DO NOTHING",
-          data.id,
-          data.username,
-          data.salt,
-          data.digest,
-          data.totp_enc,
-          data.step,
-          now(),
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,target,detail,ip) SELECT ?,?,?,?,?,?,? WHERE changes()=1",
-          randomId("pa"),
-          now(),
-          actor,
-          "consultant_create",
-          data.id,
-          "新建主管顾问",
-          ip,
-        ),
-      ]);
-      if (!res[0].meta.changes) fail(409, "用户名已存在");
-    },
-    async setPlatformAccountActive(id, active, actor, ip) {
-      platform();
-      const res = await db.batch([
-        sql(
-          "UPDATE platform_admins SET active=? WHERE id=? AND (?=1 OR (id<>? AND (role<>'owner' OR (SELECT COUNT(*) FROM platform_admins WHERE role='owner' AND active=1 AND id<>?)>0)))",
-          active,
-          id,
-          active,
-          actor,
-          id,
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,target,detail,ip) SELECT ?,?,?,?,?,?,? WHERE changes()=1",
-          randomId("pa"),
-          now(),
-          actor,
-          "platform_account_active",
-          id,
-          active ? "启用控制台账号" : "停用控制台账号",
-          ip,
-        ),
-        sql(
-          "DELETE FROM platform_sessions WHERE admin_id=? AND EXISTS(SELECT 1 FROM platform_admins WHERE id=? AND active=0)",
-          id,
-          id,
-        ),
-      ]);
-      if (!res[0].meta.changes) fail(409, "账号不存在或不能停用");
-    },
-    async admin(username) {
-      platform();
-      return first("SELECT * FROM platform_admins WHERE username=?", username);
-    },
-    async adminSession(hash) {
-      platform();
-      return first(
-        "SELECT s.*,a.username,a.active,a.role FROM platform_sessions s JOIN platform_admins a ON a.id=s.admin_id WHERE s.token_hash=?",
-        hash,
-      );
-    },
-    async authenticateAdminRequest(hash) {
-      platform();
-      const t = now();
-      const eligible = `SELECT s.*,a.username,a.active,a.role FROM platform_sessions s
-        JOIN platform_admins a ON a.id=s.admin_id WHERE s.token_hash=?1 AND a.active=1
-        AND s.expires_at>?2 AND s.last_seen_at+1800000>?2`;
-      const args = [hash, t];
-      const key = env.__readRequest ? "'console-request-get:'||admin_id" : "'console-request:'||admin_id";
-      const max = env.__readRequest ? 240 : 120;
-      const rows = await db.batch([
-        sql(eligible, ...args),
-        sql(
-          `INSERT INTO security_limits(key,count,window_start,locked_until)
-          SELECT ${key},1,?2,0 FROM (${eligible}) WHERE 1
-          ON CONFLICT(key) DO UPDATE SET
-            count=CASE WHEN window_start<=?2-60000 AND locked_until<=?2 THEN 1 ELSE count+1 END,
-            window_start=CASE WHEN window_start<=?2-60000 AND locked_until<=?2 THEN ?2 ELSE window_start END`,
-          ...args,
-        ),
-        sql(
-          `UPDATE security_limits SET locked_until=?2+60000 WHERE count>${max} AND locked_until<=?2
-          AND key IN (SELECT ${key} FROM (${eligible}))`,
-          ...args,
-        ),
-        sql(
-          `SELECT locked_until,window_start,count FROM security_limits
-          WHERE key IN (SELECT ${key} FROM (${eligible}))`,
-          ...args,
-        ),
-        sql(
-          `UPDATE platform_sessions SET last_seen_at=?2 WHERE token_hash=?1
-          AND last_seen_at<=?2-60000 AND EXISTS(SELECT 1 FROM (${eligible}))`,
-          ...args,
-        ),
-      ]);
-      const admin = rows[0].results?.[0];
-      if (!admin) return null;
-      const limit = rows[3].results[0];
-      if (
-        limit.locked_until > t ||
-        (limit.window_start > t - 60000 && limit.count > max)
-      )
-        fail(429, "操作太频繁，请稍后再试");
-      return admin;
-    },
-    async newAdminSession(hash, admin, step, info) {
-      platform();
-      const t = now(),
-        result = await db.batch([
-          sql(
-            "UPDATE platform_admins SET last_totp_step=? WHERE id=? AND last_totp_step<? AND active=1",
-            step,
-            admin.id,
-            step,
-          ),
-          sql(
-            "INSERT INTO platform_sessions(token_hash,admin_id,expires_at,last_seen_at,ip,ua) SELECT ?,?,?,?,?,? WHERE changes()=1",
-            hash,
-            admin.id,
-            t + 28800000,
-            t,
-            info.ip,
-            info.ua,
-          ),
-        ]);
-      if (!result[0].meta.changes) fail(401, "用户名、密码或动态口令不正确");
-    },
-    async touchAdmin(hash) {
-      platform();
-      await sql(
-        "UPDATE platform_sessions SET last_seen_at=? WHERE token_hash=?",
-        now(),
-        hash,
-      ).run();
-    },
-    async revokeAdmin(hash) {
-      platform();
-      await sql("DELETE FROM platform_sessions WHERE token_hash=?", hash).run();
-    },
-    async platformLog(actor, action, target, detail, ip, reason) {
-      platform();
-      await platformStmt(actor, action, target, detail, ip, reason).run();
-    },
-    async platformAlerts(offset) {
-      platform();
-      return all(
-        "SELECT p.id,p.at,p.action,p.detail,p.ip,t.name tenant_name,u.name user_name FROM platform_audit p LEFT JOIN tenants t ON t.id=p.tenant_id LEFT JOIN users u ON u.tenant_id=p.tenant_id AND u.id=p.target WHERE p.action IN ('读取量告警','异地登录告警','登录失败告警','请求限流告警') ORDER BY p.at DESC,p.id LIMIT 200 OFFSET ?",
-        offset,
-      );
-    },
-    async platformOperation(id, fingerprint) {
-      platform();
-      const row = await first("SELECT detail FROM platform_audit WHERE id=?", id);
-      if (!row) return null;
-      const data = JSON.parse(row.detail);
-      if (data.fingerprint !== fingerprint) fail(409, "操作编号已用于其他请求");
-      return data.result;
-    },
-    async lifecycleState(id) {
-      platform();
-      return first(
-        "SELECT t.id,t.name,t.status,t.version,t.disabled_at,t.expires_at,v.version data_version FROM tenants t JOIN tenant_data_versions v ON v.tenant_id=t.id WHERE t.id=? AND t.deleted_at IS NULL",
-        id,
-      );
-    },
-    async changeTenantLifecycle(id, row, enable, op, admin, reason) {
-      platform();
-      const result = { ok: true, status: enable ? "active" : "paused" };
-      const at = now();
-      const changed = await db.batch([
-        sql(
-          "UPDATE tenants SET status=?,disabled_at=?,disabled_by=?,disabled_reason=?,version=version+1,updated_at=?,updated_by=? WHERE id=? AND version=? AND NOT EXISTS(SELECT 1 FROM tenant_purge_jobs j WHERE j.tenant_id=tenants.id)",
-          result.status, enable ? null : at, enable ? null : admin.id,
-          enable ? null : reason, at, admin.id, id, row.version,
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,reason,ip) SELECT ?,?,?,?,?,?,?,?,? WHERE changes()=1",
-          op.id, at, admin.id, enable ? "enable_tenant" : "disable_tenant",
-          id, id, JSON.stringify({ fingerprint: op.fingerprint, tenant_name: row.name, result }), reason, admin.ip,
-        ),
-        sql("UPDATE maintenance_leases SET revoked=1 WHERE tenant_id=? AND EXISTS(SELECT 1 FROM platform_audit WHERE id=?)", id, op.id),
-      ]);
-      if (!changed[0].meta.changes) {
-        const replay = await this.platformOperation(op.id, op.fingerprint);
-        if (replay) return replay;
-        fail(409, "机构状态已变化，请刷新");
-      }
-      return result;
-    },
-    async startExportRun(id, admin) {
-      platform();
-      const run = randomId("export");
-      const out = await sql(
-        `INSERT INTO tenant_export_runs(tenant_id,id,admin_id,tenant_version,data_version)
-         SELECT t.id,?,?,t.version,v.version FROM tenants t JOIN tenant_data_versions v ON v.tenant_id=t.id
-         WHERE t.id=? AND t.status='paused' AND t.disabled_at IS NOT NULL AND t.deleted_at IS NULL
-         AND NOT EXISTS(SELECT 1 FROM tenant_purge_jobs j WHERE j.tenant_id=t.id)
-         ON CONFLICT(tenant_id) DO UPDATE SET id=excluded.id,admin_id=excluded.admin_id,
-         tenant_version=excluded.tenant_version,data_version=excluded.data_version,table_index=0,next_offset=0,completed_at=NULL`,
-        run, admin, id,
-      ).run();
-      if (!out.meta.changes) fail(409, "请先停用机构");
-      return run;
-    },
-    async exportRun(id, run, admin) {
-      platform();
-      return first(
-        `SELECT e.* FROM tenant_export_runs e JOIN tenants t ON t.id=e.tenant_id AND t.version=e.tenant_version
-         JOIN tenant_data_versions v ON v.tenant_id=t.id AND v.version=e.data_version
-         WHERE e.tenant_id=? AND e.id=? AND e.admin_id=? AND t.status='paused'
-         AND NOT EXISTS(SELECT 1 FROM tenant_purge_jobs j WHERE j.tenant_id=t.id)`,
-        id, run, admin,
-      );
-    },
-    async advanceExport(run, index, offset, completed) {
-      platform();
-      const at = now();
-      const update = sql(
-        `UPDATE tenant_export_runs SET table_index=?,next_offset=?,completed_at=?
-         WHERE id=? AND table_index=? AND next_offset=? AND completed_at IS NULL
-           AND EXISTS(SELECT 1 FROM tenants t JOIN tenant_data_versions v ON v.tenant_id=t.id
-             WHERE t.id=tenant_export_runs.tenant_id AND t.version=tenant_version AND v.version=data_version)`,
-        index, offset, completed ? at : null, run.id, run.table_index, run.next_offset,
-      );
-      const out = completed ? (await db.batch([
-        update,
-        sql("INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,ip) SELECT ?,?,?,'tenant_export_complete',?,?,?,'' WHERE changes()=1",
-          randomId("pa"), at, run.admin_id, run.tenant_id, run.id, "完成机构完整加密导出"),
-      ]))[0] : await update.run();
-      if (!out.meta.changes) fail(409, "导出进度或机构数据已变化，请刷新");
-    },
-    async purgeJob(id) {
-      platform();
-      return first("SELECT * FROM tenant_purge_jobs WHERE tenant_id=?", id);
-    },
-    async purgeReceipt(id) {
-      platform();
-      const row = await first(
-        "SELECT detail FROM platform_audit WHERE tenant_id=? AND action='purge_tenant' ORDER BY at DESC LIMIT 1", id,
-      );
-      return row ? JSON.parse(row.detail) : null;
-    },
-    async hasFreshExport(id) {
-      platform();
-      return !!await first(
-        `SELECT 1 FROM tenant_export_runs e JOIN tenants t ON t.id=e.tenant_id AND t.version=e.tenant_version
-         JOIN tenant_data_versions v ON v.tenant_id=t.id AND v.version=e.data_version
-         WHERE e.tenant_id=? AND e.completed_at>=?`, id, now()-86400000,
-      );
-    },
-    async ownerTotp(id) {
-      platform();
-      return first("SELECT totp_enc,last_totp_step FROM platform_admins WHERE id=? AND role='owner' AND active=1", id);
-    },
-    async startPurge(id, row, admin, op, reason, step, cutoff) {
-      platform();
-      const t = now(), guard = randomId("guard");
-      try {
-        await db.batch([
-          sql(
-            `INSERT INTO tenant_purge_jobs(tenant_id,id,admin_id,tenant_name,reason,fingerprint,ip,created_at,phase)
-             SELECT t.id,?,?,t.name,?,?,?,?,0 FROM tenants t JOIN tenant_export_runs e ON e.tenant_id=t.id
-             JOIN tenant_data_versions v ON v.tenant_id=t.id
-             WHERE t.id=? AND t.version=? AND t.status='paused' AND t.disabled_at IS NOT NULL AND t.disabled_at<=?
-             AND e.tenant_version=t.version AND e.data_version=v.version AND e.completed_at>=?`,
-            op.id, admin.id, reason, op.fingerprint, admin.ip, t, id, row.version, cutoff, t-86400000,
-          ),
-          sql("INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES('platform',?,1,changes())", guard),
-          sql(
-            "UPDATE platform_admins SET last_totp_step=? WHERE id=? AND active=1 AND role='owner' AND last_totp_step<?",
-            step, admin.id, step,
-          ),
-          sql("INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES('platform',?,1,changes())", guard+"t"),
-          sql("UPDATE tenant_data_versions SET version=version+1 WHERE tenant_id=?", id),
-          sql("DELETE FROM mutation_guards WHERE tenant_id='platform' AND id IN (?,?)", guard, guard+"t"),
-        ]);
-      } catch (error) {
-        if (!/CHECK constraint|UNIQUE constraint/i.test(String(error.message))) throw error;
-        const job = await this.purgeJob(id);
-        if (job?.id === op.id && job.fingerprint === op.fingerprint) return job;
-        fail(409, "机构、导出凭证或动态口令已变化，请重新检查");
-      }
-      return this.purgeJob(id);
-    },
-    async purgeTableStep(job) {
-      platform();
-      const table = PURGE_TABLES[job.phase];
-      if (!table) fail(409, "删除作业阶段不正确");
-      const id = job.tenant_id, guard = randomId("guard");
-      const { where, values } = purgeFilter(table, id);
-      const protectedTable = ["package_transactions", "payroll_snapshots", "lessons", "lesson_participants"].includes(table);
-      const ops = [
-        sql("INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES('platform',?,1,(SELECT COUNT(*) FROM tenant_purge_jobs WHERE tenant_id=? AND id=? AND phase=?))", guard, id, job.id, job.phase),
-      ];
-      if (protectedTable) ops.push(sql("INSERT INTO trusted_imports(tenant_id,id) VALUES(?,?)", id, guard));
-      ops.push(
-        sql(`DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE ${where} LIMIT 200)`, ...values),
-        sql(
-          `UPDATE tenant_purge_jobs SET phase=phase+CASE WHEN changes()<200 THEN 1 ELSE 0 END,
-           counts=json_set(counts,?,COALESCE(json_extract(counts,?),0)+changes()) WHERE tenant_id=? AND id=?`,
-          "$."+table, "$."+table, id, job.id,
-        ),
-      );
-      if (protectedTable) ops.push(sql("DELETE FROM trusted_imports WHERE tenant_id=? AND id=?", id, guard));
-      ops.push(sql("DELETE FROM mutation_guards WHERE tenant_id='platform' AND id=?", guard));
-      try {
-        await db.batch(ops);
-      } catch (error) {
-        if (!String(error.message).includes("CHECK constraint")) throw error;
-        const current = await this.purgeJob(id);
-        if (current?.id === job.id && current.phase !== job.phase) return current;
-        fail(409, "删除进度已变化，请刷新");
-      }
-      return this.purgeJob(id);
-    },
-    async finishPurge(job) {
-      platform();
-      const id = job.tenant_id, guard = randomId("guard");
-      const filters = PURGE_TABLES.map((table) => ({ table, ...purgeFilter(table, id) }));
-      const conditions = filters.map(({ table, where }) => `EXISTS(SELECT 1 FROM ${table} WHERE ${where})`);
-      const exportCount = (await first("SELECT COUNT(*) n FROM tenant_export_runs WHERE tenant_id=?", id)).n;
-      const result = {
-        id: job.id, status: "completed", tenant_name: job.tenant_name,
-        completed_at: now(), counts: { ...JSON.parse(job.counts), tenant_export_runs: exportCount, tenant_purge_jobs: 1, tenants: 1 },
-      };
-      const detail = { fingerprint: job.fingerprint, result };
-      // Rewind if a previously admitted writer added a row after its table was swept.
-      const newRows = await db.batch(filters.map(({ table, where, values }) =>
-        sql(`SELECT 1 FROM ${table} WHERE ${where} LIMIT 1`, ...values),
-      ));
-      const dirty = newRows.findIndex((x) => x.results.length);
-      if (dirty >= 0) {
-        await sql("UPDATE tenant_purge_jobs SET phase=? WHERE id=? AND phase=?", dirty, job.id, PURGE_TABLES.length).run();
-        return null;
-      }
-      try {
-        await db.batch([
-          // The final atomic check also covers writers between the scan and this transaction.
-          ...filters.map(({ table, where, values }, n) =>
-            sql(`INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES('platform',?,0,${conditions[n]})`, guard+n, ...values),
-          ),
-          sql("INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES('platform',?,1,(SELECT COUNT(*) FROM tenant_purge_jobs WHERE tenant_id=? AND id=? AND phase=?))", guard, id, job.id, PURGE_TABLES.length),
-          sql("DELETE FROM tenant_export_runs WHERE tenant_id=?", id),
-          sql("DELETE FROM tenant_purge_jobs WHERE tenant_id=?", id),
-          sql("DELETE FROM tenants WHERE id=? AND status='paused'", id),
-          sql("INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,reason,ip) VALUES(?,?,?,?,?,?,?,?,?)",
-            job.id, result.completed_at, job.admin_id, "purge_tenant", id, id, JSON.stringify(detail), job.reason, job.ip),
-          sql("DELETE FROM mutation_guards WHERE tenant_id='platform' AND substr(id,1,?)=?", guard.length, guard),
-        ]);
-      } catch (error) {
-        if (!String(error.message).includes("CHECK constraint")) throw error;
-        return (await this.purgeReceipt(id))?.result || null;
-      }
-      return result;
-    },
-    async platformLogs(offset) {
-      platform();
-      return all(
-        "SELECT p.*,CASE WHEN p.action='purge_tenant' THEN json_extract(p.detail,'$.result.tenant_name') ELSE t.name END tenant_name FROM platform_audit p LEFT JOIN tenants t ON t.id=p.tenant_id ORDER BY p.at DESC,p.id LIMIT 200 OFFSET ?",
-        offset,
-      );
-    },
-    async listTenants(offset) {
-      platform();
-      return all(
-        "SELECT id,slug,name,type,city,status,expires_at,staff_seat_limit,student_seat_limit,version,disabled_at,disabled_by,disabled_reason FROM tenants WHERE deleted_at IS NULL ORDER BY created_at DESC,id LIMIT 200 OFFSET ?",
-        offset,
-      );
-    },
-    async createTenant(data, actor, modules) {
-      platform();
-      const t = now();
-      const statements = [
-        sql(
-          "INSERT INTO tenants(id,slug,name,type,city,status,expires_at,staff_seat_limit,student_seat_limit,contact_enc,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          data.id,
-          data.slug,
-          data.name,
-          data.type,
-          data.city,
-          "active",
-          data.expires_at,
-          data.staff_seat_limit,
-          data.student_seat_limit,
-          data.contact_enc,
-          t,
-          actor,
-          t,
-          actor,
-        ),
-        sql(
-          "INSERT INTO tenant_branding(tenant_id,id,display_name,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,?,?,?,?)",
-          data.id,
-          "brand",
-          data.name,
-          t,
-          actor,
-          t,
-          actor,
-        ),
-        ...modules.map((m) =>
-          sql(
-            "INSERT INTO tenant_modules(tenant_id,id,enabled,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,?,?,?,?)",
-            data.id,
-            m,
-            m === "school_db" ? 0 : 1,
-            t,
-            actor,
-            t,
-            actor,
-          ),
-        ),
-        platformStmt(actor, "create_tenant", data.id, "开通机构"),
-      ];
-      await db.batch(statements);
-    },
-    async slugTaken(slug, except = "") {
-      platform();
-      return !!(await first(
-        "SELECT id FROM tenants WHERE slug=? AND id<>? UNION ALL SELECT tenant_id AS id FROM tenant_slug_aliases WHERE slug=? AND expires_at>? LIMIT 1",
-        slug,
-        except,
-        slug,
-        now(),
-      ));
-    },
-    async updateTenant(id, v, data, actor) {
-      platform();
-      const t = now();
-      const result = await db.batch([
-        sql(
-          "UPDATE tenants SET slug=?,name=?,type=?,city=?,status=?,expires_at=?,staff_seat_limit=?,student_seat_limit=?,version=version+1,updated_at=?,updated_by=? WHERE id=? AND version=? AND deleted_at IS NULL",
-          data.slug,
-          data.name,
-          data.type,
-          data.city,
-          data.status,
-          data.expires_at,
-          data.staff_seat_limit,
-          data.student_seat_limit,
-          t,
-          actor,
-          id,
-          v,
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,ip) SELECT ?,?,?,?,?,?,?,? WHERE changes()=1",
-          randomId("pa"),
-          t,
-          actor,
-          "update_tenant",
-          id,
-          id,
-          "修改机构、路径或账号上限",
-          "",
-        ),
-      ]);
-      if (!result[0].meta.changes) await conflict(id);
-    },
-    async saveBrand(id, v, b, actor) {
-      platform();
-      storedRecord(b, "机构品牌");
-      const result = await db.batch([
-        sql(
-          "UPDATE tenant_branding SET display_name=?,logo=?,login_bg=?,theme_color=?,welcome_text=?,consultant_qr=?,contact_text=?,version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id=? AND version=?",
-          b.display_name,
-          b.logo,
-          b.login_bg,
-          b.theme_color,
-          b.welcome_text,
-          b.consultant_qr ?? null,
-          b.contact_text ?? "",
-          now(),
-          actor,
-          id,
-          "brand",
-          v,
-        ),
-        sql(
-          "INSERT INTO platform_audit(id,at,admin_id,action,tenant_id,target,detail,ip) SELECT ?,?,?,?,?,?,?,? WHERE changes()=1",
-          randomId("pa"),
-          now(),
-          actor,
-          "brand",
-          id,
-          id,
-          "更新品牌",
-          "",
-        ),
-      ]);
-      if (!result[0].meta.changes) await conflict(id);
-    },
-    async module(id, module, enabled, actor) {
-      platform();
-      await db.batch([
-        sql(
-          "UPDATE tenant_modules SET enabled=?,version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id=?",
-          enabled ? 1 : 0,
-          now(),
-          actor,
-          id,
-          module,
-        ),
-        platformStmt(actor, "module", id, module + ":" + enabled),
-      ]);
-    },
-    async identitySessionOwner(hash, kind = null) {
-      platform();
-      return first("SELECT tenant_id,kind FROM sessions WHERE token_hash=? AND (? IS NULL OR kind=?)", hash, kind, kind);
-    },
-    async identityCandidates(index) {
-      platform();
-      return all(`SELECT u.*,t.name tenant_name,t.slug,t.version tenant_version,b.logo,
-        (SELECT COUNT(*) FROM platform_phone_index WHERE phone_hmac_platform=?) candidate_count
-        FROM platform_phone_index p JOIN users u ON u.tenant_id=p.tenant_id AND u.id=p.user_id
-        JOIN tenants t ON t.id=u.tenant_id LEFT JOIN tenant_branding b ON b.tenant_id=t.id AND b.id='brand'
-        WHERE p.phone_hmac_platform=? AND u.active=1 AND u.deleted_at IS NULL AND t.deleted_at IS NULL AND t.status='active'
-        ORDER BY COALESCE((SELECT MAX(at) FROM auth_log WHERE tenant_id=u.tenant_id AND user_id=u.id AND event='login_success'),(SELECT MAX(created_at) FROM sessions WHERE tenant_id=u.tenant_id AND user_id=u.id),0) DESC,u.tenant_id,u.id LIMIT 5`, index, index);
-    },
-    async identityChoices(matches, group, until) {
-      platform();
-      await db.batch(matches.map(m => sql(`INSERT INTO login_choices(tenant_id,id,token_hash,user_id,user_version,tenant_version,group_id,expires_at,created_at)
-        SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users u JOIN tenants t ON t.id=u.tenant_id
-        WHERE u.tenant_id=? AND u.id=? AND u.version=? AND u.digest=? AND u.active=1 AND t.version=? AND t.status='active')`,
-        m.tenant_id,randomId('lc'),m.choice_hash,m.id,m.version,m.tenant_version,group,until,now(),m.tenant_id,m.id,m.version,m.digest,m.tenant_version)));
-    },
-    async identityChoice(hash) {
-      platform();
-      return first(`SELECT c.*,u.name,u.phone_last4,u.roles,u.must_change,u.active,u.version,u.digest
-        FROM login_choices c JOIN users u ON u.tenant_id=c.tenant_id AND u.id=c.user_id
-        WHERE c.token_hash=? AND c.expires_at>?`, hash, now());
-    },
-    async identityConsumeChoice(hash, sessionHash, info) {
-      platform();
-      const at=now(), id=randomId('ses');
-      const results=await db.batch([
-        sql(`INSERT INTO sessions(tenant_id,id,token_hash,user_id,expires_at,last_seen_at,idle_ms,ip,ua,created_at,created_by,updated_at,updated_by,kind)
-          SELECT c.tenant_id,?,?,c.user_id,?,?,7200000,?,?,?,c.user_id,?,c.user_id,'root'
-          FROM login_choices c JOIN users u ON u.tenant_id=c.tenant_id AND u.id=c.user_id JOIN tenants t ON t.id=c.tenant_id
-          WHERE c.token_hash=? AND c.expires_at>? AND u.version=c.user_version AND t.version=c.tenant_version
-          AND u.active=1 AND u.deleted_at IS NULL AND t.status='active' AND t.deleted_at IS NULL
-          AND (t.expires_at IS NULL OR unixepoch(t.expires_at||'T23:59:59+08:00')*1000>?)`,
-          id,sessionHash,at+43200000,at,info.ip,info.ua,at,at,hash,at,at),
-        sql(`DELETE FROM login_choices WHERE group_id=(SELECT group_id FROM login_choices WHERE token_hash=?)
-          AND EXISTS(SELECT 1 FROM sessions WHERE id=? AND token_hash=?)`,hash,id,sessionHash),
-      ]);
-      if(!results[0].meta.changes) fail(401,'机构选择已过期，请重新登录','unauthenticated');
-    },
-    async identityChildren(parent) {
-      scoped();
-      return all(`SELECT s.id,s.name,s.nickname,s.grade,s.direction,g.relation FROM guardian_links g
-        JOIN students s ON s.tenant_id=g.tenant_id AND s.id=g.student_id
-        JOIN users u ON u.tenant_id=g.tenant_id AND u.id=g.parent_user_id
-        WHERE g.tenant_id=? AND g.parent_user_id=? AND g.revoked_at IS NULL AND s.deleted_at IS NULL
-        AND u.active=1 AND u.deleted_at IS NULL ORDER BY s.name,s.id`,tenantId,parent);
-    },
-    async identityGuardians(student) {
-      scoped();
-      return all(`SELECT g.id,g.student_id,g.parent_user_id,g.relation,g.version,u.name,u.phone_last4,u.active,u.disabled_reason
-        FROM guardian_links g JOIN users u ON u.tenant_id=g.tenant_id AND u.id=g.parent_user_id
-        WHERE g.tenant_id=? AND g.student_id=? AND g.revoked_at IS NULL AND u.deleted_at IS NULL ORDER BY g.created_at,g.id`,tenantId,student);
-    },
-    async identityGuardian(student,id) {
-      scoped();
-      return first('SELECT * FROM guardian_links WHERE tenant_id=? AND student_id=? AND id=? AND revoked_at IS NULL',tenantId,student,id);
-    },
-    async identityBindGuardian(student,parent,relation,actor,newUser=null) {
-      scoped();
-      const at=now(),link=randomId('gdn'),ops=[];
-      ops.push(sql(`INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES(?,?,1,
-        CASE WHEN EXISTS(SELECT 1 FROM students WHERE tenant_id=? AND id=? AND deleted_at IS NULL) THEN 1 ELSE 0 END)`,tenantId,randomId('guard'),tenantId,student));
-      if(newUser) {
-        ops.push(sql(`INSERT INTO users(tenant_id,id,phone_hmac,phone_enc,phone_last4,name,roles,salt,digest,must_change,active,created_at,created_by,updated_at,updated_by)
-          VALUES(?,?,?,?,?,?,'["parent"]',?,?,1,1,?,?,?,?)`,tenantId,parent.id,newUser.phone_hmac,newUser.phone_enc,newUser.phone_last4,newUser.name,newUser.salt,newUser.digest,at,actor.id,at,actor.id));
-      } else {
-        ops.push(sql(`INSERT INTO mutation_guards(tenant_id,id,expected,actual)
-          SELECT ?,?,?,COALESCE((SELECT version FROM users WHERE tenant_id=? AND id=? AND deleted_at IS NULL AND roles='["parent"]' AND (active=1 OR disabled_reason='no_children')),-1)`,tenantId,randomId('guard'),parent.version,tenantId,parent.id));
-        ops.push(sql(`UPDATE users SET active=1,disabled_reason=NULL,version=version+1,updated_at=?,updated_by=?
-          WHERE tenant_id=? AND id=? AND active=0 AND disabled_reason='no_children'`,at,actor.id,tenantId,parent.id));
-      }
-      ops.push(sql('INSERT INTO guardian_links(tenant_id,id,parent_user_id,student_id,relation,created_by,created_at,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',tenantId,link,parent.id,student,relation,actor.id,at,actor.id,at));
-      ops.push(auditStmt(actor,'parents','bind',link,'绑定家长与学员'));
-      await db.batch(ops);
-      return this.identityGuardian(student,link);
-    },
-    async identityChangeGuardian(old,relation,revoke,v,actor) {
-      scoped();
-      const at=now();
-      const result=await db.batch([
-        sql('UPDATE guardian_links SET relation=?,revoked_at=?,version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id=? AND student_id=? AND version=? AND revoked_at IS NULL',relation,revoke?at:null,at,actor.id,tenantId,old.id,old.student_id,v),
-        sql('INSERT INTO audit_log(tenant_id,id,at,actor_id,actor_label,module,action,entity_id,summary) SELECT ?,?,?,?,?,?,?,?,? WHERE changes()=1',tenantId,randomId('aud'),at,actor.id,actor.name,'parents',revoke?'unbind':'update',old.id,revoke?'解绑家长与学员':'修改家长关系'),
-      ]);
-      if(!result[0].meta.changes) {
-        fail(409,'家长绑定已被修改，请刷新','version_conflict');
-      }
-    },
-    async identityDisableParent(user,actor) {
-      scoped();
-      const result=await db.batch([
-        sql(`UPDATE users SET active=0,disabled_reason='manual',version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id=? AND roles='["parent"]' AND version=? AND deleted_at IS NULL`,now(),actor.id,tenantId,user.id,user.version),
-        auditStmt(actor,'parents','disable',user.id,'手动停用家长账号'),
-      ]);
-      if(!result[0].meta.changes) await conflict(user.id);
-    },
-    async identityPublicBrand(slug) {
-      platform();
-      return first(`SELECT t.id,t.status,t.expires_at,b.display_name name,b.logo logo_url,b.login_bg login_bg_url,b.theme_color primary_color
-        FROM tenants t JOIN tenant_branding b ON b.tenant_id=t.id AND b.id='brand' WHERE t.slug=? AND t.deleted_at IS NULL`,slug);
-    },
-    async identityIndexRows(offset,limit=100) {
-      platform();
-      return all('SELECT tenant_id,id,phone_enc,version FROM users WHERE deleted_at IS NULL ORDER BY tenant_id,id LIMIT ? OFFSET ?',limit,offset);
-    },
-    async identityIndexPage(rows,admin) {
-      platform();
-      const writes=[];
-      for(const row of rows) {
-        writes.push(sql(`INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES(?,?,?,COALESCE((SELECT version FROM users WHERE tenant_id=? AND id=?),-1))`,row.tenant_id,randomId('guard'),row.version,row.tenant_id,row.id));
-        writes.push(sql('UPDATE users SET platform_phone_hmac=? WHERE tenant_id=? AND id=? AND version=?',row.hash,row.tenant_id,row.id,row.version));
-      }
-      if(writes.length) await db.batch(writes);
-    },
-    async identityIndexFinish(admin) {
-      platform();
-      await db.batch([
-        sql(`DELETE FROM platform_phone_index WHERE NOT EXISTS(SELECT 1 FROM users u JOIN tenants t ON t.id=u.tenant_id
-          WHERE u.tenant_id=platform_phone_index.tenant_id AND u.id=platform_phone_index.user_id AND u.active=1 AND u.deleted_at IS NULL
-          AND t.status='active' AND t.deleted_at IS NULL AND u.platform_phone_hmac=platform_phone_index.phone_hmac_platform
-          AND EXISTS(SELECT 1 FROM json_each(u.roles) WHERE value IN ('supervisor','consultant','academic','finance')))`),
-        platformStmt(admin,'rebuild_phone_index',null,'重建平台手机号索引'),
-      ]);
-    },
-    async identityOpsTenants(offset,limit) {
-      platform();
-      const result=await db.batch([
-        sql('SELECT id FROM tenants WHERE deleted_at IS NULL ORDER BY created_at DESC,id LIMIT ? OFFSET ?',limit,offset),
-        sql('SELECT COUNT(*) n FROM tenants WHERE deleted_at IS NULL'),
-      ]);
-      return {ids:result[0].results.map(r=>r.id),total:result[1].results[0].n};
-    },
-    async identityOpsConfig() {
-      scoped();
-      const data=await db.batch([
-        sql('SELECT * FROM tenants WHERE id=? AND deleted_at IS NULL',tenantId),
-        sql('SELECT display_name,logo,login_bg,theme_color,version FROM tenant_branding WHERE tenant_id=? AND id=?',tenantId,'brand'),
-        sql('SELECT id,enabled,version FROM tenant_modules WHERE tenant_id=? AND deleted_at IS NULL',tenantId),
-        sql('SELECT id,pack_version FROM tenant_subjects WHERE tenant_id=?',tenantId),
-        sql('SELECT fast_daily_limit,deep_daily_limit FROM tenant_ai_overrides WHERE tenant_id=?',tenantId),
-      ]);
-      if(!data[0].results.length) return null;
-      return {tenant:data[0].results[0],brand:data[1].results[0],modules:data[2].results,subjects:data[3].results,ai_override:data[4].results[0]||null};
-    },
-    async identityOpsSave(data,old,actor,moduleIds) {
-      platform();
-      const at=now(),id=data.id,ops=[];
-      if(old) {
-        ops.push(sql('INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES(?,?,?,COALESCE((SELECT version FROM tenants WHERE id=? AND deleted_at IS NULL),-1))',id,randomId('guard'),data.version,id));
-        ops.push(sql(`UPDATE tenants SET slug=?,name=?,expires_at=?,staff_seat_limit=?,version=version+1,updated_at=?,updated_by=? WHERE id=? AND deleted_at IS NULL`,data.slug,data.name,data.expires_at,data.staff_seat_limit,at,actor.id,id));
-      } else {
-        ops.push(sql(`INSERT INTO tenants(id,slug,name,status,expires_at,staff_seat_limit,student_seat_limit,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,'active',?,?,100000,?,?,?,?)`,id,data.slug,data.name,data.expires_at,data.staff_seat_limit,at,actor.id,at,actor.id));
-        ops.push(sql(`INSERT INTO tenant_branding(tenant_id,id,display_name,created_at,created_by,updated_at,updated_by) VALUES(?,'brand',?,?,?,?,?)`,id,data.name,at,actor.id,at,actor.id));
-        ops.push(sql(`INSERT INTO tenant_modules(tenant_id,id,enabled,created_at,created_by,updated_at,updated_by) SELECT ?,value,CASE WHEN value='school_db' THEN 0 ELSE 1 END,?,?,?,? FROM json_each(?)`,id,at,actor.id,at,actor.id,JSON.stringify(moduleIds)));
-      }
-      ops.push(sql('UPDATE tenant_branding SET display_name=?,logo=?,login_bg=?,theme_color=?,version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id=?',data.name,data.logo,data.login_bg,data.primary_color,at,actor.id,id,'brand'));
-      if(data.modules) ops.push(sql(`UPDATE tenant_modules SET enabled=CAST(json_extract(?, '$.'||id) AS INTEGER),version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id IN(SELECT key FROM json_each(?))`,JSON.stringify(data.modules),at,actor.id,id,JSON.stringify(data.modules)));
-      if(data.subjects) {
-        ops.push(sql('DELETE FROM tenant_subjects WHERE tenant_id=? AND id NOT IN(SELECT value FROM json_each(?))',id,JSON.stringify(data.subjects)));
-        ops.push(sql(`INSERT INTO tenant_subjects(tenant_id,id,created_at,created_by) SELECT ?,value,?,? FROM json_each(?) WHERE 1 ON CONFLICT(tenant_id,id) DO NOTHING`,id,at,actor.id,JSON.stringify(data.subjects)));
-      }
-      if(data.ai_override) ops.push(sql(`INSERT INTO tenant_ai_overrides(tenant_id,id,fast_daily_limit,deep_daily_limit) VALUES(?,'limits',?,?) ON CONFLICT(tenant_id,id) DO UPDATE SET fast_daily_limit=excluded.fast_daily_limit,deep_daily_limit=excluded.deep_daily_limit`,id,data.ai_override.fast_daily_limit,data.ai_override.deep_daily_limit));
-      if(data.status !== undefined) ops.push(sql(`UPDATE tenants SET status=?,disabled_at=CASE WHEN ?='active' THEN NULL ELSE COALESCE(disabled_at,?) END,
-        disabled_by=CASE WHEN ?='active' THEN NULL ELSE ? END,disabled_reason=CASE WHEN ?='active' THEN NULL ELSE '机构管理停用' END
-        WHERE id=?`,data.status,data.status,at,data.status,actor.id,data.status,id));
-      if(data.subjects) ops.push(...await subjectOps(data.subjects,actor,id));
-      ops.push(platformStmt(actor.id,old?'update_tenant':'create_tenant',id,'机构管理配置（不含密钥或明文手机号）'));
-      await db.batch(ops);
-    },
-    async identityRevokeSessions(actor,reason) {
-      scoped();
-      await db.batch([sql('DELETE FROM sessions WHERE tenant_id=?',tenantId),sql('DELETE FROM login_choices WHERE tenant_id=?',tenantId),auditStmt(actor,'accounts','revoke_sessions',tenantId,reason)]);
-    },
     async identityLeadExists(id) {
       scoped();
       return !!await first("SELECT id FROM leads WHERE tenant_id=? AND id=? AND deleted_at IS NULL",tenantId,id);
     },
-    async identityGuardedChildCount(parent) {
-      scoped();
-      return (await first("SELECT COUNT(*) n FROM guardian_links WHERE tenant_id=? AND parent_user_id=? AND revoked_at IS NULL",tenantId,parent)).n;
-    },
-    async identityOpsPage(ids) {
-      platform();
-      const payload=JSON.stringify(ids);
-      const data=await db.batch([
-        sql("SELECT * FROM tenants WHERE id IN(SELECT value FROM json_each(?)) AND deleted_at IS NULL",payload),
-        sql("SELECT * FROM tenant_branding WHERE tenant_id IN(SELECT value FROM json_each(?)) AND id='brand'",payload),
-        sql("SELECT * FROM tenant_modules WHERE tenant_id IN(SELECT value FROM json_each(?)) AND deleted_at IS NULL",payload),
-        sql("SELECT * FROM tenant_subjects WHERE tenant_id IN(SELECT value FROM json_each(?))",payload),
-        sql("SELECT * FROM tenant_ai_overrides WHERE tenant_id IN(SELECT value FROM json_each(?))",payload),
-      ]);
-      return ids.map(id=>({tenant:data[0].results.find(r=>r.id===id),brand:data[1].results.find(r=>r.tenant_id===id),modules:data[2].results.filter(r=>r.tenant_id===id),subjects:data[3].results.filter(r=>r.tenant_id===id),ai_override:data[4].results.find(r=>r.tenant_id===id)||null}));
-    },
+
   };
-}
-
-function platformRepo(db, tenantId) {
-    const sql = (q, ...p) => db.prepare(q).bind(...p), first = (q, ...p) => sql(q, ...p).first(), all = async (q, ...p) => (await sql(q, ...p).all()).results || [];
-    const platform = () => {
-        if (tenantId) throw Error("platform scope required");
-    }, scoped = () => {
-        if (!tenantId) throw Error("tenant scope required");
-    };
-    let exists;
-    const available = async () => exists ?? (exists = !!await first("SELECT 1 ok FROM sqlite_master WHERE type='table' AND name='subject_packs'"));
-    const audit = (a, action, detail) => sql("INSERT INTO platform_audit(id,at,admin_id,action,detail,ip) VALUES(?,?,?,?,?,'')", randomId("pa"), now(), a.id, action, JSON.stringify(detail));
-    const guard = (query, args, expected) => {
-        const id = randomId("pg");
-        return [ sql("INSERT INTO platform_ops_guards(id,expected,actual) VALUES(?,?,COALESCE((" + query + "),-1))", id, expected, ...args), id ];
-    };
-    const end = id => sql("DELETE FROM platform_ops_guards WHERE id=?", id);
-    const subjectRow = (k, v) => first("SELECT p.name,v.* FROM subject_pack_versions v JOIN subject_packs p ON p.key=v.key WHERE v.key=? AND v.pack_version=?", k, v);
-    const visible = `COALESCE(m.status,'published')='published' AND (m.scope='all' AND p.scope_all=1 OR m.scope IS NULL AND p.scope_all=1 OR EXISTS(SELECT 1 FROM style_version_tenants s WHERE s.tenant_id=?1 AND s.pack_id=p.id AND s.pack_version=v.version) OR m.scope IS NULL AND EXISTS(SELECT 1 FROM style_pack_scopes s WHERE s.tenant_id=?1 AND s.pack_id=p.id))`;
-    const owned = "0";
-    return {
-        available: available,
-        async subjects() {
-            platform();
-            const rows = await all("SELECT p.name pack_name,p.current_published_version,v.* FROM subject_packs p JOIN subject_pack_versions v ON v.key=p.key ORDER BY p.key,v.created_at,v.pack_version");
-            return rows;
-        },
-        async subject(k, v) {
-            platform();
-            return subjectRow(k, v);
-        },
-        async saveSubject(d, old, a, publish = false) {
-            platform();
-            storedRecord(d.content, "学科模板");
-            const at = now(), ops = [];
-
-            let g;
-            if (old) {
-                const pair = guard("SELECT version FROM subject_pack_versions WHERE key=? AND pack_version=? AND status='draft'", [ d.key, d.pack_version ], old.version);
-                g = pair[1];
-                ops.push(pair[0]);
-                ops.push(sql("UPDATE subject_pack_versions SET name=?,content_json=?,version=version+1,status=?,updated_at=?,updated_by=?,published_at=? WHERE key=? AND pack_version=?", d.name, JSON.stringify(d.content), publish ? "published" : "draft", at, a.id, publish ? at : null, d.key, d.pack_version));
-            } else {
-                ops.push(sql("INSERT INTO subject_pack_versions(key,pack_version,name,status,content_json,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,'draft',?,?,?,?,?)", d.key, d.pack_version, d.name, JSON.stringify(d.content), at, a.id, at, a.id));
-            }
-            if (publish) ops.push(sql("UPDATE subject_packs SET name=?,current_published_version=? WHERE key=?", d.name, d.pack_version, d.key));
-            ops.push(audit(a, publish ? "publish_subject" : "save_subject", {
-                key: d.key,
-                pack_version: d.pack_version
-            }));
-            if (g) ops.push(end(g));
-            await db.batch(ops);
-            return subjectRow(d.key, d.pack_version);
-        },
-        async styleRows(id = null) {
-            platform();
-            return all("SELECT p.id,p.name,p.active,p.current_version,v.version pack_version,v.manifest_json,m.version,m.status,m.scope,m.checks_json,m.published_at FROM style_packs p JOIN style_pack_versions v ON v.pack_id=p.id LEFT JOIN style_version_meta m ON m.pack_id=v.pack_id AND m.pack_version=v.version WHERE (? IS NULL OR p.id=?) ORDER BY p.id,v.created_at,v.version", id, id);
-        },
-        async styleTenants(id) {
-            platform();
-            return all("SELECT tenant_id AS id,pack_version FROM style_version_tenants WHERE pack_id=? ORDER BY tenant_id", id);
-        },
-        async styleUsage(id) { platform(); return 0; },
-        async style(id, v) {
-            platform();
-            return first("SELECT p.id,p.name,p.active,v.version pack_version,v.manifest_json,m.version,m.status,m.scope,m.checks_json FROM style_packs p JOIN style_pack_versions v ON v.pack_id=p.id LEFT JOIN style_version_meta m ON m.pack_id=v.pack_id AND m.pack_version=v.version WHERE p.id=? AND v.version=?", id, v);
-        },
-        async styleUpload(data, assets, a) {
-            platform();
-            const m = data.manifest, at = now(), ops = [ sql("INSERT INTO style_packs(id,name,current_version,active,scope_all,default_plan,created_at) VALUES(?,?,?,0,0,0,?) ON CONFLICT(id) DO NOTHING", m.id, m.name, m.version, at), sql("INSERT INTO style_pack_versions(id,pack_id,version,manifest_json,created_at) VALUES(?,?,?,?,?)", randomId("sv"), m.id, m.version, JSON.stringify(m), at), sql("INSERT INTO style_version_meta(pack_id,pack_version,status,scope,checks_json,created_by) VALUES(?,?,'draft','admin_only',?,?)", m.id, m.version, JSON.stringify(data.checks), a.id) ];
-            for (const x of assets) ops.push(sql("INSERT INTO style_assets(pack_id,pack_version,path,r2_key,mime,width,height,bytes,sha256) VALUES(?,?,?,?,?,?,?,?,?)", m.id, m.version, x.path, x.r2_key, x.mime, x.width, x.height, x.bytes, x.sha256));
-            ops.push(audit(a, "upload_style", {
-                id: m.id,
-                pack_version: m.version
-            }));
-            await db.batch(ops);
-            return this.style(m.id, m.version);
-        },
-        async validTenants(ids) {
-            platform();
-            return all("SELECT id FROM tenants WHERE id IN(SELECT value FROM json_each(?)) AND deleted_at IS NULL", JSON.stringify(ids));
-        },
-        async publishStyle(row, scope, tenants, a) {
-            platform();
-            const [g, id] = guard("SELECT version FROM style_version_meta WHERE pack_id=? AND pack_version=? AND status='draft'", [ row.id, row.pack_version ], row.version), ops = [ g, sql("UPDATE style_version_meta SET status='published',scope=?,version=version+1,published_at=? WHERE pack_id=? AND pack_version=?", scope, now(), row.id, row.pack_version), sql("UPDATE style_packs SET current_version=?,name=?,active=1,scope_all=? WHERE id=?", row.pack_version, JSON.parse(row.manifest_json).name, Number(scope === "all"), row.id), sql("DELETE FROM style_pack_scopes WHERE pack_id=?", row.id) ];
-            for (const tid of tenants) ops.push(sql("INSERT INTO style_version_tenants(tenant_id,id,pack_id,pack_version) VALUES(?,?,?,?)", tid, randomId("svt"), row.id, row.pack_version), sql("INSERT INTO style_pack_scopes(tenant_id,id,pack_id) VALUES(?,?,?)", tid, randomId("scope"), row.id));
-            ops.push(audit(a, "publish_style", {
-                id: row.id,
-                pack_version: row.pack_version,
-                scope: scope,
-                tenants: tenants
-            }), end(id));
-            await db.batch(ops);
-        },
-        async disableStyle(id, a) {
-            platform();
-            const p = await first("SELECT id FROM style_packs WHERE id=?", id);
-            if (!p) fail(404, "不存在", "not_found");
-            await db.batch([ sql("UPDATE style_packs SET active=0 WHERE id=?", id), audit(a, "disable_style", {
-                id: id
-            }) ]);
-        },
-        async defaultStyle(type, id, a) {
-            platform();
-            const row = await first("SELECT p.id,v.manifest_json FROM style_packs p JOIN style_pack_versions v ON v.pack_id=p.id AND v.version=p.current_version JOIN style_version_meta m ON m.pack_id=v.pack_id AND m.pack_version=v.version WHERE p.id=? AND p.active=1 AND m.status='published'", id);
-            if (!row) fail(404, "不存在", "not_found");
-            if (!JSON.parse(row.manifest_json).doc_types.includes(type)) invalid("风格不支持此文档类型", "doc_type");
-            await db.batch([ sql("INSERT INTO style_defaults(doc_type,pack_id) VALUES(?,?) ON CONFLICT(doc_type) DO UPDATE SET pack_id=excluded.pack_id", type, id), audit(a, "default_style", {
-                doc_type: type,
-                pack_id: id
-            }) ]);
-        },
-        async defaults() {
-            platform();
-            return all("SELECT * FROM style_defaults ORDER BY doc_type");
-        },
-        async styleAssets(id, v) {
-            if (tenantId) scoped();
-            return all("SELECT path,mime,width,height,bytes,sha256 FROM style_assets WHERE pack_id=? AND pack_version=? ORDER BY path", id, v);
-        },
-        async asset(id, v, path) {
-            if (tenantId && !await this.tenantStyle(id, v, true)) return null;
-            return first("SELECT * FROM style_assets WHERE pack_id=? AND pack_version=? AND path=?", id, v, path);
-        },
-        async tenantStyle(id, v, historical = false) {
-            scoped();
-            return first(`SELECT p.id,p.name,p.active,p.current_version,v.version,v.manifest_json FROM style_packs p JOIN style_pack_versions v ON v.pack_id=p.id AND v.version=COALESCE(?3,p.current_version) LEFT JOIN style_version_meta m ON m.pack_id=v.pack_id AND m.pack_version=v.version WHERE p.id=?2 AND (((?4=0 OR p.active=1) AND v.version=p.current_version AND (${visible})) OR ?4=1 AND (${owned}))`, tenantId, id, v, Number(historical));
-        },
-        async tenantStyles(type) {
-            scoped();
-            return all(`SELECT p.id,p.name,p.active,p.current_version,v.version,v.manifest_json FROM style_packs p JOIN style_pack_versions v ON v.pack_id=p.id AND v.version=p.current_version LEFT JOIN style_version_meta m ON m.pack_id=v.pack_id AND m.pack_version=v.version WHERE p.active=1 AND (${visible}) AND EXISTS(SELECT 1 FROM json_each(v.manifest_json,'$.doc_types') WHERE value=?2) ORDER BY CASE WHEN p.id=(SELECT pack_id FROM style_defaults WHERE doc_type=?2) THEN 0 ELSE 1 END,p.default_plan DESC,p.id`, tenantId, type);
-        },
-
-        async compliance() {
-            platform();
-            return all("SELECT id,term,active,version FROM compliance_terms ORDER BY id");
-        },
-        async saveTerms(terms, a) {
-            platform();
-            const before = await this.compliance(), ops = before.map(x => sql("UPDATE compliance_terms SET active=0,version=version+1 WHERE id=?", x.id));
-            for (const term of terms) ops.push(sql("INSERT INTO compliance_terms(id,term,active,version) VALUES(?,?,1,1) ON CONFLICT(term) DO UPDATE SET active=1", randomId("term"), term));
-            ops.push(audit(a, "save_compliance", {
-                terms: terms
-            }));
-            await db.batch(ops);
-            return this.compliance();
-        },
-        async aiOverride(id, d, a) {
-            platform();
-            if (!(await this.validTenants([ id ])).length) fail(404, "不存在", "not_found");
-            await db.batch([ sql("INSERT INTO tenant_ai_overrides(tenant_id,fast_daily_limit,deep_daily_limit) VALUES(?,?,?) ON CONFLICT(tenant_id,id) DO UPDATE SET fast_daily_limit=excluded.fast_daily_limit,deep_daily_limit=excluded.deep_daily_limit", id, d.fast_daily_limit, d.deep_daily_limit), audit(a, "ai_override", {
-                id: id,
-                ...d
-            }) ]);
-        },
-        async usage(from, to, tenant, group) {
-            platform();
-            if (tenant && !(await this.validTenants([ tenant ])).length) fail(404, "不存在", "not_found");
-            const col = {
-                day: "date(datetime(created_at/1000,'unixepoch','+8 hours'))",
-                tenant: "tenant_id",
-                tool: "tool"
-            }[group];
-            const data=await db.batch([sql(`SELECT ${col} key,tier,COUNT(*) calls,SUM(CASE WHEN result='ok' THEN 1 ELSE 0 END) successful,SUM(CASE WHEN result<>'ok' THEN 1 ELSE 0 END) failed,SUM(prompt_tokens) prompt_tokens,SUM(completion_tokens) completion_tokens,SUM(duration_ms) duration_ms FROM ai_usage WHERE created_at>=? AND created_at<? AND (? IS NULL OR tenant_id=?) GROUP BY ${col},tier ORDER BY key,tier`,from,to,tenant,tenant),sql(`SELECT ${col} key,tier,result reason,COUNT(*) count FROM ai_usage WHERE created_at>=? AND created_at<? AND (? IS NULL OR tenant_id=?) AND result<>'ok' GROUP BY ${col},tier,result`,from,to,tenant,tenant)]);return data[0].results.map(x=>{const failure_reasons={timeout:0,protocol_invalid:0,response_too_large:0,other:0};for(const f of data[1].results.filter(y=>y.key===x.key&&y.tier===x.tier)){const reason=['timeout','protocol_invalid','response_too_large'].includes(f.reason)||/^provider_http_[1-5]\d\d$/.test(f.reason)?f.reason:'other';failure_reasons[reason]=(failure_reasons[reason]||0)+f.count;}return {...x,failure_reasons};});
-        },
-        async subjectStatements(keys, a, tid, explicit = false) {
-            if (!tid) throw Error("tenant scope required");
-            const at = now(), state = await db.batch([ "offer_courses", "stage_types", "report_classes", "stage_rules", "calendar_nodes", "course_rules", "tenant_subjects", "setting_template_refs" ].map(t => sql("SELECT * FROM " + t + " WHERE tenant_id=?", tid))), rows = state.map(x => x.results), oldCfg = rows.slice(3, 6).map(x => x.find(y => y.id === "main"));
-            const docs = {
-                rules: oldCfg[0] ? JSON.parse(oldCfg[0].doc_json) : {
-                    rules: {}
-                },
-                calendar: oldCfg[1] ? JSON.parse(oldCfg[1].doc_json) : {
-                    region: null,
-                    items: []
-                },
-                course: oldCfg[2] ? JSON.parse(oldCfg[2].doc_json) : {
-                    items: []
-                }
-            }, ops = [];
-            for (const key of keys) {
-                const pack = await first("SELECT p.name,v.* FROM subject_packs p JOIN subject_pack_versions v ON v.key=p.key AND v.pack_version=p.current_published_version WHERE p.key=? AND v.status='published'", key);
-                if (!pack) invalid("学科模板未发布", "key");
-                const old = rows[6].find(x => x.id === key);
-                if (old?.imported_at && (!explicit || old.pack_version === pack.pack_version)) continue;
-                const c = JSON.parse(pack.content_json), maps = {};
-                for (const [kind, table, input, prefix, index] of [ [ "courses", "offer_courses", c.courses, "crs", 0 ], [ "stage_types", "stage_types", c.stages, "stg", 1 ], [ "report_classes", "report_classes", c.classes, "rcl", 2 ] ]) {
-                    maps[kind] = new Map;
-                    const inserts = [], refs = [];
-                    for (const [i, item] of input.entries()) {
-                        const found = rows[7].find(x => x.subject === key && x.kind === kind && x.template_key === item.key), entity = found && rows[index].find(x => x.id === found.entity_id);
-                        if (found) {
-                            if (entity && !entity.deleted_at) maps[kind].set(item.key, entity.id);
-                            continue;
-                        }
-                        if (rows[index].some(x => x.subject === key && x.name === item.name && !x.deleted_at)) continue;
-                        const id = randomId(prefix), {key: templateKey, ...doc} = item;
-                        doc.subject = key;
-                        if (kind === "stage_types") doc.order ??= (i + 1) * 10;
-                        inserts.push({
-                            id: id,
-                            doc: doc,
-                            name: item.name,
-                            active: Number(item.active ?? true)
-                        });
-                        maps[kind].set(templateKey, id);
-                        refs.push({
-                            id: randomId("tref"),
-                            template_key: templateKey,
-                            entity_id: id
-                        });
-                    }
-                    for (const chunk of jsonChunks(inserts, 15e4)) ops.push(sql(`INSERT INTO ${table}(tenant_id,id,subject,name,active,source,doc_json,created_at,created_by,updated_at,updated_by,version) SELECT ?1,json_extract(value,'$.id'),?2,json_extract(value,'$.name'),json_extract(value,'$.active'),'template',json_extract(value,'$.doc'),?3,?4,?3,?4,1 FROM json_each(?5)`, tid, key, at, a.id, chunk));
-                    for (const chunk of jsonChunks(refs, 15e4)) ops.push(sql("INSERT INTO setting_template_refs(tenant_id,id,subject,kind,template_key,entity_id) SELECT ?1,json_extract(value,'$.id'),?2,?3,json_extract(value,'$.template_key'),json_extract(value,'$.entity_id') FROM json_each(?4)", tid, key, kind, chunk));
-                }
-
-                for (const rule of c.course_rules) {
-                    const stage = maps.stage_types.get(rule.stage_key);
-                    if (!stage) invalid("模板阶段无法可靠映射，请在机构设置维护", "course_rules");
-                    if (docs.course.items.some(x => x.stage_type_id === stage)) continue;
-                    const convert = k => {
-                        const id = maps.courses.get(k);
-                        if (!id) invalid("模板课程无法可靠映射，请在机构设置维护", "course_rules");
-                        return id;
-                    };
-                    docs.course.items.push({
-                        stage_type_id: stage,
-                        required: rule.required.map(convert),
-                        recommended: rule.recommended.map(convert),
-                        exclusive: rule.exclusive.map(g => g.map(convert)),
-                        units: rule.units
-                    });
-                }
-                docs.rules.rules = {
-                    ...c.rules,
-                    ...docs.rules.rules
-                };
-                const nodeKeys = new Set(docs.calendar.items.map(x => x.key));
-                for (const n of c.calendar) if (!nodeKeys.has(n.key)) {
-                    docs.calendar.items.push(n);
-                    nodeKeys.add(n.key);
-                }
-                ops.push(sql("INSERT OR IGNORE INTO report_dimensions(tenant_id,id,class_id,dim_key) SELECT ?1,'dim_'||lower(hex(randomblob(12))),c.id,json_extract(d.value,'$.key') FROM report_classes c,json_each(c.doc_json,'$.dimensions') d WHERE c.tenant_id=?1 AND c.subject=?2", tid, key));
-                ops.push(sql("INSERT INTO tenant_subjects(tenant_id,id,pack_version,created_at,created_by,imported_at,content_json) VALUES(?,?,?,?,?,?,?) ON CONFLICT(tenant_id,id) DO UPDATE SET pack_version=excluded.pack_version,imported_at=excluded.imported_at,content_json=excluded.content_json", tid, key, pack.pack_version, at, a.id, at, JSON.stringify({
-                    content_types: c.content_types,
-                    constraints: c.constraints,
-                    tone: c.tone
-                })));
-                const [g, gid] = guard("SELECT CASE WHEN current_published_version=? THEN 1 ELSE 0 END FROM subject_packs WHERE key=?", [ pack.pack_version, key ], 1);
-                ops.push(g, end(gid));
-            }
-            if (!ops.length) return ops;
-            for (const [i, table, doc] of [ [ 0, "stage_rules", docs.rules ], [ 1, "calendar_nodes", docs.calendar ], [ 2, "course_rules", docs.course ] ]) {
-                if (oldCfg[i]) ops.push(sql("INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES(?,?,?,COALESCE((SELECT version FROM " + table + " WHERE tenant_id=? AND id='main'),-1))", tid, randomId("guard"), oldCfg[i].version, tid));
-                ops.push(sql(`INSERT INTO ${table}(tenant_id,id,doc_json,created_at,created_by,updated_at,updated_by,version) VALUES(?,'main',?,?,?,?,?,1) ON CONFLICT(tenant_id,id) DO UPDATE SET doc_json=excluded.doc_json,updated_at=excluded.updated_at,updated_by=excluded.updated_by,version=${table}.version+1`, tid, JSON.stringify(doc), at, a.id, at, a.id));
-            }
-            ops.push(sql("INSERT INTO tenant_price_lists(tenant_id,id,doc_json,created_at,created_by,updated_at,updated_by,version) VALUES(?,'main','{}',?,?,?,?,2) ON CONFLICT(tenant_id,id) DO UPDATE SET version=tenant_price_lists.version+1,updated_at=excluded.updated_at,updated_by=excluded.updated_by", tid, at, a.id, at, a.id));
-            ops.push(sql("INSERT INTO audit_log(tenant_id,id,at,actor_id,actor_label,module,action,entity_id,summary,before_json,after_json) VALUES(?,?,?,?,?,'settings','import_template',?,'显式导入学科模板',NULL,?)", tid, randomId("aud"), at, a.id, a.name || "平台", keys.join(","), JSON.stringify({
-                keys: keys
-            })), sql("DELETE FROM mutation_guards WHERE tenant_id=?", tid));
-            return ops;
-        },
-        async currentImport(key) {
-            scoped();
-            return !!await first("SELECT 1 ok FROM tenant_subjects t JOIN subject_packs p ON p.key=t.id WHERE t.tenant_id=? AND t.id=? AND t.pack_version=p.current_published_version AND t.imported_at IS NOT NULL", tenantId, key);
-        },
-        async importWarnings() {
-            scoped();
-            return all("SELECT DISTINCT t.subject FROM (SELECT subject,id FROM offer_courses WHERE tenant_id=?1 AND source='template' AND deleted_at IS NULL UNION ALL SELECT subject,id FROM stage_types WHERE tenant_id=?1 AND source='template' AND deleted_at IS NULL UNION ALL SELECT subject,id FROM report_classes WHERE tenant_id=?1 AND source='template' AND deleted_at IS NULL) t WHERE NOT EXISTS(SELECT 1 FROM setting_template_refs r WHERE r.tenant_id=?1 AND r.entity_id=t.id)", tenantId);
-        }
-    };
 }

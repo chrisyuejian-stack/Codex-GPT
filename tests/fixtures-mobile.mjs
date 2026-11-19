@@ -29,6 +29,7 @@ export async function teacherToken(s, id = s.teacher) {
 }
 export async function mobileSetup(f, count = 2, suffix = "a") {
   const s = { ...(await setup(f, count, suffix)), f };
+  s.f=s.instance; s.f.instances.set(s.t.slug,s.f);
   for (const student of s.students) await pack(s, student, 20);
   s.lid = await lesson(s, "2026-11-10T10:00");
   s.teacherAccount = await teacherToken(s);

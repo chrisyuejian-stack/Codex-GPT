@@ -2,18 +2,18 @@ import test, { after } from "node:test";
 
 import assert from "node:assert/strict";
 
-import { growthSchool, call, ok, parent, submitFeedback, confirmFeedback } from "./fixtures-growth.mjs";
+import { growthSchool, call, ok, studentAccount, submitFeedback, confirmFeedback } from "./fixtures-growth.mjs";
 
-test("YX6F 结构化反馈待确认不扣课、不公开，确认后家长可见；新点评待审仍看旧版", () => growthSchool(async s => {
-    const pa = await parent(s), before = s.f.db.raw.prepare("SELECT COUNT(*) n FROM package_transactions").get().n, p = ok(await submitFeedback(s));
+test("YX6F 结构化反馈待确认不扣课、不公开，确认后学员可见；新点评待审仍看旧版", () => growthSchool(async s => {
+    const pa = await studentAccount(s), before = s.f.db.raw.prepare("SELECT COUNT(*) n FROM package_transactions").get().n, p = ok(await submitFeedback(s));
     assert.equal(s.f.db.raw.prepare("SELECT COUNT(*) n FROM package_transactions").get().n, before);
-    assert.equal(ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token)).items.length, 0);
+    assert.equal(ok(await call(s, "student/comments", "GET", undefined, pa.token)).items.length, 0);
     ok(await call(s, "feedback/" + p.id + "/" + s.students[0] + "/copied", "POST", {}, s.teacherAccount.token), 409);
     ok(await confirmFeedback(s, p.id));
     ok(await call(s, "feedback/" + p.id + "/" + s.students[0] + "/copied", "POST", {}, s.teacherAccount.token));
     const reviewed = ok(await call(s, "lessons/" + s.lid + "/review", "GET", undefined, s.teacherAccount.token));
     assert.equal(reviewed.personal.find(x => x.student_id === s.students[0]).copied_count, 1);
-    let feed = ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token));
+    let feed = ok(await call(s, "student/comments", "GET", undefined, pa.token));
     assert.equal(feed.items[0].message.good, "节奏稳定");
     const q = ok(await submitFeedback(s, {
         kind: "comments",
@@ -29,11 +29,11 @@ test("YX6F 结构化反馈待确认不扣课、不公开，确认后家长可见
             } ]
         }
     }));
-    feed = ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token));
+    feed = ok(await call(s, "student/comments", "GET", undefined, pa.token));
     assert.equal(feed.items[0].message.good, "节奏稳定");
     ok(await call(s, "feedback/" + p.id + "/" + s.students[0] + "/copied", "POST", {}, s.teacherAccount.token));
     ok(await confirmFeedback(s, q.id, "return"));
-    assert.equal(ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token)).items[0].message.good, "节奏稳定");
+    assert.equal(ok(await call(s, "student/comments", "GET", undefined, pa.token)).items[0].message.good, "节奏稳定");
 }));
 
 test("YX6F 自动确认同事务扣课，失败回滚不发布；别名冲突422、老师当日课", () => growthSchool(async s => {
@@ -56,12 +56,12 @@ test("YX6F 自动确认同事务扣课，失败回滚不发布；别名冲突422
 }));
 
 test("YX6F 缺省personal保持旧纯文字提交，旧确认可复制并进入时间线", () => growthSchool(async s => {
-    const pa = await parent(s), p = ok(await submitFeedback(s, {
+    const pa = await studentAccount(s), p = ok(await submitFeedback(s, {
         personal: false
     }));
     assert.equal(s.f.db.raw.prepare("SELECT COUNT(*) n FROM growth_feedback WHERE status='confirmed'").get().n, 0);
     ok(await confirmFeedback(s, p.id));
-    const feed = ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token));
+    const feed = ok(await call(s, "student/comments", "GET", undefined, pa.token));
     assert.equal(feed.items.length, 1);
     assert.ok(feed.items[0].message.learned.includes("节奏稳定"));
     ok(await call(s, "feedback/" + p.id + "/" + s.students[0] + "/copied", "POST", {}, s.teacherAccount.token));
@@ -171,9 +171,9 @@ test("YX6F 自动确认部分受阻，公共点评也不能变成受阻孩子的
         key: "feedback_auto_confirm",
         value: true
     }));
-    const pa = await parent(s), result = ok(await submitFeedback(s));
+    const pa = await studentAccount(s), result = ok(await submitFeedback(s));
     assert.equal(result.blocked.length, 1);
-    assert.equal(ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token)).items.length, 0);
+    assert.equal(ok(await call(s, "student/comments", "GET", undefined, pa.token)).items.length, 0);
     assert.equal(s.f.db.raw.prepare("SELECT COUNT(*) n FROM growth_feedback WHERE status='confirmed'").get().n, 1);
     ok(await call(s, "feedback/" + result.id + "/" + s.students[0] + "/copied", "POST", {}, s.teacherAccount.token), 409);
 }));
@@ -192,7 +192,7 @@ test("YX6F 相同操作重放不重复提交，修改内容复用操作号仍冲
 }));
 
 test("YX6F 普通点评也能替换旧结构化版本，窗口外员工更正不重新扣课", () => growthSchool(async s => {
-    const pa = await parent(s), first = ok(await submitFeedback(s));
+    const pa = await studentAccount(s), first = ok(await submitFeedback(s));
     ok(await confirmFeedback(s, first.id));
     const second = ok(await submitFeedback(s, {
         kind: "comments",
@@ -206,7 +206,7 @@ test("YX6F 普通点评也能替换旧结构化版本，窗口外员工更正不
         }
     }));
     ok(await confirmFeedback(s, second.id));
-    assert.equal(ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token)).items[0].message.learned, "纯文字新版");
+    assert.equal(ok(await call(s, "student/comments", "GET", undefined, pa.token)).items[0].message.learned, "纯文字新版");
     const count = s.f.db.raw.prepare("SELECT COUNT(*) n FROM package_transactions").get().n, v = ok(await call(s, "lessons/" + s.lid + "/review"));
     ok(await call(s, "lessons/" + s.lid + "/comments", "PUT", {
         operation_id: "op_" + crypto.randomUUID(),
@@ -225,7 +225,7 @@ test("YX6F 普通点评也能替换旧结构化版本，窗口外员工更正不
         } ]
     }));
     assert.equal(s.f.db.raw.prepare("SELECT COUNT(*) n FROM package_transactions").get().n, count);
-    assert.equal(ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token)).items[0].message.good, "员工确认的新版本");
+    assert.equal(ok(await call(s, "student/comments", "GET", undefined, pa.token)).items[0].message.good, "员工确认的新版本");
 }));
 
 test("YX6F 关闭反馈模块不破坏原纯文字出勤流程，结构化入口返回404", () => growthSchool(async s => {
@@ -273,6 +273,6 @@ test("YX6F 自动确认后点评可更新但出勤不能重提，不产生第二
     assert.equal(s.f.db.raw.prepare("SELECT status FROM lesson_submissions WHERE id=?").get(second.id).status, "confirmed");
     assert.equal(s.f.db.raw.prepare("SELECT COUNT(*) n FROM package_transactions").get().n, before);
     ok(await submitFeedback(s), 409);
-    const pa = await parent(s);
-    assert.equal(ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token)).items[0].message.good, "新确认点评");
+    const pa = await studentAccount(s);
+    assert.equal(ok(await call(s, "student/comments", "GET", undefined, pa.token)).items[0].message.good, "新确认点评");
 }));

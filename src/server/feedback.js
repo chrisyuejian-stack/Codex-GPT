@@ -13,10 +13,10 @@ import { beijingIso } from "./tool-validation.js";
 import { lessonWindow } from "./presentation.js";
 
 export const feedbackPath = (p) =>
-  /^\/api\/(?:feedback\/(?:today|[^/]+\/[^/]+\/copied)|students\/[^/]+\/repertoire(?:\/[^/]+)?|parent\/(?:children\/[^/]+\/feed|media\/[^/]+))$/.test(
+  /^\/api\/(?:feedback\/(?:today|[^/]+\/[^/]+\/copied)|students\/[^/]+\/repertoire(?:\/[^/]+)?|student\/(?:comments|media\/[^/]+))$/.test(
     p,
   );
-const personal = (u) => u.roles.some((x) => ["student", "parent"].includes(x));
+
 const teacher = (u) => u.roles.includes("teacher");
 const staff = (u) =>
   u.roles.some((x) => ["supervisor", "academic"].includes(x));
@@ -25,14 +25,12 @@ export async function feedbackApi(req, env, resolved, u, p, url) {
   if (!feedbackPath(path)) return undefined;
   if (!p.modules.feedback) fail(404, "不存在", "not_found");
   const r = repo(env, resolved.tenant.id);
-  const family =
-    /^\/api\/parent\/(?:children\/([^/]+)\/feed|media\/([^/]+))$/.exec(path);
+  const family = /^\/api\/student\/(comments|media\/([^/]+))$/.exec(path);
   if (family) {
-    if (req.method !== "GET" || !personal(u))
+    if (req.method !== "GET" || !u.roles.includes("student") || !u.student_id)
       fail(403, "没有权限", "forbidden");
-    const children = await r.feedbackChildIds(u);
-    if (family[1]) {
-      if (!children.includes(family[1])) fail(404, "不存在", "not_found");
+    const children = [u.student_id];
+    if (family[1] === "comments") {
       const offset = Number(url.searchParams.get("offset") || 0),
         limit = Number(url.searchParams.get("limit") || 50);
       if (
@@ -43,8 +41,8 @@ export async function feedbackApi(req, env, resolved, u, p, url) {
         limit > 200
       )
         invalid("分页不正确");
-      const student = await r.growthStudent(family[1]);
-      const data = await r.feedbackFeed(student.id, offset, limit),
+      const student = await r.growthStudent(u.student_id);
+      const data = await r.studentFeedback(student.id, offset, limit),
         base = resolved.root
           ? "/api"
           : resolved.base.replace(/\/$/, "") + "/api";
@@ -62,7 +60,7 @@ export async function feedbackApi(req, env, resolved, u, p, url) {
             image_ids: student.parent_consent_media ? d.image_ids || [] : [],
             image_urls: student.parent_consent_media
               ? (d.image_ids || []).map(
-                  (id) => base + "/parent/media/" + encodeURIComponent(id),
+                  (id) => base + "/student/media/" + encodeURIComponent(id),
                 )
               : [],
             doc_json: undefined,
@@ -71,7 +69,7 @@ export async function feedbackApi(req, env, resolved, u, p, url) {
         next_offset: offset + limit < data.total ? offset + limit : null,
       });
     }
-    const image = await r.feedbackParentMedia(family[2], children);
+    const image = await r.studentFeedbackMedia(family[2], children);
     if (!image) fail(404, "不存在", "not_found");
     const file = await env.CHANNEL_MEDIA.get(image.r2_key);
     if (!file) fail(404, "不存在", "not_found");
@@ -141,7 +139,6 @@ export async function feedbackApi(req, env, resolved, u, p, url) {
       (req.method === "GET" && u.roles.includes("consultant"))
     ))
       fail(403, "没有权限", "forbidden");
-    if (personal(u)) fail(403, "没有权限", "forbidden");
     const rows = await r.growthRepertoire(student.id),
       dto = (x) => ({
         id: x.id,

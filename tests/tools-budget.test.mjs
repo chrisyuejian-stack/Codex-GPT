@@ -3,11 +3,10 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { fixture } from "./support.mjs";
 import { setup, request } from "./fixtures-credit.mjs";
-import { schoolFixture } from "./fixtures-school.mjs";
-import { adminCall } from "./fixtures-admin.mjs";
+
 import { IMPORT_HEADERS } from "../src/server/imports.js";
 import { workbook } from "../src/server/xlsx.js";
-import { startBackup, continueBackup } from "../src/server/backup.js";
+
 import sourceBackup from "../src/server/backup.js";
 const backupWorker =
   process.env.TEST_BUNDLE === "1"
@@ -182,63 +181,6 @@ test("第六阶段查询预算：30人班级、30个班级模板整月、200行E
         rows: preview.rows.map((row) => ({ token: row.token, action: "new" })),
       }),
     );
-    await check("GET overview", adminCall(f, "overview"));
-    await check("GET backups", adminCall(f, "backups"));
-
-    await check("GET announcements", adminCall(f, "announcements"));
-    const msg = await check(
-      "POST announcements",
-      adminCall(f, "announcements", "POST", {
-        title: "系统消息",
-        content: "预算验收",
-        roles: ["supervisor"],
-        tenants: [s.t.id],
-        starts_at: Date.now() - 1000,
-      }),
-    );
-    await check("GET system-messages", request(s, "system-messages"));
-    await check(
-      "POST system-messages/ID/read",
-      request(s, "system-messages/" + msg.id + "/read", "POST", {}),
-    );
-    await check(
-      "GET tenants/ID/business",
-      adminCall(f, "tenants/" + s.t.id + "/business?path=/data/students"),
-    );
-    const lease = await check(
-      "POST tenants/ID/maintenance",
-      adminCall(f, "tenants/" + s.t.id + "/maintenance", "POST", {
-        reason: "查询预算代管测试",
-      }),
-    );
-    const student = (await request(s, "data/students/" + s.students[0])).body
-      .record;
-    await check(
-      "POST tenants/ID/operate",
-      adminCall(f, "tenants/" + s.t.id + "/operate", "POST", {
-        lease: lease.id,
-        path: "/data/students/" + student.id,
-        method: "PATCH",
-        data: { version: student.version, notes: "维护" },
-      }),
-    );
-    await check(
-      "DELETE tenants/ID/maintenance/ID",
-      adminCall(
-        f,
-        "tenants/" + s.t.id + "/maintenance/" + lease.id,
-        "DELETE",
-        {},
-      ),
-    );
-    await check(
-      "GET tenants/ID/export-schema",
-      adminCall(f, "tenants/" + s.t.id + "/export-schema"),
-    );
-    await check(
-      "GET tenants/ID/export（200行）",
-      adminCall(f, "tenants/" + s.t.id + "/export?table=students&offset=0"),
-    );
     // Production scheduled handler is bounded: capture once, then 12 encrypted pages per Cron invocation.
     let tick = 0;
     do {
@@ -275,78 +217,6 @@ test("第六阶段查询预算：30人班级、30个班级模板整月、200行E
       )
       .get();
     assert.ok(backup);
-    const job = await check(
-      "POST tenants/ID/jobs（恢复暂存）",
-      adminCall(f, "tenants/" + s.t.id + "/jobs", "POST", {
-        kind: "restore",
-        backup_id: backup.id,
-        reason: "查询预算恢复演练",
-      }),
-    );
-    await check(
-      "GET tenants/ID/jobs",
-      adminCall(f, "tenants/" + s.t.id + "/jobs"),
-    );
-    await check(
-      "GET tenants/ID/jobs/ID",
-      adminCall(f, "tenants/" + s.t.id + "/jobs/" + job.id),
-    );
-    for (const item of job.manifest.required)
-      await check(
-        "POST tenants/ID/jobs/ID/page",
-        adminCall(
-          f,
-          "tenants/" + s.t.id + "/jobs/" + job.id + "/page",
-          "POST",
-          item,
-        ),
-      );
-    await check(
-      "POST tenants/ID/jobs/ID/commit（完整恢复）",
-      adminCall(
-        f,
-        "tenants/" + s.t.id + "/jobs/" + job.id + "/commit",
-        "POST",
-        {},
-      ),
-    );
-    const empty = await schoolFixture(f, "empty-budget");
-    const old = await check(
-      "POST tenants/ID/jobs（旧JSON）",
-      adminCall(f, "tenants/" + empty.t.id + "/jobs", "POST", {
-        kind: "legacy",
-        counts: { students: 1 },
-        settings: {},
-        reason: "旧JSON预算验收",
-      }),
-    );
-    await check(
-      "POST tenants/ID/jobs/ID/page（旧JSON）",
-      adminCall(
-        f,
-        "tenants/" + empty.t.id + "/jobs/" + old.id + "/page",
-        "POST",
-        { table: "students", rows: [{ id: "old", name: "旧学员" }] },
-      ),
-    );
-    await check(
-      "POST tenants/ID/jobs/ID/preview",
-      adminCall(
-        f,
-        "tenants/" + empty.t.id + "/jobs/" + old.id + "/preview",
-        "POST",
-        {},
-      ),
-    );
-    await check(
-      "POST tenants/ID/jobs/ID/cancel",
-      adminCall(
-        f,
-        "tenants/" + empty.t.id + "/jobs/" + old.id + "/cancel",
-        "POST",
-        {},
-      ),
-    );
     const summary = Object.values(Object.groupBy(report, (x) => x.name)).map(
       (rows) => ({
         name: rows[0].name,

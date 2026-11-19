@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {fixture} from './support.mjs';
 import {setup} from './fixtures-credit.mjs';
-import {school,call,ok,accountToken} from './fixtures-plans.mjs';
+import { school, call, ok } from "./fixtures-plans.mjs";
 import {png} from './fixtures-platform.mjs';
 import {upload,storageLimit,gallery,ops,httpExamples} from './fixtures-v041.mjs';
 const encoded=png.toString('base64'),size=encoded.length;
@@ -47,11 +47,6 @@ test('V041 G4 缺失旧对象标NULL，网络错误保留待统计；回填不�
 test('V041 G4 回填每次最多20对象，未完成时禁止上传避免低估',()=>school(async s=>{
  for(let i=0;i<45;i++)await oldImage(s,'batch_'+String(i).padStart(2,'0'));
  const first=ok(await gallery(s));assert.equal(first.storage.pending,25);assert.equal(first.storage.complete,false);const r=ok(await upload(s,png),503);assert.equal(r.error,'storage_pending');assert.equal(r.details.storage.pending,5);assert.equal(s.f.env.CHANNEL_MEDIA.objects.size,45);const last=ok(await gallery(s));assert.equal(last.storage.pending,0);assert.equal(last.storage.used,45*size);ok(await upload(s,png),201);
-}));
-
-test('V041 G4 平台owner调整限额/版本冲突/回填，员工无权操作',()=>school(async s=>{
- let st=ok(await ops(s,'tenants/'+s.t.id+'/gallery-storage'));const prior=st.version;st=ok(await ops(s,'tenants/'+s.t.id+'/gallery-storage','PUT',{version:prior,limit:0}));assert.equal(st.limit,0);const e=ok(await ops(s,'tenants/'+s.t.id+'/gallery-storage','PUT',{version:prior,limit:size}),409);assert.equal(e.error,'version_conflict');assert.equal(e.details.latest.limit,0);ok(await ops(s,'tenants/'+s.t.id+'/gallery-storage','PUT',{version:st.version,limit:-1}),422);ok(await ops(s,'tenants/missing/gallery-storage'),404);ok(await call(s,'/api/ops/tenants/'+s.t.id+'/gallery-storage'),404);
- await oldImage(s);const rec=ok(await ops(s,'tenants/'+s.t.id+'/gallery-storage/recount','POST',{}));assert.equal(rec.used,size);assert.equal(rec.pending,0);assert.equal(rec.limit,0);assert.ok(s.f.db.raw.prepare("SELECT id FROM platform_audit WHERE action='gallery_storage_limit'").get());
 }));
 
 test('V041 G4 R2删除失败仍计费，重试删除成功才释放容量',()=>school(async s=>{

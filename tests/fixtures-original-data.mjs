@@ -1,16 +1,17 @@
+// Test-only translation for fixed business regression data; never bundled or exposed over HTTP.
 // Only the old education JSON is recognized. No old authentication, portal, application, AI, or bindings.
 import {
   backupTables,
   restoreTables,
   IMPORT_SHAPES,
   TABLE_LABELS,
-} from "./backup-model.js";
-import { randomId, now, fail, string, phone } from "./core.js";
-import { encrypt } from "./crypto.js";
-import { moneyIn, quantityIn } from "./numbers.js";
-import { day } from "./scheduling.js";
-import { calculatePayroll } from "./finance.js";
-import { effectivePolicies } from "./absence.js";
+} from "../src/server/backup-model.js";
+import { randomId, now, fail, string, phone } from "../src/server/core.js";
+import { encrypt } from "../src/server/crypto.js";
+import { moneyIn, quantityIn } from "../src/server/numbers.js";
+import { day } from "../src/server/scheduling.js";
+import { calculatePayroll } from "../src/server/finance.js";
+import { effectivePolicies } from "../src/server/absence.js";
 export const LEGACY_TABLES = {
   students: "students",
   teachers: "teachers",
@@ -529,3 +530,5 @@ export async function convertLegacy(env, tenantId, raw, settings, admin) {
     }
   return { rows, settings: businessSettings, warnings: [...new Set(warnings)] };
 }
+
+export async function seedOriginal(s,raw){const target=s.instance||s.f,converted=await convertLegacy(target.env,s.t.id,raw,raw.settings||{},s.user),db=target.db.raw;db.exec('BEGIN');try{db.exec('PRAGMA defer_foreign_keys=ON');db.prepare("INSERT INTO trusted_imports(tenant_id,id) VALUES(?,'fixture-seed')").run(s.t.id);for(const [table,rows]of Object.entries(converted.rows))for(const row of rows){const columns=backupTables[table].columns.filter(k=>row[k]!==undefined);db.prepare('INSERT INTO '+table+'('+columns.join(',')+') VALUES('+columns.map(()=>'?').join(',')+')').run(...columns.map(k=>row[k]));}db.prepare('INSERT INTO credit_income_entries SELECT e.* FROM credit_income_legacy_estimates e WHERE e.tenant_id=? AND NOT EXISTS(SELECT 1 FROM credit_income_entries x WHERE x.tenant_id=e.tenant_id AND x.id=e.id)').run(s.t.id);db.prepare("DELETE FROM trusted_imports WHERE tenant_id=? AND id='fixture-seed'").run(s.t.id);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}for(const [key,value]of Object.entries(converted.settings))await s.r.saveSetting(key,value,s.user);}

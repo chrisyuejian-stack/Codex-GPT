@@ -53,15 +53,15 @@ test("R1 批量权限：三项保存只撤销一次会话，另一机构不受�
     });
     assert.equal(response.status, 200, response.text);
     assert.deepEqual(response.body, { ok: true });
-    assert.equal(response.queries, 2);
+    assert.equal(response.queries, 3);
     assert.equal(batches.length, 1);
-    assert.equal(batches[0].length, 3);
+    assert.equal(batches.at(-1).length, 3);
     assert.equal(
-      batches[0].filter((sql) => sql.includes("DELETE FROM sessions")).length,
+      batches.at(-1).filter((sql) => sql.includes("DELETE FROM sessions")).length,
       1,
     );
     assert.equal(
-      batches[0].filter((sql) => sql.includes("INSERT INTO audit_log")).length,
+      batches.at(-1).filter((sql) => sql.includes("INSERT INTO audit_log")).length,
       1,
     );
     const actual = rights(f, a.t.id);
@@ -104,8 +104,8 @@ test("R1 批量权限：空数组、超限、非法项整批拒绝，合法重�
       const r = await request(s, "rights", "PUT", { changes: input });
       assert.equal(r.status, 400, r.text);
     }
-    assert.deepEqual(rights(f, s.t.id), []);
-    assert.deepEqual(audits(f, s.t.id), []);
+    assert.deepEqual(rights(s.instance, s.t.id), []);
+    assert.deepEqual(audits(s.instance, s.t.id), []);
     assert.equal((await request(s, "me")).status, 200);
     const limit = await request(s, "rights", "PUT", {
       changes: [
@@ -114,7 +114,7 @@ test("R1 批量权限：空数组、超限、非法项整批拒绝，合法重�
       ],
     });
     assert.equal(limit.status, 200, limit.text);
-    const stored = rights(f, s.t.id);
+    const stored = rights(s.instance, s.t.id);
     assert.equal(stored.length, 1);
     assert.equal(stored[0].allowed, 1);
     assert.equal(stored[0].version, 1);
@@ -130,15 +130,15 @@ test("R1 批量权限：旧格式兼容，教务和财务两种格式均拒绝",
       const s = { ...(await schoolFixture(f, "batch-" + role, role)), f };
       for (const input of [changes[0], { changes }])
         assert.equal((await request(s, "rights", "PUT", input)).status, 403);
-      assert.deepEqual(rights(f, s.t.id), []);
+      assert.deepEqual(rights(s.instance, s.t.id), []);
     }
     const s = { ...(await schoolFixture(f, "batch-legacy")), f };
     const r = await request(s, "rights", "PUT", changes[0]);
     assert.equal(r.status, 200, r.text);
     assert.deepEqual(r.body, { ok: true });
-    assert.equal(rights(f, s.t.id)[0].allowed, 0);
+    assert.equal(rights(s.instance, s.t.id)[0].allowed, 0);
     assert.deepEqual(
-      audits(f, s.t.id).map((row) => row.summary),
+      audits(s.instance, s.t.id).map((row) => row.summary),
       ["修改角色权限，机构会话已失效"],
     );
     assert.equal((await request(s, "me")).status, 401);

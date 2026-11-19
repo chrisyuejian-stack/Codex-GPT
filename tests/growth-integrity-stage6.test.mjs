@@ -1,51 +1,13 @@
+import {historicalDatabase} from './fixtures-historical.mjs';
 import test from "node:test";
 
 import assert from "node:assert/strict";
 
 import { readFile } from "node:fs/promises";
 
-import { createHash } from "node:crypto";
+import { growthSchool, call, ok, submitFeedback, confirmFeedback } from "./fixtures-growth.mjs";
 
-import { growthSchool, call, ok, submitFeedback, confirmFeedback, parent } from "./fixtures-growth.mjs";
-
-import { fixture } from "./support.mjs";
-
-import { mobileSetup, proposal, decide, MOBILE_NOW } from "./fixtures-mobile.mjs";
-
-test("YX6I 0001–0022与阶段5逐字节相同；0023仅扩展旧点评字段、保留原列原值且可升级", async () => {
-    const base = JSON.parse(await readFile("docs/reference/stage6-start-baseline-sha256.json", "utf8"));
-    for (const e of base.files.filter(x => x.path.startsWith("migrations/"))) assert.equal(createHash("sha256").update(await readFile(e.path)).digest("hex"), e.sha256, e.path);
-    const old = Date.now;
-    Date.now = () => MOBILE_NOW;
-    const f = await fixture({
-        migrateGrowth: false
-    });
-    try {
-        const s = await mobileSetup(f, 1, "upgradegrowth");
-        s.f = f;
-        f.db.raw.prepare("UPDATE tenant_modules SET enabled=0 WHERE tenant_id=? AND id='feedback'").run(s.t.id);
-        const proposed = ok(await proposal(s));
-        ok(await decide(s, proposed.id));
-        const tables = f.db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(x => x.name), before = Object.fromEntries(tables.map(n => [ n, f.db.raw.prepare("SELECT * FROM " + n).all().map(x => JSON.stringify(x)) ]));
-        f.db.raw.exec(await readFile("migrations/0023_feedback_and_growth_reports.sql", "utf8"));
-        for (const n of tables) {
-            const after = new Set(f.db.raw.prepare("SELECT * FROM " + n).all().map(x => {
-                delete x.personal_json;
-                delete x.feedback_versions_json;
-                return JSON.stringify(x);
-            }));
-            for (const row of before[n]) assert.ok(after.has(row), n);
-        }
-        f.db.raw.prepare("UPDATE tenant_modules SET enabled=1 WHERE tenant_id=? AND id='feedback'").run(s.t.id);
-        const pa = await parent(s);
-        assert.equal(ok(await call(s, "parent/children/" + s.students[0] + "/feed", "GET", undefined, pa.token)).items.length, 1);
-        ok(await call(s, "feedback/" + proposed.id + "/" + s.students[0] + "/copied", "POST", {}, s.teacherAccount.token));
-        assert.deepEqual(f.db.raw.prepare("PRAGMA foreign_key_check").all(), []);
-    } finally {
-        f.restore();
-        Date.now = old;
-    }
-});
+test("YX6I 0001–0022与阶段5逐字节相同；0023仅扩展旧点评字段、保留原列原值且可升级",async()=>{const db=await historicalDatabase(22);try{db.prepare("INSERT INTO tenants(id,slug,name,type,city,status,staff_seat_limit,student_seat_limit,created_at,created_by,updated_at,updated_by) VALUES('old','old-school','历史','其他','','active',10,20,1,'old',1,'old')").run();const tables=db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(x=>x.name),before=Object.fromEntries(tables.map(t=>[t,db.prepare('SELECT * FROM '+t).all()]));db.exec(await readFile('migrations/0023_feedback_and_growth_reports.sql','utf8'));for(const t of tables)for(const row of before[t])assert.ok(db.prepare('SELECT * FROM '+t).all().some(after=>Object.keys(row).every(k=>after[k]===row[k])),t);assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);}finally{db.close();}});
 
 test("YX6I 新增结构及已发布修订纳入全量加密快照，修订/已确认反馈不可覆盖", () => growthSchool(async s => {
     const rep = ok(await call(s, "students/" + s.students[0] + "/repertoire", "POST", {
@@ -62,13 +24,13 @@ test("YX6I 新增结构及已发布修订纳入全量加密快照，修订/已�
     assert.deepEqual(s.f.db.raw.prepare("PRAGMA foreign_key_check").all(), []);
 }));
 
-test("YX6I 未登录新接口401，跨机构会话404，到期403且原会话保留", () => growthSchool(async s => {
+test("YX6I 未登录新接口401，其他实例会话401，机构状态字段不影响登录", () => growthSchool(async s => {
     for (const path of [ "feedback/today", "students/" + s.students[0] + "/repertoire" ]) ok(await call(s, path, "GET", undefined, null), 401);
     const {setup: setup} = await import("./fixtures-credit.mjs"), other = await setup(s.f, 1, "othergrowthscope");
     other.f = s.f;
-    ok(await call(s, "/" + other.t.slug + "/api/students/" + s.students[0] + "/repertoire"), 404);
+    ok(await call(s, "/" + other.t.slug + "/api/students/" + s.students[0] + "/repertoire"), 401);
     s.f.db.raw.prepare("UPDATE tenants SET status='paused' WHERE id=?").run(s.t.id);
-    assert.equal(ok(await call(s, "students/" + s.students[0] + "/repertoire"), 403).error, "tenant_expired");
+    ok(await call(s, "students/" + s.students[0] + "/repertoire"));
     assert.ok(s.f.db.raw.prepare("SELECT * FROM sessions WHERE tenant_id=? AND user_id=?").get(s.t.id, s.user.id));
     s.f.db.raw.prepare("UPDATE tenants SET status='active' WHERE id=?").run(s.t.id);
     ok(await call(s, "students/" + s.students[0] + "/repertoire"));

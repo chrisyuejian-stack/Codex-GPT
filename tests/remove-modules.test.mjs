@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { fixture } from "./support.mjs";
 import { setup, request, lesson } from "./fixtures-credit.mjs";
 import { backupTables, restoreTables } from "../src/server/backup-model.js";
-import { PURGE_TABLES } from "../src/server/purge-schema.js";
+
 import { modules, can } from "../src/server/permissions.js";
 import {
   aiContext,
@@ -52,7 +52,8 @@ const dropped = [
 ];
 
 test("0029 在外键开启且存在方案/推广子记录时删除模块，保留线索、课次、AI 与审计", async () => {
-  const f = await fixture({ migrateRemoval: false });
+  const f = await fixture({ migrateRemoval: false, migrateSingleTenant: false });
+  f.db.raw.exec("CREATE TABLE app_instance(id TEXT PRIMARY KEY,tenant_id TEXT,initialized_at INTEGER);CREATE TABLE app_state(id TEXT PRIMARY KEY,value TEXT);ALTER TABLE ai_settings ADD COLUMN configured INTEGER NOT NULL DEFAULT 0;");
   try {
     const s = await setup(f, 1, "remove-migration"),
       db = f.db.raw,
@@ -350,7 +351,7 @@ test("备份和清理不再枚举已删表，完整快照仍覆盖 AI 与教学�
     for (const name of dropped) {
       assert.ok(!backupTables[name], name);
       assert.ok(!restoreTables.includes(name), name);
-      assert.ok(!PURGE_TABLES.includes(name), name);
+
     }
     for (const name of [
       "ai_settings",

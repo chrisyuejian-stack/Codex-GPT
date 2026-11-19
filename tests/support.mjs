@@ -1,17 +1,13 @@
-import { tenantAssets } from "../scripts/frontend-bundle.mjs";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { emulateD1, validateD1 } from "./d1-emulator.mjs";
-import { LocalR2 } from "./r2.mjs";
-import { AsyncLocalStorage } from "node:async_hooks";
-import { DatabaseSync } from "node:sqlite";
-import { readFile } from "node:fs/promises";
-import sourceWorker from "../src/server/worker.js";
-const worker =
-  process.env.TEST_BUNDLE === "1"
-    ? (await import("../dist/_worker.js")).default
-    : sourceWorker;
-import { newPassword, encrypt, totp, base32 } from "../src/server/crypto.js";
-import { b64, bytes, sha } from "../src/server/core.js";
+import { tenantAssets } from '../scripts/frontend-bundle.mjs';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {emulateD1,validateD1} from './d1-emulator.mjs';
+import {LocalR2} from './r2.mjs';
+import {AsyncLocalStorage} from 'node:async_hooks';
+import {DatabaseSync} from 'node:sqlite';
+import {readFile} from 'node:fs/promises';
+import sourceWorker from '../src/server/worker.js';
+import {b64,bytes} from '../src/server/core.js';
+const worker=process.env.TEST_BUNDLE==='1'?(await import('../dist/_worker.js')).default:sourceWorker;
 export class LocalD1 {
   constructor() {
     this.raw = new DatabaseSync(":memory:");
@@ -101,7 +97,7 @@ export class LocalD1 {
     }
   }
 }
-export async function fixture({ migrateIncome = true, migrateSettings = true, migratePlans = true, migrateAi = true, migrateGrowth = true, migratePlatform = true, migrateArticle = true, migrateProspects = true, migrateStorage = true, migrateRemoval = true } = {}) {
+export async function fixture({migrateIncome=true,migrateSettings=true,migratePlans=true,migrateAi=true,migrateGrowth=true,migratePlatform=true,migrateArticle=true,migrateProspects=true,migrateStorage=true,migrateRemoval=true,migrateSingleTenant=true,legacyUrls=true}={}){
   const db = new LocalD1();
   db.raw.exec(
     await readFile(
@@ -191,174 +187,18 @@ export async function fixture({ migrateIncome = true, migrateSettings = true, mi
   if(migrateSettings && migrateStorage) db.raw.exec(await readFile(new URL('../migrations/0027_gallery_storage.sql',import.meta.url),'utf8'));
   if(migrateSettings && migratePlans && migrateStorage) db.raw.exec(await readFile(new URL('../migrations/0028_plan_v2.sql',import.meta.url),'utf8'));
   if (migrateRemoval) db.raw.exec(await readFile(new URL("../migrations/0029_remove_modules.sql", import.meta.url), "utf8"));
-  const env = {
-    CHANNEL_DB: db,
-    CHANNEL_BACKUPS: new LocalR2(),
-    CHANNEL_MEDIA: new LocalR2(),
-    BACKUP_KEY: b64(bytes(32)),
-    TENANT_HOST: "school.test",
-    CONSOLE_HOST: "console.school.test",
-    FIELD_KEY: b64(bytes(32)),
-    HMAC_KEY: b64(bytes(32)),
-    PLATFORM_PHONE_HMAC_KEY: b64(bytes(32)),
-    PW_PEPPER: b64(bytes(32)),
-    PLATFORM_SETUP_KEY: b64(bytes(32)),
-    TURNSTILE_SECRET: "test-only-secret",
-    TURNSTILE_SITE_KEY: "test-only-key",
-    ACCESS_ISSUER:
-      "https://test-" +
-      crypto.randomUUID().slice(0, 8) +
-      ".cloudflareaccess.com",
-    ACCESS_AUD: "fixture-audience",
-    ACCESS_EMAILS: "fixture@example.test",
-  };
-  env.ASSETS = {
-    fetch: async (req) => {
-      const pathname = new URL(req.url).pathname;
-      const map = {
-        "/tenant.html": "src/tenant/index.html",
-        "/share/index.html": "src/share/index.html",
-        "/console.html": "src/console/index.html",
-        "/assets/tenant.js": "src/tenant/app.js",
-        "/assets/tenant.css": "src/tenant/app.css",
-        "/console-assets/pinyin-pro.js": "src/console/vendor/pinyin-pro.js",
-        "/console-assets/console.js": "src/console/app.js",
-        "/console-assets/console.css": "src/console/app.css",
-      };
-      if (!map[pathname]) return new Response("not found", { status: 404 });
-      if (
-        process.env.TEST_BUNDLE !== "1" &&
-        ["/assets/tenant.js", "/assets/tenant.css"].includes(pathname)
-      ) {
-        const assets = await tenantAssets();
-        return new Response(pathname.endsWith(".js") ? assets.js : assets.css, {
-          headers: {
-            "Content-Type": pathname.endsWith(".js")
-              ? "text/javascript"
-              : "text/css",
-          },
-        });
-      }
-      return new Response(
-        await readFile(
-          process.env.TEST_BUNDLE === "1" ? "dist" + pathname : map[pathname],
-        ),
-        {
-          headers: {
-            "Content-Type": pathname.endsWith(".js")
-              ? "text/javascript"
-              : pathname.endsWith(".css")
-                ? "text/css"
-                : "text/html",
-          },
-        },
-      );
-    },
-  };
-  const keys = await crypto.subtle.generateKey(
-      {
-        name: "RSASSA-PKCS1-v1_5",
-        modulusLength: 2048,
-        publicExponent: new Uint8Array([1, 0, 1]),
-        hash: "SHA-256",
-      },
-      true,
-      ["sign", "verify"],
-    ),
-    jwk = await crypto.subtle.exportKey("jwk", keys.publicKey);
-  jwk.kid = "fixture";
-  const url64 = (x) => Buffer.from(JSON.stringify(x)).toString("base64url"),
-    header = url64({ alg: "RS256", kid: "fixture" }),
-    payload = url64({
-      iss: env.ACCESS_ISSUER,
-      aud: [env.ACCESS_AUD],
-      email: env.ACCESS_EMAILS,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    }),
-    input = header + "." + payload;
-  const signature = Buffer.from(
-    await crypto.subtle.sign(
-      "RSASSA-PKCS1-v1_5",
-      keys.privateKey,
-      new TextEncoder().encode(input),
-    ),
-  ).toString("base64url");
-  const original = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    const url = String(input instanceof Request ? input.url : input);
-    if (url === env.ACCESS_ISSUER + "/cdn-cgi/access/certs")
-      return Response.json({ keys: [jwk] });
-    if (url === "https://challenges.cloudflare.com/turnstile/v0/siteverify") {
-      const params = init.body;
-      return Response.json({
-        success: params.get("response") === "fixture-valid",
-        hostname: "school.test",
-        action: "login",
-      });
-    }
-    return original(input, init);
-  };
-  // 仅测试夹具直接建平台会话；生产包中无此入口。
-  const id = "adm_fixture",
-    secret = base32(bytes(20)),
-    password = await newPassword(env, "FixtureSecure8Z");
-  db.raw
-    .prepare(
-      "INSERT INTO platform_admins(id,username,salt,digest,totp_enc,created_at) VALUES(?,?,?,?,?,?)",
-    )
-    .run(
-      id,
-      "fixture",
-      password.salt,
-      password.digest,
-      await encrypt(env, secret, "platform:totp"),
-      Date.now(),
-    );
-  const token = b64(bytes(32));
-  db.raw
-    .prepare(
-      "INSERT INTO platform_sessions(token_hash,admin_id,expires_at,last_seen_at,ip,ua) VALUES(?,?,?,?,?,?)",
-    )
-    .run(
-      await sha(token),
-      id,
-      Date.now() + 3600000,
-      Date.now(),
-      "test",
-      "fixture",
-    );
-  const access = header + "." + payload + "." + signature;
-  const request = async (url, init = {}) => {
-    const response = await db.measure(
-      () => {
-        const req = new Request(url, init);
-        if (init.cf) Object.defineProperty(req, "cf", { value: init.cf });
-        return worker.fetch(req, env);
-      },
-      { url: String(url), method: init.method || "GET" },
-    );
-    return response;
-  };
-  return {
-    env,
-    db,
-    request,
-    access,
-    adminCookie: "__Host-channel_console=" + token,
-    restore() {
-      if (process.env.QUERY_REPORT_DIR) {
-        mkdirSync(process.env.QUERY_REPORT_DIR, { recursive: true });
-        writeFileSync(
-          process.env.QUERY_REPORT_DIR + "/" + crypto.randomUUID() + ".json",
-          JSON.stringify(db.queryReports),
-        );
-      }
-      globalThis.fetch = original;
-      db.limits.close();
-      db.raw.close();
-      if (db.queryReports.some((x) => x.queries > db.queryLimit))
-        throw Error("HTTP 请求超过 D1 查询预算");
-    },
-  };
+  if(migrateSingleTenant)db.raw.exec(await readFile('migrations/0030_single_tenant.sql','utf8'));
+ const env={CHANNEL_DB:db,CHANNEL_BACKUPS:new LocalR2(),CHANNEL_MEDIA:new LocalR2(),APP_HOST:'school.test',FIELD_KEY:b64(bytes(32)),BACKUP_KEY:b64(bytes(32)),HMAC_KEY:b64(bytes(32)),PW_PEPPER:b64(bytes(32)),SETUP_KEY:b64(bytes(32))};
+ env.ASSETS={fetch:async(req)=>{const path=new URL(req.url).pathname,map={'/tenant.html':'src/tenant/index.html','/assets/tenant.js':'src/tenant/app.js','/assets/tenant.css':'src/tenant/app.css'};if(!map[path])return new Response('not found',{status:404});
+ if(process.env.TEST_BUNDLE!=='1'&&['/assets/tenant.js','/assets/tenant.css'].includes(path)){const a=await tenantAssets();return new Response(path.endsWith('.js')?a.js:a.css,{headers:{'Content-Type':path.endsWith('.js')?'text/javascript':'text/css'}});}
+ return new Response(await readFile(process.env.TEST_BUNDLE==='1'?'dist'+path:map[path]),{headers:{'Content-Type':path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'text/html'}});}};
+ const originalFetch=globalThis.fetch,children=[],instances=new Map();
+ const directRequest=async(input,options={})=>db.measure(()=>{const req=new Request(input,options);if(options.cf)Object.defineProperty(req,'cf',{value:options.cf});return worker.fetch(req,env);},{url:String(input),method:options.method||'GET'});
+ const f={env,db,instances,access:'',adminCookie:'',fork:async()=>{const child=await fixture({legacyUrls});children.push(child);return child;},request:async(input,options={})=>{
+  if(!legacyUrls)return directRequest(input,options);
+  const url=new URL(input),segment=url.pathname.split('/')[1],target=instances.get(segment);
+  const headers=new Headers(options.headers);if(headers.has('Cookie'))headers.set('Cookie',headers.get('Cookie').replace(/(?:channel_session|__Host-yx_session)=/g,'__Host-fengqin_session='));
+  if(target){url.pathname='/'+url.pathname.split('/').slice(2).join('/');return target.directRequest(url,{...options,headers});}
+  return directRequest(url,{...options,headers});
+ },directRequest,restore(){for(const child of children)child.restore();if(process.env.QUERY_REPORT_DIR){mkdirSync(process.env.QUERY_REPORT_DIR,{recursive:true});writeFileSync(process.env.QUERY_REPORT_DIR+'/'+crypto.randomUUID()+'.json',JSON.stringify(db.queryReports));}globalThis.fetch=originalFetch;db.limits.close();db.raw.close();if(db.queryReports.some(x=>x.queries>db.queryLimit))throw Error('HTTP 请求超过 D1 查询预算');}};return f;
 }

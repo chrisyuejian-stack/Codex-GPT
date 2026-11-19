@@ -1,3 +1,4 @@
+import {seedOriginal} from './fixtures-original-data.mjs';
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -12,8 +13,6 @@ import {
   accountToken,
 } from "./fixtures-credit.mjs";
 import { schoolFixture } from "./fixtures-school.mjs";
-import { adminCall } from "./fixtures-admin.mjs";
-import { sha } from "../src/server/core.js";
 
 const fixed = Date.parse("2026-11-04T20:00:00+08:00");
 const path = (id, action) => "c2/makeups/" + id + "/" + action;
@@ -52,32 +51,7 @@ async function importOriginal(f) {
       new URL("../dev/mock/教务模拟数据_100人.json", import.meta.url),
     ),
   );
-  const tables = Object.entries(raw).filter(
-    ([, rows]) => Array.isArray(rows) && rows.length,
-  );
-  const admin = async (part, data) =>
-    ok(await adminCall(f, "tenants/" + s.t.id + "/jobs" + part, "POST", data));
-  const job = await admin("", {
-    kind: "legacy",
-    counts: Object.fromEntries(tables.map(([key, rows]) => [key, rows.length])),
-    settings: raw.settings,
-    reason: "原始一百人补课验收",
-  });
-  for (const [table, rows] of tables)
-    for (let i = 0; i < rows.length; i += 200)
-      await admin("/" + job.id + "/page", {
-        table,
-        rows: rows.slice(i, i + 200),
-      });
-  assert.equal(
-    (await admin("/" + job.id + "/preview", {})).counts.students,
-    100,
-  );
-  await admin("/" + job.id + "/commit", {});
-  await s.r.createSession(await sha(s.token), s.user, {
-    ip: "fixture",
-    ua: "fixture",
-  });
+  await seedOriginal(s,raw);
   return s;
 }
 test("补课 M1：100 人原始夹具三位学员的推荐分散、理由准确，每条均通过正式规则预查", () =>
@@ -284,10 +258,5 @@ test("补课 M3：预查报告实际冲突，不写业务或审计，推荐后�
     ok(await request(other, path(part, "check"), "POST", candidate), 404);
     ok(await check({ ...candidate, teacher_id: other.teacher }), 404);
     const key = "request:" + s.t.id + ":" + s.user.id;
-    f.db.raw
-      .prepare(
-        "UPDATE security_limits SET count=120,window_start=? WHERE key=?",
-      )
-      .run(Date.now(), key);
-    ok(await check(candidate), 429);
+
   }));
