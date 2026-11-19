@@ -1,3 +1,4 @@
+import {seedCatalog} from './fixtures-catalog.mjs';
 import assert from "node:assert/strict";
 
 import { fixture } from "./support.mjs";
@@ -70,9 +71,7 @@ export async function school(fn) {
 }
 
 export async function seed(s, subject = "music_interest") {
-    ok(await call(s, "settings/subjects", "POST", {
-        key: subject
-    }));
+    await seedCatalog(s, subject);
     const types = ok(await call(s, "settings/stage-types")).items;
     return types.filter(x => x.subject === subject);
 }
@@ -102,27 +101,6 @@ export async function course(s, name = "钢琴一对一", amount = 200, mode = "
     })) : ok(await call(s, "settings/courses", "POST", data), 201);
 }
 
-export async function parent(s, indices = [ 0 ]) {
-    let user;
-    for (const index of indices) {
-        const r = ok(await call(s, "students/" + s.students[index] + "/guardians", "POST", {
-            name: "家长",
-            phone: "13812344321",
-            relation: "mother"
-        }), 201);
-        user = r.parent || r.user || r;
-    }
-    const row = s.f.db.raw.prepare("SELECT * FROM users WHERE tenant_id=? AND roles='[\"parent\"]'").get(s.t.id);
-    s.f.db.raw.prepare("UPDATE users SET must_change=0 WHERE tenant_id=? AND id=?").run(s.t.id, row.id);
-    const token = b64(bytes(32));
-    await s.r.createSession(await sha(token), await s.r.user(row.id), {
-        ip: "test",
-        ua: "plans"
-    });
-    return {
-        id: row.id,
-        token: token
-    };
-}
+export async function studentAccount(s, index=0) {if(index===0&&s.student)return s.student;return accountToken(s,['student'],s.students[index]);}
 
 export { accountToken };

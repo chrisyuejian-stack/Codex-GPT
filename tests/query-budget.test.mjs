@@ -2,39 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { fixture } from "./support.mjs";
-import { repo } from "../src/server/repo.js";
-import { modules } from "../src/server/permissions.js";
-import { newPassword, encrypt, phoneIndex } from "../src/server/crypto.js";
-import { randomId, bytes, b64, sha } from "../src/server/core.js";
+
+import { randomId } from "../src/server/core.js";
 test("D1 查询预算：30人班课、30个模板整月生成及所有已测接口每请求不超过40次", async () => {
   const f = await fixture();
   try {
-    const tenant = {
-      id: randomId("ten"),
-      slug: "budget-school",
-      name: "预算验收",
-      type: "其他",
-      city: "",
-      expires_at: null,
-      staff_seat_limit: 100,
-      student_seat_limit: 1000,
-      contact_enc: null,
-    };
-    await repo(f.env, null).createTenant(tenant, "fixture", modules);
-    const r = repo(f.env, tenant.id),
-      user = {
-        id: randomId("usr"),
-        name: "主管",
-        roles: '["supervisor"]',
-        phone_hmac: await phoneIndex(f.env, tenant.id, "13912345678"),
-        phone_enc: await encrypt(f.env, "13912345678", tenant.id + ":phone"),
-        phone_last4: "5678",
-        ...(await newPassword(f.env, "BudgetPassword8Za")),
-      };
-    await r.createUser(user, { id: "fixture", name: "主管" });
-    f.db.raw.prepare("UPDATE users SET must_change=0").run();
-    const token = b64(bytes(32));
-    await r.createSession(await sha(token), user, { ip: "x", ua: "budget" });
+    const {schoolFixture}=await import('./fixtures-school.mjs');
+    const {t:tenant,r,user,token}=await schoolFixture(f,'budget');
     const category = randomId("cat"),
       type = randomId("type"),
       stamp = Date.now(),
@@ -132,7 +106,7 @@ test("D1 查询预算：30人班课、30个模板整月生成及所有已测接�
     const results = [];
     async function call(label, path, method = "GET", data) {
       const response = await f.request(
-          "https://school.test/budget-school/api/" + path,
+          "https://school.test/"+tenant.slug+"/api/" + path,
           {
             method,
             headers: {
@@ -310,9 +284,8 @@ test("D1 查询预算：30人班课、30个模板整月生成及所有已测接�
       teacher_id: m.teacher,
     });
     await call("登录", "login", "POST", {
-      phone: "13912345678",
-      password: "BudgetPassword8Za",
-      turnstile: "fixture-valid",
+      phone: "13911112222",
+      password: "PhaseTwoSecure9",
     });
     await call("我的设备", "sessions");
     const report = {

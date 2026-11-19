@@ -93,57 +93,13 @@ export async function body(req) {
     fail(400, "请求格式不正确");
   }
 }
-export function accessMode(env) {
-  const value = env.ACCESS_MODE;
-  if (value === undefined || value === "" || value === "on") return "on";
-  if (value === "off") return "off";
-  fail(503, "Access模式配置不正确", "CONFIG_INVALID");
-}
-export function turnstileMode(env) {
-  const value = env.TURNSTILE_MODE;
-  if (value === undefined || value === "" || value === "on") return "on";
-  if (value === "off") return "off";
-  fail(503, "人机验证模式配置不正确", "CONFIG_INVALID");
-}
+
 export function config(env) {
-  const mode = accessMode(env),
-    captchaMode = turnstileMode(env);
-  for (const k of [
-    "FIELD_KEY",
-    "BACKUP_KEY",
-    "HMAC_KEY",
-    "PW_PEPPER",
-    "PLATFORM_SETUP_KEY",
-    ...(captchaMode === "on" ? ["TURNSTILE_SECRET"] : []),
-  ])
-    if (typeof env[k] !== "string" || !env[k])
-      fail(503, "系统配置不完整，请联系维护人员", "CONFIG_MISSING");
-  let key, backupKey;
-  try {
-    key = unb64(env.FIELD_KEY);
-    backupKey = unb64(env.BACKUP_KEY);
-  } catch {
-    fail(503, "系统配置不正确", "CONFIG_INVALID");
-  }
-  if (
-    key.length !== 32 ||
-    backupKey.length !== 32 ||
-    env.HMAC_KEY.length < 32 ||
-    env.PW_PEPPER.length < 32 ||
-    env.PLATFORM_SETUP_KEY.length < 32
-  )
-    fail(503, "系统密钥配置不正确", "CONFIG_INVALID");
-  if (
-    !env.CHANNEL_DB ||
-    !env.CHANNEL_BACKUPS ||
-    !env.TENANT_HOST ||
-    !env.CONSOLE_HOST ||
-    env.CONSOLE_HOST === env.TENANT_HOST ||
-    (captchaMode === "on" && !env.TURNSTILE_SITE_KEY) ||
-    (mode === "on" &&
-      (!env.ACCESS_ISSUER || !env.ACCESS_AUD || !env.ACCESS_EMAILS))
-  )
-    fail(503, "系统配置不完整，请联系维护人员", "CONFIG_MISSING");
+ for (const k of ['FIELD_KEY','BACKUP_KEY','HMAC_KEY','PW_PEPPER']) if (typeof env[k] !== 'string' || !env[k]) fail(503,'系统配置不完整','CONFIG_MISSING');
+ let field,backup;try{field=unb64(env.FIELD_KEY);backup=unb64(env.BACKUP_KEY);}catch{fail(503,'系统密钥配置不正确','CONFIG_INVALID');}
+ if(field.length!==32||backup.length!==32||env.HMAC_KEY.length<32||env.PW_PEPPER.length<32)fail(503,'系统密钥配置不正确','CONFIG_INVALID');
+ if(!env.CHANNEL_DB||!env.CHANNEL_BACKUPS)fail(503,'系统资源配置不完整','CONFIG_MISSING');
+ if(env.TENANT_ID!==undefined && (typeof env.TENANT_ID!=='string'||! /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(env.TENANT_ID)))fail(503,'TENANT_ID 格式不正确','CONFIG_INVALID');
 }
 export function secureResponse(res, login = false, cacheControl = "no-store") {
   const out = new Response(res.body, res);
@@ -155,7 +111,7 @@ export function secureResponse(res, login = false, cacheControl = "no-store") {
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
     "Cross-Origin-Resource-Policy": "same-origin",
-    "Content-Security-Policy": `default-src 'none'; script-src 'self'${login ? " https://challenges.cloudflare.com" : ""}; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src ${login ? "https://challenges.cloudflare.com" : "'none'"}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'`,
+    "Content-Security-Policy": `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'`,
   }))
     out.headers.set(k, v);
   return out;

@@ -2,9 +2,9 @@ import { fixture } from "./support.mjs";
 
 import { mobileSetup, MOBILE_NOW } from "./fixtures-mobile.mjs";
 
-import { call, ok, seed, accountToken, parent } from "./fixtures-plans.mjs";
+import { call, ok, seed, accountToken, studentAccount } from "./fixtures-plans.mjs";
 
-export { call, ok, seed, accountToken, parent };
+export { call, ok, seed, accountToken, studentAccount };
 
 export async function growthSchool(fn, count = 2) {
     const original = Date.now;

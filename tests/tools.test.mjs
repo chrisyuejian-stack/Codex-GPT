@@ -2,8 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fixture } from "./support.mjs";
 import { setup, request, accountToken, pack } from "./fixtures-credit.mjs";
-import { randomId } from "../src/server/core.js";
-import { mkdir, writeFile } from "node:fs/promises";
+
 const ok = async (r, code = 200) => {
   assert.equal(r.status, code, r.text);
   assert.ok(r.queries <= 40);
@@ -189,21 +188,10 @@ test("第六阶段：顾问联系说明加密落库，公共品牌不泄露，�
   try {
     const s = { ...(await setup(f)), f },
       contact = "课程咨询13900000009";
-    const detail = await adminCall(f, "tenants/" + s.t.id);
-    const brand = detail.body.brand;
-    await ok(
-      await adminCall(f, "tenants/" + s.t.id + "/brand", "PUT", {
-        ...brand,
-        contact_text: contact,
-      }),
-    );
-    const db = f.db.raw
-      .prepare("SELECT contact_text FROM tenant_branding WHERE tenant_id=?")
-      .get(s.t.id);
-    assert.ok(db.contact_text.startsWith("v1."));
-    assert.ok(!db.contact_text.includes("13900000009"));
-    const read = await adminCall(f, "tenants/" + s.t.id);
-    assert.equal(read.body.brand.contact_text, contact);
+    const {encrypt}=await import('../src/server/crypto.js');
+    f.db.raw.prepare('UPDATE tenant_branding SET contact_text=? WHERE tenant_id=?').run(await encrypt(f.env,contact,s.t.id+':contact'),s.t.id);
+    const db=f.db.raw.prepare('SELECT contact_text FROM tenant_branding WHERE tenant_id=?').get(s.t.id);
+    assert.ok(db.contact_text.startsWith('v1.'));assert.ok(!db.contact_text.includes('13900000009'));
     const pub = await request(s, "public/brand");
     assert.ok(!pub.text.includes("13900000009"));
     assert.ok(!("contact_text" in pub.body));

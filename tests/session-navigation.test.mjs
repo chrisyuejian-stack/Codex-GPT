@@ -12,8 +12,8 @@ test('会话失效的已知机构网页回登录；API仍401，未知路径和�
     const check=async(path,init={})=>{
       const r=await f.request(url(path),init);
       assert.equal(r.status,302);
-      assert.equal(r.headers.get('location'),`/${s.t.slug}/login`);
-      assert.match(r.headers.get('set-cookie'),/channel_session=;.*HttpOnly; Secure; SameSite=Strict; Max-Age=0/);
+      assert.equal(r.headers.get('location'),'/login');
+      assert.match(r.headers.get('set-cookie'),/__Host-fengqin_session=;.*HttpOnly; Secure; SameSite=Strict; Max-Age=0/);
       assert.match(r.headers.get('cache-control'),/no-store/);
       return r;
     };

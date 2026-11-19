@@ -1,55 +1,26 @@
 {
-  "status": "stage7_local_validated_not_deployed",
-  "project": "yijiexingtu-crm",
-  "pages": "yijiexingtu-crm-prod",
-  "backup_worker": "yijiexingtu-backup-prod",
+  "status": "single_tenant_local_not_deployed",
+  "project": "fengqin-crm",
+  "pages": "fengqin-crm-prod",
+  "custom_domain": "edu.fantasmearts.com",
+  "backup_worker": "fengqin-backup-prod",
   "bindings": {
-    "CHANNEL_DB": {
-      "type": "d1",
-      "resource_name": "yijiexingtu-crm-prod",
-      "database_id": null
-    },
-    "CHANNEL_MEDIA": {
-      "type": "r2",
-      "resource_name": "yijiexingtu-media-prod",
-      "public_access": false
-    },
-    "CHANNEL_BACKUPS": {
-      "type": "r2",
-      "resource_name": "yijiexingtu-backups-prod",
-      "public_access": false
-    }
+    "CHANNEL_DB": {"type": "d1", "resource_name": "fengqin-crm-prod", "database_id": null},
+    "CHANNEL_MEDIA": {"type": "r2", "resource_name": "fengqin-media-prod", "public_access": false},
+    "CHANNEL_BACKUPS": {"type": "r2", "resource_name": "fengqin-backups-prod", "public_access": false}
   },
   "variables": {
-    "TENANT_HOST": "edu.yijiexingtu.com",
-    "CONSOLE_HOST": "ops.yijiexingtu.com",
-    "ACCESS_MODE": "on",
-    "TURNSTILE_MODE": "on",
-    "REFERRALS_MODE": "off"
+    "APP_HOST": "edu.fantasmearts.com",
+    "AI_FAST_MODEL": "deepseek-chat",
+    "AI_DEEP_MODEL": "deepseek-reasoner",
+    "AI_FAST_DAILY_LIMIT": "80",
+    "AI_DEEP_DAILY_LIMIT": "50"
   },
-  "required_external_values": [
-    "ACCESS_ISSUER",
-    "ACCESS_AUD",
-    "ACCESS_EMAILS",
-    "TURNSTILE_SITE_KEY"
-  ],
-  "secret_names": [
-    "FIELD_KEY",
-    "BACKUP_KEY",
-    "HMAC_KEY",
-    "PW_PEPPER",
-    "PLATFORM_SETUP_KEY",
-    "TURNSTILE_SECRET",
-    "PLATFORM_PHONE_HMAC_KEY",
-    "DEEPSEEK_API_KEY"
-  ],
-  "isolation": {
-    "production_and_preview_must_use_separate_resources": true,
-    "reuse_legacy_database": false,
-    "reuse_legacy_r2": false,
-    "reuse_legacy_secrets": false
-  },
-  "secret_configuration_note": "DEEPSEEK_API_KEY用于Pages服务器；模型与额度在平台页面配置。既有加密/索引/密码/备份密钥在升级时保持原值。",
-  "database_target_migration": "0024_platform_management.sql",
-  "no_new_stage7_environment_values": true
+  "optional_variables": {"TENANT_ID": "可选；初始化时固定，否则首次初始化自动生成并保存；以后不可切换"},
+  "secret_names": ["FIELD_KEY", "BACKUP_KEY", "HMAC_KEY", "PW_PEPPER", "SETUP_KEY", "DEEPSEEK_API_KEY"],
+  "backup_worker_secrets": ["FIELD_KEY", "BACKUP_KEY"],
+  "crons": ["0 19 * * *", "*/5 * * * *"],
+  "database_target_migration": "0030_single_tenant.sql",
+  "isolation": {"production_and_preview_must_use_separate_resources": true, "reuse_legacy_database": false, "reuse_legacy_r2": false, "reuse_legacy_secrets": false},
+  "secret_configuration_note": "FIELD_KEY/BACKUP_KEY 为32字节Base64；HMAC_KEY/PW_PEPPER/SETUP_KEY 至少32字符。初始化成功后可移除SETUP_KEY。AI密钥仅在Pages，模型与额度允许主管内部设置覆盖；备份Worker与Pages使用相同库、桶和备份密钥。"
 }

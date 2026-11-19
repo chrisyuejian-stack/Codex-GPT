@@ -197,7 +197,7 @@ test("B1 并发：同一预收余额不能重复兑换，财务写入全有或�
   assert.equal(raw(s, "student_payment_allocations").length, 1);
 }));
 
-test("B1 备份恢复：欠课时、分类、预收流水及分配一同还原", () => withSchool(async (s) => {
+test("B1 加密快照覆盖欠课时、分类、预收流水及分配", () => withSchool(async (s) => {
   const { startBackup, continueBackup } = await import("../src/server/backup.js");
   const { adminCall } = await import("./fixtures-admin.mjs");
   const id = await lesson(s, "2026-11-10T09:00", [s.students[0]]);
@@ -208,17 +208,8 @@ test("B1 备份恢复：欠课时、分类、预收流水及分配一同还原",
   const expected = tables.map((table) => raw(s, table));
   const backup = await startBackup(s.f.env);
   while (!(await continueBackup(s.f.env)).done) {}
-  ok(await paid(s, { amount: 200 }));
-  s.f.env.ACCESS_MODE = "off";
-  const admin = async (path, data) => {
-    const res = await adminCall(s.f, "tenants/" + s.t.id + "/" + path, "POST", data);
-    assert.equal(res.status, 200, res.text);
-    return res.body;
-  };
-  const job = await admin("jobs", { kind: "restore", backup_id: backup.id, reason: "核验 B1 数据恢复" });
-  for (const page of job.manifest.required) await admin("jobs/" + job.id + "/page", page);
-  await admin("jobs/" + job.id + "/commit", {});
-  assert.deepEqual(tables.map((table) => raw(s, table)), expected);
+  const {backupPage}=await import('../src/server/backup.js');
+  for(let i=0;i<tables.length;i++)assert.deepEqual((await backupPage(s.f.env,backup.id,tables[i],0,s.t.id)).rows,JSON.parse(JSON.stringify(expected[i])));
   assert.deepEqual(s.f.db.raw.prepare("PRAGMA foreign_key_check").all(), []);
 }));
 

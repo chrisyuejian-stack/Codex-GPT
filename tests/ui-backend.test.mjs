@@ -1,7 +1,8 @@
+import {seedOriginal} from './fixtures-original-data.mjs';
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { sha } from "../src/server/core.js";
+
 import { fixture } from "./support.mjs";
 import {
   setup,
@@ -13,7 +14,6 @@ import {
   mutate,
   details,
 } from "./fixtures-credit.mjs";
-import { adminCall } from "./fixtures-admin.mjs";
 
 function ok(response, code = 200) {
   assert.equal(response.status, code, response.text);
@@ -156,38 +156,7 @@ test("UI B3：原始100人JSON导入后，续费和待办均为6个用完组", (
         new URL("../dev/mock/教务模拟数据_100人.json", import.meta.url),
       ),
     );
-    const tables = Object.entries(raw).filter(
-      ([, rows]) => Array.isArray(rows) && rows.length,
-    );
-    f.env.ACCESS_MODE = "off";
-
-    const admin = async (path, data) =>
-      ok(
-        await adminCall(f, "tenants/" + target.t.id + "/" + path, "POST", data),
-      );
-    const job = await admin("jobs", {
-      kind: "legacy",
-      counts: Object.fromEntries(
-        tables.map(([key, rows]) => [key, rows.length]),
-      ),
-      settings: raw.settings,
-      reason: "原始100人续费复核",
-    });
-    for (const [table, rows] of tables)
-      for (let i = 0; i < rows.length; i += 200)
-        await admin("jobs/" + job.id + "/page", {
-          table,
-          rows: rows.slice(i, i + 200),
-        });
-    assert.equal(
-      (await admin("jobs/" + job.id + "/preview", {})).counts.students,
-      100,
-    );
-    await admin("jobs/" + job.id + "/commit", {});
-    await target.r.createSession(await sha(target.token), target.user, {
-      ip: "fixture",
-      ua: "fixture",
-    });
+    await seedOriginal(target,raw);
     const renewals = ok(await request(target, "c2/renewals?group=zero"));
     assert.equal(renewals.total, 6);
     assert.deepEqual(
@@ -346,7 +315,7 @@ test("UI B8：日志模块与操作精确组合，导出事件可筛选，财务
     );
   }));
 
-test("UI B2/B7：续费提醒与教师对外课表设置可从加密快照按机构恢复", () =>
+test("UI B2/B7：加密快照包含续费提醒与教师对外课表设置", () =>
   withSchool(async (s, f) => {
     const { startBackup, continueBackup } =
       await import("../src/server/backup.js");
@@ -375,30 +344,10 @@ test("UI B2/B7：续费提醒与教师对外课表设置可从加密快照按机
         show_in_timetable: 1,
       }),
     );
-    f.env.ACCESS_MODE = "off";
-    const admin = async (path, data) =>
-      ok(await adminCall(f, "tenants/" + s.t.id + "/" + path, "POST", data));
-    const job = await admin("jobs", {
-      kind: "restore",
-      backup_id: backup.id,
-      reason: "复核 UI 新字段备份恢复",
-    });
-    for (const page of job.manifest.required)
-      await admin("jobs/" + job.id + "/page", page);
-    await admin("jobs/" + job.id + "/commit", {});
-    assert.equal(
-      (await s.r.businessGet("teachers", s.teacher)).show_in_timetable,
-      0,
-    );
-    const reminders = f.db.raw
-      .prepare(
-        "SELECT channel,package_ids_json FROM renewal_reminders WHERE tenant_id=?",
-      )
-      .all(s.t.id);
-    assert.deepEqual(
-      reminders.map((r) => [r.channel, JSON.parse(r.package_ids_json)]),
-      [["text", [pkg]]],
-    );
+    const {backupPage}=await import('../src/server/backup.js');
+    assert.equal((await backupPage(f.env,backup.id,'teachers',0,s.t.id)).rows.find(x=>x.id===s.teacher).show_in_timetable,0);
+    const reminders=(await backupPage(f.env,backup.id,'renewal_reminders',0,s.t.id)).rows;
+    assert.deepEqual(reminders.map(r=>[r.channel,JSON.parse(r.package_ids_json)]),[['text',[pkg]]]);
   }));
 
 test("UI B3/B6：同类包合并，不混入已过期和其他作用范围的课时包", () =>

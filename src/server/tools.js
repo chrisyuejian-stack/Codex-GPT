@@ -175,7 +175,7 @@ function safe(kind, row) {
 export async function toolsApi(req, env, t, user, policy, path, url, readBody) {
 
   const r = repo(env, t.id);
-  if (!path.startsWith("/api/system-messages")) staff(user);
+
   if (path === "/api/followup-assignees" && req.method === "GET") {
     requireCan(user, policy, "followup", "read");
     return { items: await r.followupAssignees() };
@@ -336,30 +336,7 @@ export async function toolsApi(req, env, t, user, policy, path, url, readBody) {
       contact_text: await decrypt(env, b.contact_text, t.id + ":contact"),
     };
   }
-  if (path.startsWith("/api/system-messages"))
-    requireCan(user, policy, "home", "read", {
-      id: user.id,
-      teacher_id: user.teacher_id,
-      student_id: user.student_id,
-    });
-  if (path === "/api/system-messages" && req.method === "GET") {
-    const offset = integer(
-      Number(url.searchParams.get("offset") || 0),
-      "分页",
-      0,
-      1000000,
-    );
 
-    const { items, unread: unread_count } = await r.systemMessagePage(user, offset);
-
-    return { items, unread_count };
-  }
-  const read = /^\/api\/system-messages\/([^/]+)\/read$/.exec(path);
-  if (read && req.method === "POST") {
-    await readBody(req);
-    await r.readMessage(read[1], user);
-    return { ok: true };
-  }
   const membership = /^\/api\/tools\/classes\/([^/]+)\/members$/.exec(path);
   if (membership && req.method === "POST") {
     requireCan(user, policy, "classes", "create");

@@ -163,7 +163,7 @@ test("第四阶段复核 P1：本月出勤/标准/成本/课程/调整/学费变
           }),
         );
       const denied = await approve(s, 1, 409);
-      assert.match(denied.error, /本月结算数据已变更/);
+      assert.match(denied.message, /本月结算数据已变更/);
       assert.equal(
         f.db.raw.prepare("SELECT COUNT(*) n FROM payroll_snapshots").get().n,
         0,

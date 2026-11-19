@@ -66,13 +66,11 @@ export async function createScenario(kind = 'attendance') {
       loginAccounts[role] = { phone: `1390000000${i + 1}`, password: u.temporary_password };
     }
     if (kind === 'authentication') {
-      f.env.TURNSTILE_MODE = 'off';
       f.db.raw.prepare('UPDATE users SET must_change=1 WHERE tenant_id=?').run(s.t.id);
     }
     // Fresh isolated fixture: zero rate-limit counters before user actions begin.
     f.db.raw.exec('DELETE FROM security_limits');
-    f.env.TENANT_HOST = 'localhost';
-    f.env.CONSOLE_HOST = '127.0.0.1';
+    f.env.APP_HOST = 'localhost';
     const manifest = { kind, now: SCENARIO_NOW, slug: s.t.slug, course: COURSE,
       students: STUDENTS, studentIds: students, teacher, room, courseId: course, lesson,
       packageIds: packages, extraCourse, extraPackage,

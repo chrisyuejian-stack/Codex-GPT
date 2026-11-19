@@ -42,14 +42,7 @@ export const backupTables = {
     ],
     tenant: false,
   },
-  tenant_slug_aliases: {
-    columns: ["slug", "tenant_id", "expires_at"],
-    tenant: true,
-  },
-  tenant_domains: {
-    columns: ["domain", "tenant_id", "kind", "verified"],
-    tenant: true,
-  },
+
   tenant_branding: {
     columns: [
       "tenant_id",
@@ -194,49 +187,7 @@ export const backupTables = {
     ],
     tenant: true,
   },
-  platform_admins: {
-    columns: [
-      "id",
-      "username",
-      "salt",
-      "digest",
-      "totp_enc",
-      "last_totp_step",
-      "active",
-      "created_at",
-      "role",
-    ],
-    tenant: false,
-  },
-  platform_sessions: {
-    columns: [
-      "token_hash",
-      "admin_id",
-      "expires_at",
-      "last_seen_at",
-      "ip",
-      "ua",
-    ],
-    tenant: false,
-  },
-  platform_audit: {
-    columns: [
-      "id",
-      "at",
-      "admin_id",
-      "action",
-      "tenant_id",
-      "target",
-      "detail",
-      "reason",
-      "ip",
-    ],
-    tenant: true,
-  },
-  platform_state: {
-    columns: ["id", "value"],
-    tenant: false,
-  },
+
   students: {
     columns: [
       "tenant_id",
@@ -893,41 +844,6 @@ export const backupTables = {
     tenant: true,
   },
 
-  announcement_reads: {
-    columns: [
-      "tenant_id",
-      "id",
-      "announcement_id",
-      "user_id",
-      "created_at",
-      "created_by",
-      "updated_at",
-      "updated_by",
-      "version",
-      "deleted_at",
-    ],
-    tenant: true,
-  },
-  platform_announcements: {
-    columns: [
-      "id",
-      "title",
-      "content",
-      "roles",
-      "starts_at",
-      "ends_at",
-      "withdrawn_at",
-      "withdrawn_by",
-      "withdrawal_reason",
-      "created_at",
-      "created_by",
-    ],
-    tenant: false,
-  },
-  announcement_targets: {
-    columns: ["tenant_id", "id", "announcement_id"],
-    tenant: true,
-  },
   backup_runs: {
     columns: ["id", "at", "status", "detail"],
     tenant: false,
@@ -1595,22 +1511,14 @@ export const BACKUP_STATUS_LABELS = {
   failed: "失败，后续任务将继续重试",
 };
 
-// Identity metadata belongs to the same encrypted full-database backup; business restore
-// keeps current accounts and guardian links, just as it already keeps current accounts.
-Object.assign(backupTables, {
-  guardian_links: { tenant: true, columns: ['tenant_id','id','parent_user_id','student_id','relation','created_by','created_at','updated_by','updated_at','version','revoked_at'] },
-  login_choices: { tenant: true, columns: ['tenant_id','id','token_hash','user_id','user_version','tenant_version','group_id','expires_at','created_at'] },
-  platform_phone_index: { tenant: true, pk: ['tenant_id','user_id'], columns: ['tenant_id','user_id','phone_hmac_platform'] },
-  tenant_subjects: { tenant: true, columns: ['tenant_id','id','pack_version','created_at','created_by'] },
-  tenant_ai_overrides: { tenant: true, columns: ['tenant_id','id','fast_daily_limit','deep_daily_limit'] },
-});
-backupTables.users.columns.push('platform_phone_hmac','disabled_reason');
+// Installation identity and accounts are included in encrypted full-database snapshots.
+backupTables.users.columns.push('disabled_reason');
 backupTables.sessions.columns.push('kind');
 backupTables.students.columns.push('report_class_id','source_lead_id','nickname','parent_consent_media');
 
 // Stage3 tool settings are included in encrypted full snapshots. Legacy business restore
 // intentionally retains the current institution settings, like account/brand metadata.
-backupTables.tenant_subjects.columns.push('imported_at','content_json');
+
 Object.assign(backupTables,{
   "stage_rules": {
     "tenant": true,
@@ -1832,73 +1740,6 @@ Object.assign(backupTables,{
 // Stage4 course plans and their immutable snapshots are part of full encrypted backups.
 Object.assign(backupTables,{
 
-  "style_packs": {
-    "tenant": false,
-    "pk": [
-      "id"
-    ],
-    "columns": [
-      "id",
-      "name",
-      "current_version",
-      "active",
-      "scope_all",
-      "default_plan",
-      "created_at"
-    ]
-  },
-  "style_pack_versions": {
-    "tenant": false,
-    "pk": [
-      "pack_id",
-      "version"
-    ],
-    "columns": [
-      "id",
-      "pack_id",
-      "version",
-      "manifest_json",
-      "created_at"
-    ]
-  },
-  "style_pack_scopes": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "pack_id"
-    ]
-  },
-  "compliance_terms": {
-    "tenant": false,
-    "pk": [
-      "id"
-    ],
-    "columns": [
-      "id",
-      "term",
-      "active",
-      "version"
-    ]
-  },
-  "tenant_compliance_terms": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "term",
-      "active",
-      "version"
-    ]
-  }
 });
 
 // Stage5 content and dedicated AI state are included in full encrypted snapshots.
@@ -2054,115 +1895,13 @@ backupTables.lesson_submissions.columns.push("personal_json");
 backupTables.lesson_comments.columns.push("feedback_versions_json");
 
 Object.assign(backupTables,{
-  "subject_packs": {
-    "tenant": false,
-    "pk": [
-      "key"
-    ],
-    "columns": [
-      "key",
-      "name",
-      "current_published_version",
-      "created_at"
-    ]
-  },
-  "subject_pack_versions": {
-    "tenant": false,
-    "pk": [
-      "key",
-      "pack_version"
-    ],
-    "columns": [
-      "key",
-      "pack_version",
-      "name",
-      "version",
-      "status",
-      "content_json",
-      "created_at",
-      "created_by",
-      "updated_at",
-      "updated_by",
-      "published_at"
-    ]
-  },
-  "setting_template_refs": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "subject",
-      "kind",
-      "template_key",
-      "entity_id"
-    ]
-  },
-  "style_version_meta": {
-    "tenant": false,
-    "pk": [
-      "pack_id",
-      "pack_version"
-    ],
-    "columns": [
-      "pack_id",
-      "pack_version",
-      "version",
-      "status",
-      "scope",
-      "checks_json",
-      "created_by",
-      "published_at"
-    ]
-  },
-  "style_version_tenants": {
-    "tenant": true,
-    "pk": [
-      "tenant_id",
-      "id"
-    ],
-    "columns": [
-      "tenant_id",
-      "id",
-      "pack_id",
-      "pack_version"
-    ]
-  },
-  "style_assets": {
-    "tenant": false,
-    "pk": [
-      "pack_id",
-      "pack_version",
-      "path"
-    ],
-    "columns": [
-      "pack_id",
-      "pack_version",
-      "path",
-      "r2_key",
-      "mime",
-      "width",
-      "height",
-      "bytes",
-      "sha256"
-    ]
-  },
-  "style_defaults": {
-    "tenant": false,
-    "pk": [
-      "doc_type"
-    ],
-    "columns": [
-      "doc_type",
-      "pack_id"
-    ]
-  }
+
 });
 
 // v0.5 side tables join the full encrypted snapshot, with composite tenant keys.
 Object.assign(backupTables,{
 
 });
+
+Object.assign(backupTables,{app_instance:{tenant:false,pk:['id'],columns:['id','tenant_id','initialized_at']},app_state:{tenant:false,pk:['id'],columns:['id','value']}});
+backupTables.ai_settings.columns.push('configured');

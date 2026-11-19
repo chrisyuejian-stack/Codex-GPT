@@ -1,3 +1,4 @@
+import {seedCatalog} from './fixtures-catalog.mjs';
 import test from "node:test";
 
 import assert from "node:assert/strict";
@@ -8,11 +9,9 @@ import { fixture } from "./support.mjs";
 
 import { setup, accountToken } from "./fixtures-credit.mjs";
 
-import { repo } from "../src/server/repo.js";
-
 import { defaultNickname } from "../src/server/student-nickname.js";
 
-import { stageRuleKeys } from "../src/server/subject-packs.js";
+import { stageRuleKeys } from "../src/server/subject-keys.js";
 
 import { workbook } from "../src/server/xlsx.js";
 
@@ -110,22 +109,8 @@ async function teacherToken(s) {
 }
 
 async function supervisorToken(s) {
-  const res = await s.f.request("https://console.school.test/api/tenants/" + s.t.id + "/supervisors", {
-    method: "POST",
-    headers: {
-      Origin: "https://console.school.test",
-      "Content-Type": "application/json",
-      Cookie: s.f.adminCookie,
-      "Cf-Access-Jwt-Assertion": s.f.access
-    },
-    body: JSON.stringify({
-      name: "另一主管",
-      phone: "13888777555",
-      roles: [ "supervisor" ]
-    })
-  });
-  assert.equal(res.status, 201);
-  const made = await res.json();
+  const response = await call(s, 'accounts', 'POST', {name:'另一主管',phone:'13888777555',roles:['supervisor']});
+  const made = ok(response,201);
   s.f.db.raw.prepare("UPDATE users SET must_change=0 WHERE tenant_id=? AND id=?").run(s.t.id, made.id);
   const user = await s.r.user(made.id), token = b64(bytes(32));
   await s.r.createSession(await sha(token), user, {
@@ -159,9 +144,7 @@ const createCourse = async (s, extra = {}) => ok(await call(s, "settings/courses
 
 const rules = Object.fromEntries(stageRuleKeys.map(k => [ k, false ]));
 
-const seed = async (s, key = "music_interest") => ok(await call(s, "settings/subjects", "POST", {
-  key: key
-}));
+const seed = seedCatalog;
 
 const png = () => Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jw1kAAAAASUVORK5CYII="), c => c.charCodeAt(0));
 
@@ -212,28 +195,6 @@ test("YX3 学员新建与手工覆盖称呼、空值默认、改名不覆盖手�
   }));
   assert.equal(ok(await call(s, "data/students/" + a.id)).record.nickname, "小星");
 }));
-
-test("YX3 0020升级修正旧字面称呼、保留手工值，并带入阶段2已选择学科的内容", async () => {
-  const f = await fixture({
-    migrateSettings: false
-  });
-  try {
-    const s = {
-      ...await setup(f, 2, "before20"),
-      f: f
-    };
-    f.db.raw.prepare("UPDATE students SET name='欧阳晴',nickname='X 同学' WHERE tenant_id=? AND id=?").run(s.t.id, s.students[0]);
-    f.db.raw.prepare("UPDATE students SET name='周小雨',nickname='小星' WHERE tenant_id=? AND id=?").run(s.t.id, s.students[1]);
-    f.db.raw.prepare("INSERT INTO tenant_subjects(tenant_id,id,created_at,created_by)VALUES(?,'art_exam',?,'fixture')").run(s.t.id, Date.now());
-    f.db.raw.exec(await readFile("migrations/0020_settings_and_templates.sql", "utf8"));
-    assert.equal(f.db.raw.prepare("SELECT nickname FROM students WHERE tenant_id=? AND id=?").get(s.t.id, s.students[0]).nickname, "欧阳同学");
-    assert.equal(f.db.raw.prepare("SELECT nickname FROM students WHERE tenant_id=? AND id=?").get(s.t.id, s.students[1]).nickname, "小星");
-    assert.ok(ok(await call(s, "settings/courses")).total > 10);
-    assert.equal(ok(await call(s, "settings/calendar")).version, 1);
-  } finally {
-    f.restore();
-  }
-});
 
 test("YX3 没有模板的三类集合GET为空且version1，首次PUT递增", () => withSchool(async s => {
   assert.deepEqual(ok(await call(s, "settings/stage-rules")), {
@@ -329,56 +290,6 @@ test("YX3 日历节点重复、月份为空/越界/非整数、region格式错�
   }), 422);
 }));
 
-test("YX3 四种模板都可导入；报价无预设价格、内容结构保留、同包重试不覆盖", () => withSchool(async s => {
-  for (const key of [ "music_interest", "music_exam", "art_interest", "art_exam" ]) await seed(s, key);
-  assert.equal(ok(await call(s, "settings/subjects")).length, 4);
-  const p = ok(await call(s, "settings/courses?limit=200"));
-  assert.ok(p.total > 60);
-  assert.ok(p.items.every(c => c.pricing === null));
-  const course = p.items[0];
-  const updated = ok(await call(s, "settings/courses/" + course.id, "PUT", {
-    ...course,
-    name: course.name,
-    pricing: {
-      mode: "per_unit",
-      amount: 345.67
-    }
-  }));
-  await seed(s, course.subject);
-  assert.equal(ok(await call(s, "settings/courses/" + course.id)).pricing.amount, 345.67);
-  assert.equal(ok(await call(s, "settings/courses?limit=200")).total, p.total);
-  assert.equal(ok(await call(s, "settings/courses/" + course.id)).version, updated.version);
-  assert.ok(JSON.parse(s.f.db.raw.prepare("SELECT content_json FROM tenant_subjects WHERE tenant_id=? AND id=?").get(s.t.id, "music_interest").content_json).content_types.length > 4);
-}));
-
-test("YX3 模板同名手工项保留，手工日历和规则不会被后加模板覆盖", () => withSchool(async s => {
-  const made = await createCourse(s, {
-    name: "乐理与视唱练耳",
-    group: "自定义",
-    pricing: {
-      mode: "per_unit",
-      amount: 99
-    }
-  });
-  ok(await call(s, "settings/calendar", "PUT", {
-    version: 1,
-    region: "本地",
-    items: [ {
-      key: "grade_exam",
-      name: "当地考级",
-      months: [ 11 ]
-    } ]
-  }));
-  ok(await call(s, "settings/stage-rules", "PUT", {
-    version: 1,
-    rules: rules
-  }));
-  await seed(s);
-  assert.equal(ok(await call(s, "settings/courses/" + made.id)).pricing.amount, 99);
-  assert.deepEqual(ok(await call(s, "settings/calendar")).items.find(x => x.key === "grade_exam").months, [ 11 ]);
-  assert.deepEqual(ok(await call(s, "settings/stage-rules")).rules, rules);
-}));
-
 test("YX3 报价五种计价均用整数分存储，课包数量及金额小数严格校验", () => withSchool(async s => {
   for (const mode of [ "per_unit", "per_term", "per_semester", "per_month", "package" ]) {
     const c = await createCourse(s, {
@@ -462,7 +373,7 @@ test("YX3 新设置权限不改变财务旧授权；无prices.read时课程DTO�
   ok(await call(s, "settings/profile", "GET", undefined, finance.token), 403);
   ok(await call(s, "settings/courses", "POST", fields, consultant.token), 403);
   ok(await call(s, "settings/courses", "GET", undefined, teacher.token), 403);
-  await repo(s.f.env, null).module(s.t.id, "prices", false, "fixture");
+  s.f.db.raw.prepare("UPDATE tenant_modules SET enabled=0 WHERE tenant_id=? AND id=\'prices\'").run(s.t.id);
   const response = ok(await call(s, "settings/courses", "GET", undefined, consultant.token));
   assert.equal(Object.hasOwn(response.items[0], "pricing"), false);
 }));
@@ -728,27 +639,17 @@ test("YX3 A会话不能读改删B报价、图库、卡片，列表不混入B数�
   } ] ]) assert.equal(ok(await call(s, path, method, d), 404).error, "not_found");
   assert.equal(ok(await call(s, "settings/courses")).total, 0);
   assert.equal(ok(await call(s, "gallery")).total, 0);
-  ok(await call(s, "/" + other.t.slug + "/api/settings/profile"), 404);
+  ok(await call(s, "/" + other.t.slug + "/api/settings/profile"), 401);
 }));
 
 test("YX3 新DTO不含tenant_id，旧me既有tenant_id保持兼容", () => withSchool(async s => {
-  const p = ok(await call(s, "students/" + s.students[0] + "/guardians", "POST", {
-    name: "家长",
-    phone: "13800001111",
-    relation: "mother"
-  }), 201);
-  noTenant(p);
-  noTenant(ok(await call(s, "students/" + s.students[0] + "/guardians/" + p.link.id, "PATCH", {
-    version: 1,
-    relation: "father"
-  })));
   noTenant(ok(await call(s, "settings/profile")));
   assert.equal(ok(await call(s, "me")).tenant_id, s.t.id);
 }));
 
 test("YX3 settings模块关闭后新设置入口404，旧统计报表不受影响", () => withSchool(async s => {
   const f = await accountToken(s, [ "finance" ]);
-  await repo(s.f.env, null).module(s.t.id, "settings", false, "fixture");
+  s.f.db.raw.prepare("UPDATE tenant_modules SET enabled=0 WHERE tenant_id=? AND id=\'settings\'").run(s.t.id);
   ok(await call(s, "settings/courses"), 404);
   ok(await call(s, "gallery"), 404);
   ok(await call(s, "finance/report?month=2026-11", "GET", undefined, f.token));
@@ -843,7 +744,7 @@ test("YX3 修改卡片拒绝状态、价格权限、过期建议和实体白名�
     } ]
   };
   const c = await makeCard(s, payload);
-  await repo(s.f.env, null).module(s.t.id, "prices", false, "fixture");
+  s.f.db.raw.prepare("UPDATE tenant_modules SET enabled=0 WHERE tenant_id=? AND id=\'prices\'").run(s.t.id);
   ok(await call(s, "settings/changes/" + c.id + "/approve", "POST", {}), 403);
   assert.equal(ok(await call(s, "settings/changes/" + c.id + "/reject", "POST", {})).status, "rejected");
   ok(await call(s, "settings/changes/" + c.id + "/approve", "POST", {}), 409);
@@ -920,43 +821,13 @@ test("YX3 新设置和维度墓碑进入全量加密备份，原迁移与融合�
   await seed(s);
   await upload(s);
   await startBackup(s.f.env, Date.now());
-  for (const table of [ "offer_courses", "report_dimensions", "gallery_images", "tenant_subjects" ]) assert.ok(s.f.db.raw.prepare("SELECT row_json FROM backup_snapshot_rows WHERE tenant_id=? AND table_name=? LIMIT 1").get(s.t.id, table), table);
+  for (const table of [ "offer_courses", "report_dimensions", "gallery_images" ]) assert.ok(s.f.db.raw.prepare("SELECT row_json FROM backup_snapshot_rows WHERE tenant_id=? AND table_name=? LIMIT 1").get(s.t.id, table), table);
   const baseline = JSON.parse(await readFile("docs/reference/fusion-stage2-baseline-sha256.json", "utf8"));
   // 前端由 Claude 并行维护，这里只核对迁移文件未被改动（2026-11-13 调整）。
   for (const f of baseline.files.filter(x => x.path.startsWith("migrations/"))) {
     const data = await readFile(f.path);
     assert.equal(await sha((new TextDecoder).decode(data)), f.content_sha, f.path);
   }
-}));
-
-test("YX3 根会话与机构路径共用设置服务，到期认证后403且不删会话", () => withSchool(async s => {
-  const login = await s.f.request("https://school.test/api/auth/login", {
-    method: "POST",
-    headers: {
-      Origin: "https://school.test",
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      phone: "13911112222",
-      password: "PhaseTwoSecure9",
-      turnstile: "fixture-valid"
-    })
-  });
-  assert.equal(login.status, 200);
-  const cookie = login.headers.get("set-cookie").split(";")[0];
-  const get = () => s.f.request("https://school.test/api/settings/calendar", {
-    headers: {
-      Cookie: cookie
-    }
-  });
-  assert.deepEqual(await (await get()).json(), ok(await call(s, "settings/calendar")));
-  s.f.db.raw.prepare("UPDATE tenants SET expires_at='2000-01-01' WHERE id=?").run(s.t.id);
-  const denied = await get();
-  assert.equal(denied.status, 403);
-  assert.equal((await denied.json()).error, "tenant_expired");
-  assert.ok(s.f.db.raw.prepare("SELECT COUNT(*) n FROM sessions WHERE tenant_id=?").get(s.t.id).n >= 2);
-  s.f.db.raw.prepare("UPDATE tenants SET expires_at=NULL WHERE id=?").run(s.t.id);
-  assert.equal((await get()).status, 200);
 }));
 
 test("YX3 200行Excel预览与确认各自≤40查询，别人的预览不能确认", () => withSchool(async s => {
@@ -1024,50 +895,6 @@ test("YX3 图库上传数据库失败删除暂存对象，R2失败不产生数�
   ok(await upload(s), 500);
   s.f.env.CHANNEL_MEDIA.put = put;
   assert.equal(ok(await call(s, "gallery")).total, 0);
-}));
-
-test("YX3 ops设置学科与导入同事务，重复保存保留模板内容及导入标记", () => withSchool(async s => {
-  const op = async (method, data) => {
-    const path = "/api/ops/tenants/" + s.t.id, res = await s.f.request("https://console.school.test" + path, {
-      method: method,
-      headers: {
-        Origin: "https://console.school.test",
-        "Content-Type": "application/json",
-        Cookie: s.f.adminCookie,
-        "Cf-Access-Jwt-Assertion": s.f.access
-      },
-      body: data ? JSON.stringify(data) : undefined
-    });
-    const value = await res.json();
-    examples.push({
-      request: {
-        method: method,
-        path: path,
-        body: data ?? null,
-        actor: "platform_owner"
-      },
-      response: {
-        status: res.status,
-        body: value
-      }
-    });
-    assert.equal(res.status, 200, JSON.stringify(value));
-    return value;
-  };
-  let c = await op("GET");
-  c = await op("PUT", {
-    version: c.version,
-    subjects: [ "music_interest" ]
-  });
-  let selected = s.f.db.raw.prepare("SELECT imported_at,content_json FROM tenant_subjects WHERE tenant_id=? AND id='music_interest'").get(s.t.id);
-  assert.ok(selected.imported_at);
-  assert.ok(selected.content_json);
-  await op("PUT", {
-    version: c.version,
-    subjects: [ "music_interest" ]
-  });
-  assert.deepEqual(s.f.db.raw.prepare("SELECT imported_at,content_json FROM tenant_subjects WHERE tenant_id=? AND id='music_interest'").get(s.t.id), selected);
-  assert.ok(ok(await call(s, "settings/courses")).total > 10);
 }));
 
 test("YX3 阶段/报告班型/修改卡片跨机构修改删除审批404，过期建议不可提交", () => withSchool(async s => {

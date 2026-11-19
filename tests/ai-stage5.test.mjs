@@ -295,7 +295,7 @@ test("YX5AI 批量基础预占min人数剩余额度，每位成功计次，一�
     assert.deepEqual(await s.r.aiReplay(await s.r.aiRequestId(parent.id)), response);
 }));
 
-test("YX5AI 请求按机构隔离且忽略伪造tenant，家长财务看不到AI明细，机构用量隔离", () => school(async s => {
+test("YX5AI 请求按机构隔离且忽略伪造tenant，学员财务看不到AI明细，机构用量隔离", () => school(async s => {
     await seed(s); const  other = await (await import("./fixtures-credit.mjs")).setup(s.f, 1, "ai-other");
     other.f = s.f;
     model(s);
@@ -320,40 +320,12 @@ test("YX5AI 请求按机构隔离且忽略伪造tenant，家长财务看不到AI
             instruction: "调整设置"
         }, crypto.randomUUID(), person.token), 403);
     }
-    const {parent: parent} = await import("./fixtures-plans.mjs");
-    const pa = await parent(s);
-    assert.equal(ok(await call(s, "ai/usage", "GET", undefined, pa.token)).by_user, undefined);
+    const {studentAccount: studentAccount} = await import("./fixtures-plans.mjs");
+    const pa = await studentAccount(s);
+    ok(await call(s, "ai/usage", "GET", undefined, pa.token),403);
     ok(await ai(s, "settings/propose", {
         instruction: "调整设置"
     }, crypto.randomUUID(), pa.token), 403);
-}));
-
-test("YX5AI 机构到期优先于配额、模块关闭不调用模型，生成中停用也不扣次", () => school(async s => {
-    await seed(s);
-    model(s);
-    s.f.db.raw.prepare("UPDATE tenants SET expires_at='2000-01-01' WHERE id=?").run(s.t.id);
-    assert.equal(ok(await ai(s, "settings/propose", {
-        instruction: "调整设置"
-    }), 403).error, "tenant_expired");
-    s.f.db.raw.prepare("UPDATE tenants SET expires_at=NULL WHERE id=?").run(s.t.id);
-    s.f.db.raw.prepare("UPDATE tenant_modules SET enabled=0 WHERE tenant_id=? AND id='settings'").run(s.t.id);
-    ok(await ai(s, "settings/propose", {
-        instruction: "调整设置"
-    }), 404);
-    assert.equal(s.modelCalls.length, 0);
-    s.f.db.raw.prepare("UPDATE tenant_modules SET enabled=1 WHERE tenant_id=? AND id='settings'").run(s.t.id);
-    model(s, () => {
-        s.f.db.raw.prepare("UPDATE tenants SET status='paused' WHERE id=?").run(s.t.id);
-        return {
-            suggestions: []
-        };
-    });
-    assert.equal(ok(await ai(s, "settings/propose", {
-        instruction: "调整设置"
-    }), 403).error, "tenant_expired");
-    assert.equal(await s.r.aiDayUsed((new Date).toLocaleDateString("sv-SE", {
-        timeZone: "Asia/Shanghai"
-    }), "fast"), 0);
 }));
 
 test("YX5AI 缺幂等键、无效档位和外机构plan在预占前拒绝", () => school(async s => {
@@ -373,7 +345,7 @@ test("YX5AI 缺幂等键、无效档位和外机构plan在预占前拒绝", () =
     assert.equal(s.f.db.raw.prepare("SELECT COUNT(*) n FROM ai_quota_holds WHERE tenant_id=?").get(s.t.id).n, 0);
 }));
 
-test("YX5AI 平台模型和机构覆盖生效，设置建议快速深度硬截止分别45/90秒", () => school(async s => {
+test("YX5AI 内部模型和额度设置生效，设置建议快速深度硬截止分别45/90秒", () => school(async s => {
     await seed(s);
     model(s, request => {
         assert.ok(request.signal instanceof AbortSignal);
@@ -382,7 +354,7 @@ test("YX5AI 平台模型和机构覆盖生效，设置建议快速深度硬截�
             suggestions: []
         };
     });
-    s.f.db.raw.prepare("INSERT INTO tenant_ai_overrides(tenant_id,id,fast_daily_limit,deep_daily_limit) VALUES(?,'limits',1,0)").run(s.t.id);
+    s.f.db.raw.prepare("UPDATE ai_settings SET fast_daily_limit=1,deep_daily_limit=0 WHERE id='main' AND ? IS NOT NULL").run(s.t.id);
     const r = ok(await ai(s, "settings/propose", {
         instruction: "调整设置",
         model: "injected",
@@ -464,57 +436,6 @@ test("YX5AI settings/propose仅建议，经过既有校验后可走修改卡片�
         version: card.version
     }));
     assert.deepEqual(ok(await call(s, "settings/calendar")).items.find(x => x.key === "grade_exam").months, [ 1, 11 ]);
-}));
-
-test("YX5AI 平台AI设置只给超管，可配置模型和限额且不回传密钥", () => school(async s => {
-    const ops = async (method, data) => {
-        const res = await s.f.request("https://console.school.test/api/ops/ai/settings", {
-            method: method,
-            headers: {
-                Origin: "https://console.school.test",
-                "Content-Type": "application/json",
-                Cookie: s.f.adminCookie,
-                "Cf-Access-Jwt-Assertion": s.f.access
-            },
-            body: data === undefined ? undefined : JSON.stringify(data)
-        });
-        const result = {
-            status: res.status,
-            body: await res.json()
-        };
-        aiExamples.push({
-            request: {
-                method: method,
-                path: "/api/ops/ai/settings",
-                host: "console.school.test",
-                authenticated: true,
-                headers: {
-                    "Content-Type": "application/json",
-                    "Cf-Access-Jwt-Assertion": "<Access JWT>",
-                    Cookie: "<ops session>"
-                },
-                body: data ?? null
-            },
-            response: result
-        });
-        return result;
-    };
-    const current = ok(await ops("GET"));
-    const saved = ok(await ops("PUT", {
-        version: current.version,
-        fast_daily_limit: 5,
-        deep_daily_limit: 2,
-        fast_model: "model-A",
-        deep_model: "model-B",
-        DEEPSEEK_API_KEY: "must-ignore"
-    }));
-    assert.equal(saved.fast_model, "model-A");
-    assert.ok(!JSON.stringify(saved).includes("must-ignore"));
-    assert.equal(saved.version, current.version + 1);
-    ok(await ops("PUT", {
-        version: current.version
-    }), 409);
-    ok(await call(s, "/api/ops/ai/settings"), 404);
 }));
 
 import { after } from "node:test";
@@ -616,9 +537,9 @@ test("YX5AI 被修改卡引用的过期建议保留审计外键，但不能再�
     }), 404);
 }));
 
-test("YX5AI 生产DeepSeek HTTP适配器仅访问固定地址，模型与密钥来自平台配置", () => school(async s => {
+test("YX5AI 生产DeepSeek HTTP适配器仅访问固定地址，模型与密钥来自内部配置", () => school(async s => {
     await seed(s);
-    s.f.db.raw.prepare("UPDATE ai_settings SET fast_model='configured-provider-model'").run();
+    s.f.db.raw.prepare("UPDATE ai_settings SET configured=1,fast_model='configured-provider-model'").run();
     s.f.env.DEEPSEEK_API_KEY = "local-fake-provider-key";
     const original = globalThis.fetch;
     let seen = 0;

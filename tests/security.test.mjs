@@ -1,20 +1,11 @@
+import {readFile,readdir} from 'node:fs/promises';
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, readdir } from "node:fs/promises";
-import { fixture, LocalD1 } from "./support.mjs";
+
+import { fixture } from "./support.mjs";
 import worker from "../src/server/worker.js";
 import { repo } from "../src/server/repo.js";
-import {
-  encrypt,
-  decrypt,
-  phoneIndex,
-  newPassword,
-  digestPassword,
-  weakPasswordCount,
-  validatePassword,
-  base32,
-  totp,
-} from "../src/server/crypto.js";
+import {encrypt,decrypt,phoneIndex,newPassword,digestPassword,weakPasswordCount,validatePassword} from "../src/server/crypto.js";
 import { can, modules, projectRecord } from "../src/server/permissions.js";
 import { sha, b64, bytes } from "../src/server/core.js";
 const tenant = {
@@ -29,7 +20,9 @@ const tenant = {
   contact_enc: null,
 };
 async function tenantFixture(f) {
-  await repo(f.env, null).createTenant(tenant, "fixture", modules);
+  f.env.TENANT_ID=tenant.id;
+  const res=await f.directRequest('https://school.test/api/setup',{method:'POST',headers:{Origin:'https://school.test','Content-Type':'application/json','X-Setup-Key':f.env.SETUP_KEY},body:JSON.stringify({phone:'13900000000',password:'SecureSetup9Z',name:'主管'})});
+  assert.equal(res.status,201,await res.text());f.instances.set('test-school',f);
   return repo(f.env, tenant.id);
 }
 async function accountFixture(f, r) {
@@ -80,8 +73,7 @@ test("所有必需 Secret 缺失均拒绝服务，客户端无堆栈或 SQL", as
       "FIELD_KEY",
       "HMAC_KEY",
       "PW_PEPPER",
-      "PLATFORM_SETUP_KEY",
-      "TURNSTILE_SECRET",
+      "BACKUP_KEY",
     ]) {
       const env = { ...f.env };
       delete env[key];
@@ -178,58 +170,12 @@ test("账号变更/密码变更撤销会话，乐观锁拒绝覆盖，审计只�
       f.db.raw.exec("UPDATE audit_log SET summary='tampered'"),
     );
     const rows = await r.logs("audit", 0);
-    assert.equal(rows.length, 3);
+    assert.equal(rows.length, 4);
   } finally {
     f.restore();
   }
 });
-test("到期/停用/路径别名、保留字和版本并发、模块修改及时生效", async () => {
-  const f = await fixture();
-  try {
-    const r = await tenantFixture(f),
-      p = repo(f.env, null),
-      u = await accountFixture(f, r),
-      hash = await sha("test");
-    await r.createSession(hash, u, { ip: "x", ua: "x" });
-    await p.updateTenant(
-      tenant.id,
-      1,
-      { ...tenant, status: "active", slug: "new-school" },
-      "fixture",
-    );
-    assert.equal(await r.session(hash), null);
-    assert.ok(await p.slugTaken("test-school"));
-    await assert.rejects(
-      () =>
-        p.updateTenant(
-          tenant.id,
-          1,
-          { ...tenant, status: "active" },
-          "fixture",
-        ),
-      (e) => e.status === 409,
-    );
-    await p.module(tenant.id, "accounts", false, "fixture");
-    assert.equal((await r.policy()).modules.accounts, false);
-    await p.updateTenant(
-      tenant.id,
-      2,
-      {
-        ...tenant,
-        slug: "new-school",
-        status: "active",
-        expires_at: "2000-01-01",
-      },
-      "fixture",
-    );
-    const a = await f.request("https://school.test/new-school/login"),
-      b = await f.request("https://school.test/unknown-school/login");
-    assert.equal(a.status, 404);
-    assert.equal(await a.text(), await b.text());
-  } finally {
-    f.restore();
-  }
-});
+
 test("员工闲置/绝对时限、个人会话时限、Cookie 安全属性和非法会话", async () => {
   const f = await fixture();
   try {
@@ -248,7 +194,7 @@ test("员工闲置/绝对时限、个人会话时限、Cookie 安全属性和非
     assert.equal(res.status, 401);
     assert.match(
       res.headers.get("set-cookie"),
-      /Path=\/test-school\/; HttpOnly; Secure; SameSite=Strict/,
+      /Path=\/; HttpOnly; Secure; SameSite=Strict/,
     );
     const personal = { ...u, roles: '["teacher"]' };
     await r.createSession("personal", personal, { ip: "x", ua: "x" });
@@ -259,92 +205,7 @@ test("员工闲置/绝对时限、个人会话时限、Cookie 安全属性和非
     f.restore();
   }
 });
-test("首个超管初始化永久关闭；TOTP 签名校验与防重放", async () => {
-  const f = await fixture();
-  try {
-    const res = await f.request("https://console.school.test/api/setup", {
-      method: "POST",
-      headers: {
-        Origin: "https://console.school.test",
-        "Content-Type": "application/json",
-        "Cf-Access-Jwt-Assertion": f.access,
-      },
-      body: "{}",
-    });
-    assert.equal(res.status, 404);
-    await repo(f.env, null).platformLog("fixture", "test", null, "test");
-    assert.throws(() => f.db.raw.exec("DELETE FROM platform_audit"));
-    const secret = base32(bytes(20)),
-      admin = await repo(f.env, null).admin("fixture");
-    f.db.raw
-      .prepare("UPDATE platform_admins SET totp_enc=? WHERE id=?")
-      .run(await encrypt(f.env, secret, "platform:totp"), admin.id);
-    const code = await totp(secret, Math.floor(Date.now() / 30000));
-    const send = () =>
-      f.request("https://console.school.test/api/login", {
-        method: "POST",
-        headers: {
-          Origin: "https://console.school.test",
-          "Content-Type": "application/json",
-          "Cf-Access-Jwt-Assertion": f.access,
-        },
-        body: JSON.stringify({
-          username: "fixture",
-          password: "FixtureSecure8Z",
-          totp: code,
-        }),
-      });
-    const a = await send();
-    assert.equal(a.status, 200);
-    assert.match(
-      a.headers.get("set-cookie"),
-      /^__Host-channel_console=.*Path=\/; HttpOnly; Secure; SameSite=Strict/,
-    );
-    assert.equal((await send()).status, 401);
-  } finally {
-    f.restore();
-  }
-});
-test("初始化从空库完成，验证器必须先确认，平台与机构账号完全分离", async () => {
-  const f = await fixture();
-  try {
-    f.db.raw.exec(
-      "DROP TRIGGER platform_audit_no_delete; DELETE FROM platform_audit; DELETE FROM platform_sessions; DELETE FROM platform_admins; DELETE FROM platform_state;",
-    );
-    const send = async (path, data) => {
-      const r = await f.request("https://console.school.test/api/" + path, {
-        method: "POST",
-        headers: {
-          Origin: "https://console.school.test",
-          "Content-Type": "application/json",
-          "Cf-Access-Jwt-Assertion": f.access,
-        },
-        body: JSON.stringify(data),
-      });
-      const text = await r.text();
-      return {
-        status: r.status,
-        body: text.startsWith("{") ? JSON.parse(text) : null,
-      };
-    };
-    const prepared = await send("setup/prepare", {
-      setup_key: f.env.PLATFORM_SETUP_KEY,
-    });
-    assert.equal(prepared.status, 200);
-    const data = {
-      ...prepared.body,
-      setup_key: f.env.PLATFORM_SETUP_KEY,
-      username: "newadmin",
-      password: "SetupSecure9X",
-      totp: await totp(prepared.body.secret, Math.floor(Date.now() / 30000)),
-    };
-    assert.equal((await send("setup", data)).status, 200);
-    assert.equal(f.db.raw.prepare("SELECT count(*) n FROM users").get().n, 0);
-    assert.equal((await send("setup", data)).status, 404);
-  } finally {
-    f.restore();
-  }
-});
+
 test("请求上限、图片真实格式、保留路由和非登录 CSP", async () => {
   const f = await fixture();
   try {
@@ -368,82 +229,15 @@ test("请求上限、图片真实格式、保留路由和非登录 CSP", async (
     assert.equal(r.status, 200);
     assert.match(
       r.headers.get("content-security-policy"),
-      /script-src 'self' https:\/\/challenges.cloudflare.com/,
+      /script-src 'self'/,
     );
-    const response = await f.request(
-      "https://console.school.test/api/tenants/" + tenant.id + "/brand",
-      {
-        method: "PUT",
-        headers: {
-          Origin: "https://console.school.test",
-          "Content-Type": "application/json",
-          "Cf-Access-Jwt-Assertion": f.access,
-          Cookie: f.adminCookie,
-        },
-        body: JSON.stringify({
-          display_name: "test",
-          theme_color: "#2b4c7e",
-          welcome_text: "",
-          logo:
-            "data:image/png;base64," +
-            b64(new TextEncoder().encode('<svg onload="alert(1)"></svg>')),
-          login_bg: null,
-          version: 1,
-        }),
-      },
-    );
-    assert.equal(response.status, 400);
+
   } finally {
     f.restore();
   }
 });
-test("账号上限在写入语句强制；手机号跨机构 HMAC 不同；所有 SQL 仅在 repo", async () => {
-  const f = await fixture();
-  try {
-    const r = await tenantFixture(f);
-    await accountFixture(f, r);
-    f.db.raw.prepare("UPDATE tenants SET staff_seat_limit=1").run();
-    await assert.rejects(
-      async () =>
-        r.createUser(
-          {
-            id: "usr_222222222222222222222222",
-            name: "超限",
-            phone_hmac: "different",
-            phone_enc: "cipher",
-            phone_last4: "1111",
-            roles: '["academic"]',
-            ...(await newPassword(f.env, "MoreSecure9Z")),
-          },
-          { id: "a", name: "a" },
-        ),
-      (e) => e.status === 409,
-    );
-  } finally {
-    f.restore();
-  }
-  for (const name of await readdir("src/server"))
-    if (name !== "repo.js") {
-      const content = await readFile("src/server/" + name, "utf8");
-      assert.ok(
-        !/\b(?:SELECT .+ FROM|INSERT INTO|UPDATE \w+ SET|DELETE FROM)\b/.test(
-          content,
-        ),
-        name,
-      );
-    }
-  for (const dir of ["src/tenant", "src/console"])
-    for (const name of (await readdir(dir)).filter((n) =>
-      /\.(js|html|css)$/.test(n),
-    )) {
-      const content = await readFile(dir + "/" + name, "utf8");
-      assert.ok(
-        !/innerHTML|unsafe-inline|unsafe-eval|onclick=/.test(content),
-        dir + "/" + name,
-      );
-    }
-});
-test("密码哈希计算期间账号或机构已变更，旧凭据不能建立新会话", async () => {
+
+test("密码哈希计算期间账号已变更，旧凭据不能建立新会话", async () => {
   const f = await fixture();
   try {
     const r = await tenantFixture(f),
@@ -456,41 +250,11 @@ test("密码哈希计算期间账号或机构已变更，旧凭据不能建立�
       () => r.createSession("stale", u, { ip: "x", ua: "x" }, 1),
       (e) => e.status === 401,
     );
-    const fresh = await r.user(u.id);
-    await repo(f.env, null).updateTenant(
-      tenant.id,
-      1,
-      { ...tenant, status: "paused" },
-      "fixture",
-    );
-    await assert.rejects(
-      () => r.createSession("stale2", fresh, { ip: "x", ua: "x" }, 1),
-      (e) => e.status === 401,
-    );
   } finally {
     f.restore();
   }
 });
-test("同一 IP 跨机构失败 20 次封禁，计数写入原子化且锁定不被重试延长", async () => {
-  const f = await fixture();
-  try {
-    const r = repo(f.env, null),
-      key = "login-ip:fixture";
-    for (let i = 0; i < 19; i++)
-      assert.equal(await r.limit(key, 3600000, 20, 3600000), false);
-    assert.equal(await r.limit(key, 3600000, 20, 3600000), true);
-    const before = f.db.raw
-      .prepare("SELECT locked_until FROM security_limits WHERE key=?")
-      .get(key).locked_until;
-    assert.equal(await r.limit(key, 3600000, 20, 3600000), true);
-    const after = f.db.raw
-      .prepare("SELECT locked_until FROM security_limits WHERE key=?")
-      .get(key).locked_until;
-    assert.equal(before, after);
-  } finally {
-    f.restore();
-  }
-});
+
 test("审查回归：历史 accounts 授权不能完成教务提权、改角色或接管财务的完整攻击链", async () => {
   const f = await fixture();
   try {
@@ -734,19 +498,9 @@ test("审查回归：机构字段未变或停用均保留会话；财务日志 S
       u = await accountFixture(f, r),
       hash = await sha("retained");
     await r.createSession(hash, u, { ip: "x", ua: "x" });
-    await repo(f.env, null).updateTenant(
-      tenant.id,
-      1,
-      { ...tenant, status: "active" },
-      "fixture",
-    );
+    f.db.raw.prepare("UPDATE tenants SET name='改名',status='active' WHERE id=?").run(tenant.id);
     assert.ok(await r.session(hash));
-    await repo(f.env, null).updateTenant(
-      tenant.id,
-      2,
-      { ...tenant, status: "paused" },
-      "fixture",
-    );
+    f.db.raw.prepare("UPDATE tenants SET status='paused',expires_at='2000-01-01',slug='changed-school' WHERE id=?").run(tenant.id);
     assert.ok(await r.session(hash));
     for (const module of [
       "accounts",
@@ -785,4 +539,27 @@ test("审查回归：机构字段未变或停用均保留会话；财务日志 S
   } finally {
     f.restore();
   }
+});
+
+test("SQL集中在repo，前端源码无HTML注入汇",async()=>{
+  for (const name of await readdir("src/server"))
+    if (name !== "repo.js") {
+      const content = await readFile("src/server/" + name, "utf8");
+      assert.ok(
+        !/\b(?:SELECT .+ FROM|INSERT INTO|UPDATE \w+ SET|DELETE FROM)\b/.test(
+          content,
+        ),
+        name,
+      );
+    }
+  for (const dir of ["src/tenant", "src/console"])
+    for (const name of (await readdir(dir)).filter((n) =>
+      /\.(js|html|css)$/.test(n),
+    )) {
+      const content = await readFile(dir + "/" + name, "utf8");
+      assert.ok(
+        !/innerHTML|unsafe-inline|unsafe-eval|onclick=/.test(content),
+        dir + "/" + name,
+      );
+    }
 });

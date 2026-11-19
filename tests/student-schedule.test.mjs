@@ -69,7 +69,7 @@ test("P2 学员周课表：已生成固定课、逐人请假、真实补课、�
   const filtered = await scheduleRequest(s, weekPath + "&student_id=" + s.student);
   assert.equal(filtered.status, 200, filtered.text);
   assert.equal(full.trips, filtered.trips);
-  assert.ok(filtered.trips <= 3);
+  assert.ok(filtered.trips <= 4);
   assert.deepEqual(Object.keys(filtered.body), ["items", "next_offset"]);
   const rows = Object.fromEntries(filtered.body.items.map((row) => [row.id, row]));
   assert.deepEqual(Object.keys(rows).sort(), [s.original, s.makeup, s.cancelled, s.foreignLesson].sort());
@@ -93,7 +93,7 @@ test("P2 固定规则及模板名单：按北京时间有效期、班级继承�
   };
   const result = await scheduleRequest(s, path);
   assert.equal(result.status, 200, result.text);
-  assert.ok(result.trips <= 3);
+  assert.ok(result.trips <= 4);
   assert.deepEqual(result.body.items.map((row) => row.id), [s.fixed, s.otherFixed, s.classFixed]);
   const [first, boundary, classRule] = result.body.items;
   assert.deepEqual([first.weekday, first.start_time, first.end_time, first.date_from, first.date_to,

@@ -138,7 +138,7 @@ test("P3 F3：结算逐人校验，班课部分待销、21 节上限及批准前
   const denied=ok(await checkout(s,"2026-11",0,"submit",finance.token),409);
   assert.equal(denied.code,"PENDING_CHECKOUT");
   assert.deepEqual(denied.details,{total:1,items:[{start_at:"2026-11-10T09:00+08:00",course_name:"班课",teacher_name:"教师",student_names:["学员1"]}]});
-  assert.match(denied.error,/2026-11-10 09:00:00.*班课.*教师.*学员1/);
+  assert.match(denied.message,/2026-11-10 09:00:00.*班课.*教师.*学员1/);
   for(let i=0;i<20;i++)
     await lesson(s,"2026-11-"+String(Math.floor(i/10)+1).padStart(2,"0")+"T"+String(8+i%10).padStart(2,"0")+":00",[s.students[0]]);
   const capped=ok(await checkout(s,"2026-11",0,"submit",finance.token),409);
@@ -223,7 +223,7 @@ test("P3 S2/S3：跨日改期按原发生日跳过，同批其余模板生成，
   const t=await template(s,{class_id:cls,start_time:"11:00"});
   const result=ok(await enroll(s,t,s.students[1]),400);
   assert.equal(result.code,"CLASS_TEMPLATE_ROSTER");
-  assert.equal(result.error,"这条固定课按班级名单排课，请先把学员加入班级");
+  assert.equal(result.message,"这条固定课按班级名单排课，请先把学员加入班级");
   assert.equal(ok(await gen(s)).generated,1);
   const rows=ok(await request(s,"schedule?from=2026-11-09&to=2026-11-10")).items;
   assert.deepEqual(rows.find(x=>x.template_id===t).participant_student_ids,[s.students[0]]);
@@ -263,12 +263,12 @@ test("P3 F4/F5：旧版超收分配到预收，关联阶段不得删除，旧缴
   const stage=ok(await mutate(s,"credits/stages",{student_id,name:"保留引用"})).id;
   const add=await paid({stage_id:stage,kind:"tuition",amount:30});
   const removal=()=>mutate(s,"credits/stages/"+stage,{version:1},"DELETE");
-  assert.match(ok(await removal(),409).error,/缴费分类/);
+  assert.match(ok(await removal(),409).message,/缴费分类/);
   ok(await mutate(s,"credits/payments/"+add.id+"/reverse",{version:1,reason:"取消该缴费"}));
   ok(await removal());
 }));
 
-test("P3 F1 备份恢复：新版保留冻结估价，0018 前的备份只生成缺失估算", () => school(async s => {
+test("P3 F1 加密备份保留冻结估价", () => school(async s => {
   const { backupManifest, seal } = await import("../src/server/backup.js");
   const { adminCall } = await import("./fixtures-admin.mjs");
   const backupWorker = process.env.TEST_BUNDLE === "1"
@@ -288,18 +288,6 @@ test("P3 F1 备份恢复：新版保留冻结估价，0018 前的备份只生成
   const manifest=await backupManifest(s.f.env,snapshot.id);
   assert.equal(manifest.tables.credit_income_entries,1);
 
-  const restore=async()=>{
-    const root="tenants/"+s.t.id+"/jobs";
-    const job=ok(await adminCall(s.f,root,"POST",{kind:"restore",backup_id:snapshot.id,reason:"P3 估价恢复验证"}));
-    for(const page of job.manifest.required) ok(await adminCall(s.f,root+"/"+job.id+"/page","POST",page));
-    ok(await adminCall(s.f,root+"/"+job.id+"/commit","POST",{}));
-  };
-  await restore();
-  assert.deepEqual(txns(s),frozen);
-  const key=snapshot.id+"/manifest.enc";
-  const oldManifest={...manifest,files:manifest.files.filter((x)=>x.table!=="credit_income_entries"),tables:{...manifest.tables}};
-  delete oldManifest.tables.credit_income_entries;
-  await s.f.env.CHANNEL_BACKUPS.put(key,JSON.stringify(await seal(s.f.env,oldManifest,key)));
-  await restore();
-  assert.deepEqual(txns(s).map((row)=>[row.id,row.amount,row.source]),[[frozen[0].id,25000,"legacy_estimate"]]);
+  const {backupPage}=await import('../src/server/backup.js');
+  assert.deepEqual((await backupPage(s.f.env,snapshot.id,'credit_income_entries',0,s.t.id)).rows,JSON.parse(JSON.stringify(frozen.map(({type,...row})=>row))));
 }));

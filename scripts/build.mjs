@@ -5,8 +5,6 @@ import path from "node:path";
 const out = "dist";
 await rm(out, { recursive: true, force: true });
 await mkdir(out + "/assets", { recursive: true });
-await mkdir(out + "/console-assets", { recursive: true });
-await mkdir(out + "/share", { recursive: true });
 // 无第三方运行时；打包成单个 Pages Advanced Mode Worker。源码留在独立交付包。
 const completed = new Map();
 let chunks = [];
@@ -49,9 +47,7 @@ await writeFile(
   chunks.join("\n") + `\nexport default ${entry}.default;\n`,
 );
 await copyFile("src/tenant/index.html", out + "/tenant.html");
-await copyFile("src/share/index.html", out + "/share/index.html");
-await copyFile("src/console/index.html", out + "/console.html");
-for (const app of ["tenant", "console"]) {
+for (const app of ["tenant"]) {
   const directory = app === "tenant" ? "assets" : "console-assets";
   await copyFile(`src/${app}/app.js`, `${out}/${directory}/${app}.js`);
   await copyFile(`src/${app}/app.css`, `${out}/${directory}/${app}.css`);
@@ -59,14 +55,6 @@ for (const app of ["tenant", "console"]) {
 const frontend = await tenantAssets();
 await writeFile(out + "/assets/tenant.js", frontend.js);
 await writeFile(out + "/assets/tenant.css", frontend.css);
-await copyFile(
-  "src/console/vendor/pinyin-pro.js",
-  out + "/console-assets/pinyin-pro.js",
-);
-await copyFile(
-  "src/console/vendor/pinyin-pro.LICENSE",
-  out + "/console-assets/pinyin-pro.LICENSE",
-);
 await writeFile(
   out + "/_routes.json",
   JSON.stringify({ version: 1, include: ["/*"], exclude: [] }),
@@ -97,7 +85,6 @@ const paths = [
   "dist/_worker.js",
   "backup-dist/backup-worker.js",
   "dist/assets/tenant.js",
-  "dist/console-assets/console.js",
 ];
 const sizes = [];
 for (const file of paths) {
@@ -128,7 +115,6 @@ console.log("生产JS已压缩与变量名混淆，无source map；构建工具�
 const { createHash } = await import("node:crypto");
 for (const [page, files] of [
   ["dist/tenant.html", ["/assets/tenant.css", "/assets/tenant.js"]],
-  ["dist/console.html", ["/console-assets/console.css", "/console-assets/pinyin-pro.js", "/console-assets/console.js"]],
 ]) {
   let html = await readFile(page, "utf8");
   for (const file of files) {

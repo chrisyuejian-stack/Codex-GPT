@@ -16,7 +16,7 @@ import { body, json, fail, HttpError, randomId, now, sha } from "./core.js";
 
 import { can } from "./permissions.js";
 
-import { text, invalid } from "./tool-validation.js";
+import { invalid } from "./tool-validation.js";
 
 import { aiContext } from "./ai-context.js";
 
@@ -59,14 +59,7 @@ function quotaError(tier, limit, date) {
   throw e;
 }
 
-function checkTenant(t) {
-  if (!t || t.deleted_at) fail(404, "不存在", "not_found");
-  if (
-    t.status !== "active" ||
-    (t.expires_at && Date.parse(t.expires_at + "T23:59:59+08:00") <= now())
-  )
-    fail(403, "机构已到期或停用", "tenant_expired");
-}
+function checkTenant(t){if(!t)fail(503,'系统尚未初始化','setup_required');}
 
 function publicSuggestion(s) {
   return {
@@ -151,6 +144,7 @@ export async function aiApi(req, env, resolved, user, policy, url) {
   env.__identityContract = true;
   const r = repo(env, resolved.tenant.id),
     config = await r.aiConfig();
+  if (user.roles.includes("student")) fail(403, "学员账号不可使用AI工具", "forbidden");
   if (path === "/api/ai/usage" && req.method === "GET") {
     const date = url.searchParams.get("date") || aiDate(now());
     dateValue(date);
@@ -217,7 +211,7 @@ export async function aiApi(req, env, resolved, user, policy, url) {
     !model ||
     (!env.DEEPSEEK_API_KEY && typeof env.AI_PROVIDER !== "function")
   )
-    fail(503, "请先在平台配置AI模型和服务密钥", "configuration_missing");
+    fail(503, "请先配置AI模型和服务密钥", "configuration_missing");
   const at = now(),
     date = aiDate(at),
     limit = config[tier + "_limit"],
@@ -399,48 +393,4 @@ export async function aiApi(req, env, resolved, user, policy, url) {
     clearTimeout(timer);
     controller.abort();
   }
-}
-
-export async function aiOps(req, env, url, admin) {
-  if (url.pathname !== "/api/ops/ai/settings") return undefined;
-  const r = repo(env, null),
-    old = await r.aiPlatformSettings();
-  if (req.method === "GET") return json(old);
-  if (req.method !== "PUT") fail(404, "不存在", "not_found");
-  const d = await body(req);
-  if (d.version !== old.version) {
-    const e = new HttpError(409, "平台设置已变化", "version_conflict");
-    e.details = {
-      latest: old,
-    };
-    throw e;
-  }
-  const value = {
-    version: old.version,
-  };
-  for (const tier of ["fast", "deep"]) {
-    const n = d[tier + "_daily_limit"];
-    if (!Number.isInteger(n) || n < 0 || n > 1e6)
-      invalid("每日上限必须为非负整数", tier + "_daily_limit");
-    value[tier + "_daily_limit"] = n;
-    value[tier + "_model"] = text(
-      d[tier + "_model"],
-      tier + "_model",
-      200,
-      false,
-    );
-  }
-  try {
-    await r.aiSaveSettings(value, admin);
-  } catch (e) {
-    if (/expected=actual/.test(String(e))) {
-      const error = new HttpError(409, "平台设置已变化", "version_conflict");
-      error.details = {
-        latest: await r.aiPlatformSettings(),
-      };
-      throw error;
-    }
-    throw e;
-  }
-  return json(await r.aiPlatformSettings());
 }

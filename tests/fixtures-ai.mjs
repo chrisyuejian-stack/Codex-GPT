@@ -5,9 +5,9 @@ export { call, ok, seed, course, school, accountToken };
 export function model(s, output = {
     suggestions: []
 }) {
-    s.f.db.raw.prepare("UPDATE ai_settings SET fast_model='local-fast',deep_model='local-deep'").run();
+    (s.instance||s.f).db.raw.prepare("UPDATE ai_settings SET configured=1,fast_model='local-fast',deep_model='local-deep'").run();
     s.modelCalls = [];
-    s.f.env.AI_PROVIDER = async request => {
+    (s.instance||s.f).env.AI_PROVIDER = async request => {
         s.modelCalls.push(request);
         const value = typeof output === "function" ? await output(request, s.modelCalls.length) : output;
         return typeof value?.content === "string" ? value : {

@@ -20,7 +20,7 @@ export const modules = [
   "leads",
   "imports",
   "comments",
-  "school_db", "prices", "feedback", "parents", "ai", "usage",
+  "school_db", "prices", "feedback", "ai", "usage",
 ];
 const defaults = {
   consultant: {
@@ -85,8 +85,7 @@ const defaults = {
     packages: ["read"],
     tuition: ["read"],
     comments: ["read"],
-    exports: ["export"],
-    profile: ["read", "update"],
+    profile: ["read"],
   },
 };
 // 唯一授权入口。个人数据调用必须携带含归属信息的 record；列表服务也必须逐条调用。
@@ -271,16 +270,15 @@ function identityPermission(user, policy, module, action, record) {
   const academic = roles.includes('academic');
   const consultant = roles.includes('consultant');
   const teacher = roles.includes('teacher');
-  const parent = roles.includes('parent');
 
   if (module === 'settings' && ['write', 'propose'].includes(action))
     return action === 'write' ? supervisor : supervisor || academic || consultant;
   if (module === 'settings' && record?.settings_scope === 'tools')
     return action === 'read' && (supervisor || academic || consultant ||
       (teacher && record.kind === 'report_dimensions'));
-  if (['school_db','prices','feedback','parents','ai','usage'].includes(module)) {
+  if (['school_db','prices','feedback','ai','usage'].includes(module)) {
     if (module === 'usage') return action === 'read' && supervisor;
-    if (module === 'parents') return action === 'manage' && (supervisor || academic);
+
     if (module === 'prices') return action === 'write' ? supervisor : action === 'read' && (supervisor || academic || consultant || roles.includes('finance'));
 
     if (module === 'school_db') return action === 'read' && (supervisor || academic || consultant);
@@ -291,13 +289,6 @@ function identityPermission(user, policy, module, action, record) {
       : action === 'write' && teacher && !!user.teacher_id && record?.teacher_id === user.teacher_id;
 
   }
-  if (parent) {
-    if (module === 'profile') return ['read','update'].includes(action) && (!record || record.id === user.id);
-    if (!record?.student_id || !ownsChild(user, record.student_id)) return false;
-    return can({ ...user, roles: ['student'], student_id: record.student_id }, policy, module, action, record);
-  }
+
   return undefined;
-}
-function ownsChild(user, id) {
-  return !!id && (user.roles.includes('student') ? user.student_id === id : user.guardian_student_ids?.includes(id));
 }

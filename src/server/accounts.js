@@ -1,11 +1,9 @@
 import { repo } from "./repo.js";
-import { string, phone, fail, randomId, version } from "./core.js";
-import { can, publicUser } from "./permissions.js";
+import { string, phone, fail, randomId } from "./core.js";
+import { can } from "./permissions.js";
 import {
   encrypt,
-  decrypt,
   phoneIndex,
-  platformPhoneIndex,
   temporaryPassword,
   newPassword,
 } from "./crypto.js";
@@ -21,27 +19,24 @@ export function rolesInput(input) {
     new Set(input).size !== input.length ||
     input.some(
       (x) =>
-        !["supervisor", "consultant", "academic", "finance", "teacher", "student", "parent"].includes(
-          x,
-        ),
+        ![
+          "supervisor",
+          "consultant",
+          "academic",
+          "finance",
+          "teacher",
+          "student",
+        ].includes(x),
     ) ||
-    (input.some((x) => ["teacher", "student", "parent"].includes(x)) &&
+    (input.some((x) => ["teacher", "student"].includes(x)) &&
       input.length !== 1)
   )
     fail(400, "角色组合不正确");
   return input;
 }
-export async function createAccount(
-  env,
-  tenant,
-  actor,
-  policy,
-  data,
-  platform = false,
-) {
+export async function createAccount(env, tenant, actor, policy, data) {
   const roles = rolesInput(data.roles);
-  if (roles.includes("parent")) fail(422, "请从学员家长绑定入口开通家长账号", "validation_failed");
-  if (!platform) {
+  {
     requireCan(
       actor,
       policy,
@@ -51,7 +46,6 @@ export async function createAccount(
         : "create",
       { roles },
     );
-    if (roles.includes("supervisor")) fail(403, "主管账号由系统维护创建");
   }
   const r = repo(env, tenant.id),
     mobile = phone(data.phone);
@@ -90,8 +84,6 @@ export async function createAccount(
       id,
       name: data.name,
       phone_hmac: index,
-      platform_phone_hmac: roles.some(x => ["supervisor", "consultant", "academic", "finance"].includes(x))
-        ? await platformPhoneIndex(env, mobile) : null,
       phone_enc: await encrypt(env, mobile, tenant.id + ":phone"),
       phone_last4: mobile.slice(-4),
       roles: JSON.stringify(roles),
@@ -99,22 +91,15 @@ export async function createAccount(
       student_id: studentId,
       ...(await newPassword(env, password)),
     },
-    platform ? { id: "system_maintenance", name: "系统维护" } : actor,
+    actor,
   );
   return { id, temporary_password: password };
 }
-export async function resetAccount(
-  env,
-  tenant,
-  actor,
-  userId,
-  platform = false,
-  policy,
-) {
+export async function resetAccount(env, tenant, actor, userId, policy) {
   const r = repo(env, tenant.id),
     u = await r.user(userId);
   if (!u) fail(404, "不存在");
-  if (!platform) {
+  {
     requireCan(
       actor,
       policy,
@@ -124,16 +109,9 @@ export async function resetAccount(
         : "reset_staff",
       u,
     );
-    if (JSON.parse(u.roles).includes("supervisor"))
-      fail(403, "主管密码请联系系统维护重置");
+    if (u.id === actor.id) fail(403, "请使用修改密码入口修改自己的密码");
   }
   const password = temporaryPassword();
-  await r.password(
-    u.id,
-    u.version,
-    await newPassword(env, password),
-    platform ? { id: "system_maintenance", name: "系统维护" } : actor,
-    1,
-  );
+  await r.password(u.id, u.version, await newPassword(env, password), actor, 1);
   return { temporary_password: password };
 }
