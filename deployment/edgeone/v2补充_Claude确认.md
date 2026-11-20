@@ -16,12 +16,12 @@ v2 §0.2 第 3 点担心的问题确实存在：原后端只接受 `APP_HOST` �
 
 | # | 事项 | 谁来做 | 状态 |
 |---|---|---|---|
-| a | DNSPod **新增** `origin` CNAME → `fengqin-crm-prod.pages.dev`，TTL 600（只新增，不动其他记录） | 用户 / WorkBuddy | 待做 |
-| b | Cloudflare Pages 添加自定义域 `origin.fantasmearts.com`，确认 Active | Claude | a 完成后做 |
-| c | Cloudflare Pages 设置 `ORIGIN_HOST=origin.fantasmearts.com` 并重新部署 | Claude | 与 b 一起 |
-| d | Claude 直连验证 `https://origin.fantasmearts.com/api/setup` 返回 `{"initialized":true}` | Claude | b、c 之后 |
+| a | DNSPod **新增** `origin` CNAME → `fengqin-crm-prod.pages.dev`，TTL 600（只新增，不动其他记录） | 用户 / WorkBuddy | ✅ 已完成 |
+| b | Cloudflare Pages 添加自定义域 `origin.fantasmearts.com`，确认 Active | Claude | ✅ 已 Active（2026-11-20 13:50 UTC） |
+| c | Cloudflare Pages 设置 `ORIGIN_HOST=origin.fantasmearts.com` 并重新部署 | Claude | ✅ 已设置并重新部署 |
+| d | Claude 直连验证 `https://origin.fantasmearts.com/api/setup` 返回 `{"initialized":true}` | Claude | ✅ 已通过：读接口正常；`Origin: edu` 的写入通过同源检查；`Origin: origin` 的写入 403 |
 
-**a–d 全部完成之前，不要配置 EdgeOne 的回源（第 3 步）。**
+**a–d 已全部完成，可以开始 EdgeOne 第 1–6 步。**
 
 ### 第 3 步表格按方案 ② 的最终值
 

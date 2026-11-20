@@ -59,3 +59,4 @@ npx wrangler deploy --config deployment/cloudflare/backup-wrangler.toml
 D1 没有 `d1_migrations` 表，迁移是逐个文件手动执行的；新增迁移后在上表登记。
 | 2026-11-20 11:46 | e9dd0bc | 手机端提速（字体/登录图延迟加载、老师学员首屏预取） |
 | 2026-11-20 11:50 | e9dd0bc | 自定义域名切到 `edu.fantasmearts.com`，APP_HOST 同步修改并重新部署 |
+| 2026-11-20 13:47 | 新提交 | 新增自定义域 `origin.fantasmearts.com`（DNSPod CNAME → pages.dev，供 EdgeOne 回源，始终不改）；设置 `ORIGIN_HOST=origin.fantasmearts.com`；Smart Placement 已开启 |
