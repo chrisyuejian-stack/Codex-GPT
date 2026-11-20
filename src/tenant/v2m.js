@@ -49,10 +49,9 @@
     const views = isTeacher()
       ? [
           ["schedule", "calendar", "课表", () => teacherWeek(content), enabled("schedule")],
-          // 艺界星途：课后反馈与成长报告（阶段 6）。机构关闭成长报告模块时不显示。
-          ["yxfeedback", "edit", "反馈", () => yxFeedbackPage(content), typeof yxFeedbackPage === "function" && me.policy?.modules?.growth_reports !== false],
+          // 课后反馈：由 feedback 模块开关控制。
+          ["yxfeedback", "edit", "反馈", () => yxFeedbackPage(content), typeof yxFeedbackPage === "function" && me.policy?.modules?.feedback !== false],
           ["students", "users", "我的学生", () => C3().teacherStudents(content), enabled("students")],
-          ["yxreports", "arrow-up", "报告", () => yxReportsPage(content), typeof yxReportsPage === "function" && me.policy?.modules?.growth_reports !== false],
           ["pay", "wallet", "课酬", () => teacherPay(content), enabled("teacher_pay")],
           ["my", "user", "我的", () => profile(content), true],
         ]

@@ -62,13 +62,12 @@
     const day = todayBJ();
     // 第二个参数是“发请求的函数”：没有权限时根本不发请求（以前会先发出去再丢弃结果）。
     const may = (ok, run) => (ok ? run().catch(() => null) : Promise.resolve(null));
-    // 推荐卡片和跟进任务也在这一批一起发出，不再排在后面等。
-    globalThis.__promoRec = enabled("promo") ? api("promo/recommend").catch(() => null) : null;
+    // 跟进任务也在这一批一起发出，不再排在后面等。
     const followRequests = enabled("followup")
       ? ["overdue", "today"].map((g) => api("c2/followups?group=" + g + "&owner=&offset=0").then((x) => x.items || []).catch(() => null))
       : null;
-    // 系统消息不挡首页：和其他数据同时发出，但页面不等它，回来后再补上通知条和消息卡片。
-    const msgs = api("system-messages?offset=0").catch(() => null);
+    // 平台公告已随控制台删除。
+    const msgs = null;
     const [data, colors, unchecked, subs, makeups, due, debt] = await Promise.all([
       api("c2/home"),
       may(enabled("schedule"), () => api("schedule?from=" + day + "&to=" + dateShift(day, 1))),
@@ -521,7 +520,6 @@
       );
     if (metrics.children.length) side.append(metrics);
     if (ctx.data.lessons) side.append(lessonsPanel(c, ctx));
-    if (enabled("promo") && globalThis.ChannelV2Promo?.recommend) side.append(globalThis.ChannelV2Promo.recommend());
     grid.append(actionsPanel(c, items, reload), side);
     c.append(grid);
     if (ctx.msgs && typeof ctx.msgs.then === "function") void ctx.msgs.then(showMsgs);

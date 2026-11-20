@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 
 test("第七阶段：全部自有前端无HTML注入汇、内联事件或动态执行；生产包压缩混淆、不含源码/映射/测试数据", async () => {
-  for (const dir of ["tenant", "console"]) {
+  for (const dir of ["tenant"]) {
     const source = await readFile("src/" + dir + "/app.js", "utf8");
     assert.ok(
       !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\s*\(|new\s+Function\s*\(/.test(

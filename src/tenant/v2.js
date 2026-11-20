@@ -238,7 +238,6 @@
     if (!actions.length) todo.append(n("p", "今天没有需要处理的事。", { class: "v-empty-line" }));
     side.append(todo);
     // 枫琴推荐：只对有推广权限的主管、教务显示，样式比待办低调。
-    if (enabled("promo") && globalThis.ChannelV2Promo?.recommend) side.append(globalThis.ChannelV2Promo.recommend());
     if (data.week) {
       const week = panel("本周", n("span", weekStart(day).slice(5) + " – " + dateShift(weekStart(day), 6).slice(5) + " · " + data.week.reduce((s, x) => s + x.n, 0) + " 节", { class: "v-panel-meta" }));
       const monday = weekStart(day),

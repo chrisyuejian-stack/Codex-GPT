@@ -1,0 +1,702 @@
+/* 枫琴教务中心 · finance 页面样式。打包在 fq.css 之前；选择器用 html 前缀并以本页根类名开头，避免影响其他页面。 */
+/* 设计稿 04「财务 · 概览」：深色结账进度条、五张数字卡（衬线大数字）、近 6 个月柱状图、待收款与课时包提醒、最近收款。 */
+
+/* ---------- 顶部月份切换（放在按钮行左边） ---------- */
+html .fq-finance.fq-fin-month {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 1px solid #d8cfc2;
+  border-radius: 9px;
+  background: var(--fq-card-solid);
+  color: var(--fq-ink);
+}
+html .fq-finance.fq-fin-month strong {
+  min-width: 108px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+html .fq-finance.fq-fin-month .ui-button {
+  padding: 0;
+  min-height: 0;
+  min-width: 0;
+}
+html .fq-finance.fq-fin-month .ui-button .ui-button-face {
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #4a4158;
+}
+html .fq-finance.fq-fin-month .ui-button:hover .ui-button-face {
+  background: var(--fq-violet-soft);
+  color: var(--fq-violet-dark);
+}
+
+/* ---------- 概览主体 ---------- */
+html .fq-finance.fq-fin-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+html .fq-finance.fq-fin-overview > * {
+  margin: 0;
+}
+
+/* 结账进度：深茄紫卡片 */
+html .fq-finance .fq-fin-close {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 22px;
+  border-radius: 14px;
+  background: var(--fq-ink);
+  border: 1px solid var(--fq-ink);
+  color: #f7f1e8;
+  box-shadow: var(--fq-shadow);
+}
+html .fq-finance .fq-fin-close-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+html .fq-finance .fq-fin-close-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f7f1e8;
+}
+html .fq-finance .fq-fin-close-head span {
+  font-size: 12.5px;
+  color: #cfc5dc;
+}
+html .fq-finance .fq-fin-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+html .fq-finance .fq-fin-step {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+html .fq-finance .fq-fin-step > i {
+  align-self: stretch;
+  height: 4px;
+  border-radius: 2px;
+  background: #4a3d63;
+}
+html .fq-finance .fq-fin-step.is-todo > i,
+html .fq-finance .fq-fin-step.is-wait > i {
+  background: var(--fq-amber);
+}
+html .fq-finance .fq-fin-step.is-auto > i {
+  background: #8f7fb0;
+}
+html .fq-finance .fq-fin-step.is-done > i {
+  background: #7cc49a;
+}
+html .fq-finance .fq-fin-step-t {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f7f1e8;
+  overflow-wrap: anywhere;
+}
+html .fq-finance .fq-fin-step-t em {
+  font-style: normal;
+  color: var(--fq-amber);
+}
+html .fq-finance .fq-fin-step.is-done .fq-fin-step-t em {
+  color: #9fd8b6;
+}
+html .fq-finance .fq-fin-step.is-off .fq-fin-step-t {
+  color: #cfc5dc;
+}
+html .fq-finance .fq-fin-step-n {
+  font-size: 12.5px;
+  color: #cfc5dc;
+}
+html .fq-finance .fq-fin-step.is-off .fq-fin-step-n {
+  color: #a99cbc;
+}
+html .fq-finance .fq-fin-go {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: #f2c18a;
+  cursor: pointer;
+}
+html .fq-finance .fq-fin-go:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+html .fq-finance .fq-fin-go:focus-visible {
+  outline: 2px solid var(--fq-amber);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* 五张数字卡 */
+html .fq-finance .fq-fin-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+html .fq-finance .fq-fin-stat,
+html .fq-finance .fq-fin-panel {
+  background-color: var(--fq-card);
+  border: 1px solid var(--fq-line);
+  border-radius: 14px;
+  box-shadow: var(--fq-shadow);
+  backdrop-filter: var(--fq-glass);
+  -webkit-backdrop-filter: var(--fq-glass);
+  min-width: 0;
+}
+html .fq-finance .fq-fin-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 18px;
+}
+html .fq-finance .fq-fin-stat-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--fq-sub);
+}
+html .fq-finance .fq-fin-ic {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--fq-violet-soft);
+  color: #5a2ba0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+html .fq-finance .fq-fin-ic .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+html .fq-finance .fq-fin-num {
+  font-family: var(--fq-serif);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.15;
+  margin-top: 4px;
+  color: var(--fq-ink);
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html .fq-finance .fq-fin-ft {
+  font-size: 12px;
+  color: var(--fq-faint);
+  overflow-wrap: anywhere;
+}
+html .fq-finance .fq-fin-stat.is-profit {
+  background-color: rgba(244, 238, 251, 0.85);
+  border-color: #ddcff0;
+}
+html .fq-finance .fq-fin-stat.is-profit .fq-fin-ic {
+  background: var(--fq-violet);
+  color: #ffffff;
+}
+html .fq-finance .fq-fin-stat.is-profit .fq-fin-num {
+  color: var(--fq-violet);
+}
+html .fq-finance .fq-fin-stat.is-profit.is-neg .fq-fin-num {
+  color: var(--fq-red);
+}
+
+/* 面板通用 */
+html .fq-finance .fq-fin-panel {
+  overflow: hidden;
+}
+html .fq-finance .fq-fin-ph {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--fq-line-soft);
+}
+html .fq-finance .fq-fin-ph h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fq-ink);
+}
+html .fq-finance .fq-fin-ph p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--fq-faint);
+}
+html .fq-finance .fq-fin-pb {
+  padding: 16px 18px;
+}
+html .fq-finance .fq-fin-empty {
+  margin: 0;
+  padding: 16px 18px;
+  font-size: 13px;
+  color: var(--fq-faint);
+}
+html .fq-finance .fq-fin-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--fq-faint);
+}
+html .fq-finance .fq-fin-more,
+html .fq-finance .fq-fin-chipbtn {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--fq-violet);
+  cursor: pointer;
+}
+html .fq-finance .fq-fin-more:hover {
+  color: var(--fq-violet-dark);
+}
+html .fq-finance .fq-fin-chipbtn {
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid #e0d5ee;
+  border-radius: 9px;
+  background: var(--fq-violet-soft);
+  color: var(--fq-violet-dark);
+  font-weight: 500;
+  white-space: nowrap;
+}
+html .fq-finance .fq-fin-chipbtn:hover {
+  background: #e4d8f3;
+}
+
+/* 胶囊状态标签 */
+html .fq-finance .fq-fin-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #f0ecf3;
+  color: #5e5670;
+  white-space: nowrap;
+}
+html .fq-finance .fq-fin-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+html .fq-finance .fq-fin-pill.is-ok {
+  background: #e6f3ea;
+  color: #256b43;
+}
+html .fq-finance .fq-fin-pill.is-warn {
+  background: #fcefdd;
+  color: #8a4a0b;
+}
+html .fq-finance .fq-fin-pill.is-err {
+  background: #fbe6e3;
+  color: #a42a18;
+}
+html .fq-finance .fq-fin-pill.is-info {
+  background: var(--fq-violet-soft);
+  color: #5a2ba0;
+}
+
+/* 两栏：柱状图 + 右栏 */
+html .fq-finance .fq-fin-cols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+html .fq-finance .fq-fin-trend {
+  flex: 999 1 480px;
+}
+html .fq-finance .fq-fin-side {
+  flex: 1 1 300px;
+  max-width: 400px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+html .fq-finance .fq-fin-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 12.5px;
+  color: #4a4158;
+}
+html .fq-finance .fq-fin-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+html .fq-finance .fq-fin-legend i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+html .fq-finance .fq-fin-legend i.is-in,
+html .fq-finance .fq-fin-bars i {
+  background: var(--fq-violet);
+}
+html .fq-finance .fq-fin-legend i.is-out,
+html .fq-finance .fq-fin-bars b {
+  background: #e8b57a;
+}
+html .fq-finance .fq-fin-bars,
+html .fq-finance .fq-fin-bar-labels {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 16px;
+}
+html .fq-finance .fq-fin-bars {
+  align-items: end;
+  height: 200px;
+  border-bottom: 1px solid #e4dccf;
+}
+html .fq-finance .fq-fin-bars > div {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+}
+html .fq-finance .fq-fin-bars i,
+html .fq-finance .fq-fin-bars b {
+  display: block;
+  width: 22px;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s ease;
+}
+html .fq-finance .fq-fin-bars .is-now i {
+  box-shadow: 0 0 0 3px #e6dbf4;
+}
+html .fq-finance .fq-fin-bars .is-now i.fq-h0 {
+  box-shadow: none;
+}
+html .fq-finance .fq-fin-bars i.is-missing {
+  height: 2px;
+  background: #d8cfc2;
+}
+html .fq-finance .fq-fin-bar-labels {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--fq-sub);
+}
+html .fq-finance .fq-fin-bar-labels .is-now {
+  color: var(--fq-ink);
+  font-weight: 700;
+}
+html .fq-finance .fq-h0 { height: 0; }
+html .fq-finance .fq-h1 { height: 5%; }
+html .fq-finance .fq-h2 { height: 10%; }
+html .fq-finance .fq-h3 { height: 15%; }
+html .fq-finance .fq-h4 { height: 20%; }
+html .fq-finance .fq-h5 { height: 25%; }
+html .fq-finance .fq-h6 { height: 30%; }
+html .fq-finance .fq-h7 { height: 35%; }
+html .fq-finance .fq-h8 { height: 40%; }
+html .fq-finance .fq-h9 { height: 45%; }
+html .fq-finance .fq-h10 { height: 50%; }
+html .fq-finance .fq-h11 { height: 55%; }
+html .fq-finance .fq-h12 { height: 60%; }
+html .fq-finance .fq-h13 { height: 65%; }
+html .fq-finance .fq-h14 { height: 70%; }
+html .fq-finance .fq-h15 { height: 75%; }
+html .fq-finance .fq-h16 { height: 80%; }
+html .fq-finance .fq-h17 { height: 85%; }
+html .fq-finance .fq-h18 { height: 90%; }
+html .fq-finance .fq-h19 { height: 95%; }
+html .fq-finance .fq-h20 { height: 100%; }
+
+/* 右栏列表行 */
+html .fq-finance .fq-fin-due {
+  margin: 0;
+  font-size: 24px;
+  color: var(--fq-red);
+}
+html .fq-finance .fq-fin-due.is-zero {
+  color: var(--fq-faint);
+}
+html .fq-finance .fq-fin-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 18px;
+  box-sizing: border-box;
+  border: 0;
+  border-bottom: 1px solid #f0eae0;
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--fq-ink);
+  text-align: left;
+  cursor: pointer;
+}
+html .fq-finance .fq-fin-row:last-child {
+  border-bottom: 0;
+}
+html .fq-finance .fq-fin-row:hover {
+  background: rgba(238, 230, 247, 0.5);
+}
+html .fq-finance .fq-fin-row:focus-visible {
+  outline: 2px solid var(--fq-violet);
+  outline-offset: -2px;
+}
+html .fq-finance .fq-fin-row-t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html .fq-finance .fq-fin-amt {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 最近收款表格：手机上横向滚动 */
+html .fq-finance .fq-fin-tw {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+html .fq-finance .fq-fin-tbl {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+html .fq-finance .fq-fin-tbl th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fq-sub);
+  background: rgba(248, 244, 238, 0.7);
+  padding: 10px 18px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--fq-line-soft);
+}
+html .fq-finance .fq-fin-tbl td {
+  padding: 12px 18px;
+  border-bottom: 1px solid #f0eae0;
+  color: var(--fq-ink);
+  white-space: nowrap;
+}
+html .fq-finance .fq-fin-tbl tr:last-child td {
+  border-bottom: 0;
+}
+html .fq-finance .fq-fin-tbl .is-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+html .fq-finance .fq-fin-tbl .is-amt {
+  font-weight: 700;
+}
+html .fq-finance .fq-fin-tbl .is-faint {
+  color: var(--fq-faint);
+}
+html .fq-finance .fq-fin-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--fq-ink);
+  cursor: pointer;
+}
+html .fq-finance .fq-fin-name:hover {
+  color: var(--fq-violet);
+  text-decoration: underline;
+}
+
+/* ---------- 财务其他页签：统一成同一套外观（收款、课时包、课酬结算、成本、报表） ---------- */
+html .fq-finance .v-kpis {
+  gap: 14px;
+}
+html .fq-finance .v-kpi {
+  padding: 16px 18px;
+  border-radius: 14px;
+}
+html .fq-finance .v-kpi-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--fq-sub);
+}
+html .fq-finance .v-kpi-value {
+  font-family: var(--fq-serif);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.15;
+  margin-top: 4px;
+  color: var(--fq-ink);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+html .fq-finance .v-kpi.v-tone-money .v-kpi-value {
+  color: var(--fq-violet);
+}
+html .fq-finance .v-kpi.v-tone-warn .v-kpi-value {
+  color: #8a4a0b;
+}
+html .fq-finance .v-kpi.v-tone-bad .v-kpi-value {
+  color: var(--fq-red);
+}
+html .fq-finance .v-kpi small {
+  color: var(--fq-faint);
+}
+html .fq-finance .v-fin-table,
+html .fq-finance .v-fin-ops,
+html .fq-finance .v-panel {
+  background-color: var(--fq-card);
+  border-color: var(--fq-line);
+  border-radius: 14px;
+  box-shadow: var(--fq-shadow);
+  backdrop-filter: var(--fq-glass);
+  -webkit-backdrop-filter: var(--fq-glass);
+}
+html .fq-finance .v-fin-table.is-flat {
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html .fq-finance .v-fin-op strong {
+  font-family: var(--fq-serif);
+  font-size: 24px;
+  font-weight: 600;
+}
+html .fq-finance .v-fin-table .v-table td.is-num {
+  font-variant-numeric: tabular-nums;
+}
+html .fq-finance .v-filter-chip {
+  border-radius: 999px;
+}
+html .fq-finance .v-filter-chip.is-on {
+  background: var(--fq-ink);
+  border-color: var(--fq-ink);
+  color: #f7f1e8;
+}
+html .fq-finance .v-filter-chip.is-on .v-chip-count {
+  color: #f6c38a;
+}
+html .fq-finance .v-fin-banner {
+  border-radius: 14px;
+  background: var(--fq-violet-soft);
+  color: var(--fq-ink);
+}
+html .fq-finance .v-fin-banner.is-pending {
+  background: #fcefdd;
+  color: #8a4a0b;
+}
+html .fq-finance .v-fin-banner.is-locked {
+  background: #e6f3ea;
+  color: #256b43;
+}
+html .fq-finance.v-fin-bar .ui-month-picker strong {
+  min-width: 96px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 手机 ---------- */
+@media (max-width: 1180px) {
+  html .fq-finance .fq-fin-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  html .fq-finance.fq-fin-overview {
+    gap: 14px;
+  }
+  html .fq-finance .fq-fin-close {
+    padding: 16px;
+  }
+  html .fq-finance .fq-fin-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
+  }
+  html .fq-finance .fq-fin-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  html .fq-finance .fq-fin-stat {
+    padding: 12px 14px;
+  }
+  html .fq-finance .fq-fin-stat.is-profit {
+    grid-column: 1 / -1;
+  }
+  html .fq-finance .fq-fin-num {
+    font-size: 26px;
+  }
+  html .fq-finance .fq-fin-ic {
+    width: 28px;
+    height: 28px;
+  }
+  html .fq-finance .fq-fin-side {
+    max-width: none;
+    flex-basis: 100%;
+  }
+  html .fq-finance .fq-fin-trend {
+    flex-basis: 100%;
+  }
+  html .fq-finance .fq-fin-bars,
+  html .fq-finance .fq-fin-bar-labels {
+    gap: 6px;
+  }
+  html .fq-finance .fq-fin-bars {
+    height: 160px;
+  }
+  html .fq-finance .fq-fin-bars i,
+  html .fq-finance .fq-fin-bars b {
+    width: 14px;
+  }
+  html .fq-finance .fq-fin-bar-labels {
+    font-size: 11.5px;
+  }
+  html .fq-finance .fq-fin-ph,
+  html .fq-finance .fq-fin-row,
+  html .fq-finance .fq-fin-pb {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  html .fq-finance .v-kpi-value {
+    font-size: 24px;
+  }
+}

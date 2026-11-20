@@ -399,9 +399,7 @@
       ["packages", "课时与缴费", enabled("packages") || enabled("tuition")],
       ["followup", "跟进", enabled("followup")],
       ["stages", "学习阶段", enabled("students")],
-      ["parents", "家长", enabled("parents", "manage")],
-      ["plans", "课程方案", enabled("plans")],
-      ["repertoire", "曲目 / 作品", enabled("growth_reports") || (typeof yxIsTeacher === "function" && yxIsTeacher())],
+      ["repertoire", "曲目 / 作品", enabled("feedback") || (typeof yxIsTeacher === "function" && yxIsTeacher())],
       ["more", "更多", true],
     ].filter((x) => x[2] && !(standalone && (x[0] === "overview" || x[0] === "more")));
     if (tab === "payments") tab = "packages";
@@ -585,8 +583,6 @@
     } else if (tab === "schedule") await V().studentWeek(body, id, c);
     else if (tab === "followup") await followupPage(body, id);
     else if (tab === "stages") await creditPage(body, "stages", id);
-    else if (tab === "parents") await yxGuardians(body, id, row, again);
-    else if (tab === "plans") await yxPlansTab(body, id, row, again);
     else if (tab === "repertoire") await yxRepertoireTab(body, id);
     else {
       const box = panel("更多");
