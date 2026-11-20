@@ -82,6 +82,9 @@ function yxLoginForm(card) {
           const flags = old?.role === role ? old.flags : { schedule: true, balance: true, comments: true };
           localStorage.setItem("fq_boot_hint", JSON.stringify({ role, flags }));
         } else localStorage.removeItem("fq_boot_hint");
+        // 换了人登录：清掉上一位留在本机的离线数据（见 app.js 离线查看）。
+        const offline = JSON.parse(localStorage.getItem("fq_offline_v1") || "null");
+        if (offline && offline.user_id !== res?.user?.id) localStorage.removeItem("fq_offline_v1");
       } catch {}
       location.assign(base + "app/");
     } catch (err) {

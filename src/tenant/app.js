@@ -138,6 +138,77 @@ function apiPrefetch(paths) {
   }
   setTimeout(() => apiWarm.clear(), WARM_MS);
 }
+// ---------- PWA 第二版：老师、学员离线查看 ----------
+// 老师、学员读过的少数只读接口（本人信息、课表、课时与缴费、点评、点名详情）在本机留一份；
+// 断网时用它显示，并在顶部提示“离线模式”。员工账号不保存；登出、换人登录、超过 14 天
+// （老师/学员会话最长 14 天）都会清掉。写操作断网时直接提示“联网后再提交”，不做离线排队。
+const OFFLINE_KEY = "fq_offline_v1",
+  OFFLINE_MAX_AGE = 14 * 24 * 3600 * 1000,
+  OFFLINE_MAX_CHARS = 1500000,
+  OFFLINE_PATHS =
+    /^(?:me|schedule-next|schedule\?[^#]*|credits\/(?:packages|transactions|payments)(?:\?[^#]*)?|student\/comments(?:\?[^#]*)?|c3\/student-comments|lessons\/[A-Za-z0-9_-]+\/review)$/;
+let offlineOwner = null;
+function offlineLoad() {
+  try {
+    const s = JSON.parse(localStorage.getItem(OFFLINE_KEY) || "null");
+    return s && typeof s === "object" && s.items && typeof s.items === "object" ? s : null;
+  } catch {
+    return null;
+  }
+}
+function offlineClear() {
+  try {
+    localStorage.removeItem(OFFLINE_KEY);
+  } catch {}
+}
+function offlineSave(path, value) {
+  if (!offlineOwner || !OFFLINE_PATHS.test(path)) return;
+  try {
+    let s = offlineLoad();
+    if (!s || s.user_id !== offlineOwner) s = { user_id: offlineOwner, items: {} };
+    s.items[path] = { at: Date.now(), value };
+    let text = JSON.stringify(s);
+    // 超出上限先丢最旧的条目；本人信息（me）保留，否则离线时进不了页面。
+    const order = Object.entries(s.items)
+      .filter(([k]) => k !== "me")
+      .sort((a, b) => a[1].at - b[1].at);
+    while (text.length > OFFLINE_MAX_CHARS && order.length) {
+      delete s.items[order.shift()[0]];
+      text = JSON.stringify(s);
+    }
+    localStorage.setItem(OFFLINE_KEY, text);
+  } catch {}
+}
+function offlineGet(path) {
+  const hit = offlineLoad()?.items?.[path];
+  return hit && Date.now() - hit.at <= OFFLINE_MAX_AGE ? hit : null;
+}
+const isNetworkError = (e) => !!e && !e.status && (e.offline === true || e instanceof TypeError);
+// 顶部提示条：离线时说明数据保存时间；网络恢复后改成“点此刷新”。
+function offlineBanner(at) {
+  let bar = document.querySelector(".fq-offline-bar");
+  const time = new Date(at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  if (!bar) {
+    bar = el("button", "", { type: "button", class: "fq-offline-bar", role: "status" });
+    bar.addEventListener("click", () => navigator.onLine !== false && location.reload());
+    document.body.append(bar);
+    addEventListener("online", () => {
+      bar.textContent = "网络已恢复，点此刷新";
+      bar.classList.add("is-online");
+    });
+  }
+  if (!bar.dataset.at || at < Number(bar.dataset.at)) {
+    bar.dataset.at = String(at);
+    bar.textContent = "离线 · " + time + " 的内容，联网后才能提交";
+  }
+  bar.classList.remove("is-online");
+}
+function offlineFallback(path, e) {
+  const hit = isNetworkError(e) && offlineGet(path);
+  if (!hit) throw e;
+  offlineBanner(hit.at);
+  return structuredClone(hit.value);
+}
 const apiRule = (path) => API_CACHE_RULES.find((r) => r.re.test(path));
 const apiOptionKind = (path) => apiRule(path)?.kind || "";
 // 统一写法：data/<选项>?offset=0&q= 与 data/<选项>?offset=0 是同一份数据。只去掉空的 q，其他参数原样保留。
@@ -165,6 +236,8 @@ function apiInvalidate(kinds) {
   for (const kind of kinds === null ? API_CACHE_RULES.map((r) => r.kind) : kinds) apiEpoch.set(kind, (apiEpoch.get(kind) || 0) + 1);
 }
 async function api(path, method = "GET", data) {
+  // 登出：先清掉本机离线数据，避免下一个人在这台设备上看到。
+  if (path === "logout") offlineClear();
   // “预览”类 POST 只做计算、不写数据，不必清空缓存。
   if (method !== "GET" && /\/preview$/.test(path)) return apiRequest(path, method, data);
   // 推广内容的“已读”、海报浏览/下载次数只是统计，不改变任何业务数据，也不清缓存。
@@ -195,20 +268,31 @@ async function api(path, method = "GET", data) {
     apiWarm.delete(key);
     if (Date.now() - warm.at < WARM_MS && warm.seq === apiWriteSeq) {
       try {
-        return structuredClone(await warm.pending);
+        const value = await warm.pending;
+        offlineSave(path, value);
+        return structuredClone(value);
       } catch {
         // 预取失败（断网、权限变化等）：下面按正常流程重新请求一次，报错照原样给调用方。
       }
     }
   }
-  if (apiInflight.has(key)) return structuredClone(await apiInflight.get(key));
+  if (apiInflight.has(key)) {
+    try {
+      return structuredClone(await apiInflight.get(key));
+    } catch (e) {
+      return offlineFallback(path, e);
+    }
+  }
   const epoch = apiEpoch.get(kind) || 0,
     pending = apiGet(path);
   apiInflight.set(key, pending);
   try {
     const value = await pending;
     if (kind && (apiEpoch.get(kind) || 0) === epoch) apiCache.set(key, { at: Date.now(), value: structuredClone(value) });
+    offlineSave(path, value);
     return value;
+  } catch (e) {
+    return offlineFallback(path, e);
   } finally {
     if (apiInflight.get(key) === pending) apiInflight.delete(key);
   }
@@ -291,12 +375,20 @@ async function flushBatch() {
   });
 }
 async function apiRequest(path, method = "GET", data) {
-  const response = await fetch(base + "api/" + path, {
-    method,
-    headers: method === "GET" ? {} : { "Content-Type": "application/json" },
-    body: data === undefined ? undefined : JSON.stringify(data),
-    credentials: "same-origin",
-  });
+  let response;
+  try {
+    response = await fetch(base + "api/" + path, {
+      method,
+      headers: method === "GET" ? {} : { "Content-Type": "application/json" },
+      body: data === undefined ? undefined : JSON.stringify(data),
+      credentials: "same-origin",
+    });
+  } catch {
+    // 断网或连接中断：给出中文提示；读取会在 api() 里改用本机离线数据（若有）。
+    const e = Error(navigator.onLine === false ? "网络不可用，请联网后再试" : "网络连接失败，请稍后再试");
+    e.offline = true;
+    throw e;
+  }
   let result;
   try {
     result = await response.json();
@@ -1886,6 +1978,13 @@ try {
     } else {
       me = await meRequest;
       scheduleView = me.policy.settings.default_schedule_view || "calendar";
+      // 离线查看只给老师、学员：记下本机数据属于谁，别人的旧数据直接清掉。
+      {
+        const roles = me.user.roles || [];
+        offlineOwner = !me.user.must_change && (roles.includes("teacher") || roles.includes("student")) ? me.user.id : null;
+        if (!offlineOwner || offlineLoad()?.user_id !== offlineOwner) offlineClear();
+        offlineSave("me", me);
+      }
       // 记下身份和首屏要用的开关，下次打开时据此预取；员工或需要改密码时不预取。
       try {
         const roles = me.user.roles || [];
@@ -1897,7 +1996,9 @@ try {
       shell();
     }
   } catch (e) {
-    root.replaceChildren(el("p", e.message, { class: "loading" }));
+    if (isNetworkError(e) && UI?.empty)
+      root.replaceChildren(UI.empty({ text: "网络不可用，请检查网络后重试。", action: { label: "重试", onSelect: () => location.reload() } }));
+    else root.replaceChildren(el("p", e.message, { class: "loading" }));
   }
 })();
 

@@ -289,7 +289,8 @@ test("提速：同页内切换只换变化的区域；请求并行；字典缓�
     assert.match(app, new RegExp('\\{ kind: "' + kind + '", re: '));
   assert.match(app, /const kinds = apiAffects\(path\);\s*\/\/[^\n]*\n\s*apiInvalidate\(kinds\);/);
   assert.match(app, /if \(result\?\.committed !== false\) \{\s*apiInvalidate\(kinds\);\s*viewCache\.clear\(\);\s*apiWriteSeq\+\+;/);
-  assert.match(app, /if \(apiInflight\.has\(key\)\) return structuredClone\(await apiInflight\.get\(key\)\);/);
+  // 同时发出的同一读取只请求一次（PWA 第二版起包在 try 里，断网时改用本机离线数据）。
+  assert.match(app, /if \(apiInflight\.has\(key\)\) \{\s*try \{\s*return structuredClone\(await apiInflight\.get\(key\)\);/);
   assert.match(app, /if \(kind && \(apiEpoch\.get\(kind\) \|\| 0\) === epoch\) apiCache\.set\(key,/);
   assert.match(app, /if \(method !== "GET" && \/\\\/preview\$\/\.test\(path\)\) return apiRequest\(path, method, data\);/);
   // 路由：页面声明 __soft 时不清空整页、不闪骨架。
