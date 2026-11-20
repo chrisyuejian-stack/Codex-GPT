@@ -1,6 +1,6 @@
 import { backupTables } from "./backup-model.js";
 import { b64, unb64, bytes, textBytes, sha, fail } from "./core.js";
-export const FULL_BACKUP_VERSION = 31;
+export const FULL_BACKUP_VERSION = 32;
 export const MAX_FULL_BACKUP_BYTES = 16 * 1024 * 1024;
 export const fullBackupTables = Object.fromEntries(
   Object.entries(backupTables).filter(
@@ -124,11 +124,12 @@ export async function validateFullPayload(payload, env, tenantId) {
     !payload ||
     payload.format !== "fengqin-database" ||
     payload.schema_version !== FULL_BACKUP_VERSION ||
+    payload.migration_version !== FULL_BACKUP_VERSION ||
     payload.table_signature !== (await fullTableSignature())
   )
     fail(
       422,
-      "备份数据库版本不兼容，当前仅支持0031结构",
+      "备份数据库版本不兼容，当前仅支持0032结构",
       "backup_version_mismatch",
     );
   if (payload.tenant_id !== tenantId)
@@ -157,10 +158,18 @@ export async function validateFullPayload(payload, env, tenantId) {
     Object.keys(fullBackupTables).sort().join()
   )
     fail(422, "备份表清单不完整或包含未知表", "invalid_backup");
+  if (
+    !payload.counts ||
+    Object.keys(payload.counts).sort().join() !==
+      Object.keys(fullBackupTables).sort().join()
+  )
+    fail(422, "备份缺少每表行数", "invalid_backup");
   for (const [name, spec] of Object.entries(fullBackupTables)) {
     const rows = payload.tables[name];
     if (!Array.isArray(rows))
       fail(422, "备份表格式不正确：" + name, "invalid_backup");
+    if (payload.counts[name] !== rows.length)
+      fail(422, "备份行数与实际内容不一致：" + name, "invalid_backup");
     const seen = new Set();
     for (const row of rows) {
       if (
@@ -288,6 +297,7 @@ export async function validateFullPayload(payload, env, tenantId) {
     fail(422, "备份缺少图库文件", "invalid_backup");
   return {
     schema_version: payload.schema_version,
+    migration_version: payload.migration_version,
     created_at: payload.created_at,
     counts: Object.fromEntries(
       Object.entries(payload.tables).map(([t, rows]) => [t, rows.length]),

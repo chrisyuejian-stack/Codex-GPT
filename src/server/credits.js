@@ -799,8 +799,11 @@ async function execute(req, env, tenant, user, policy, path, url, readBody) {
       "lesson_participants",
       d.original_participant_id,
     );
+    if (d.original_participant_version!==undefined && version(d.original_participant_version)!==original.version) fail(409,"原请假记录已变化，请刷新","version_conflict");
     if (original.makeup_for) fail(400, "不能把补课再次作为原课");
+    if ((await r.makeupDecision(original.id))?.skipped === 1) fail(409,"已标记不补，请先撤回不补决定","makeup_waived");
     const originalLesson = await owned(r, "lessons", original.lesson_id);
+    if(d.original_lesson_version!==undefined && version(d.original_lesson_version)!==originalLesson.version)fail(409,"原课程已变化，请刷新","version_conflict");
     let targetLesson;
     if (d.new_lesson) {
       requireCan(user, policy, "lessons", "create");

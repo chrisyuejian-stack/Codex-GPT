@@ -1906,3 +1906,5 @@ Object.assign(backupTables,{
 Object.assign(backupTables,{app_instance:{tenant:false,pk:['id'],columns:['id','tenant_id','initialized_at']},app_state:{tenant:false,pk:['id'],columns:['id','value']}});
 backupTables.ai_settings.columns.push('configured');
 backupTables.todo_snoozes={tenant:true,pk:['tenant_id','user_id','item_key'],columns:['tenant_id','user_id','item_key','source_version','until_at','version','created_at','updated_at']};
+
+backupTables.makeup_decisions={tenant:true,pk:['tenant_id','id'],columns:['tenant_id','id','skipped','reason','version','created_at','created_by','updated_at','updated_by']};

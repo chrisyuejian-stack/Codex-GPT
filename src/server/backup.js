@@ -81,6 +81,7 @@ export async function startBackup(env, at = now()) {
   const manifest = {
     schema: 10,
     schema_version: FULL_BACKUP_VERSION,
+    migration_version: FULL_BACKUP_VERSION,
     table_signature: await fullTableSignature(),
     environment_fingerprint: await environmentFingerprint(env),
     media_files: [],
@@ -165,18 +166,20 @@ export async function continueBackup(env, at = now(), pageBudget = 12) {
         if (!object)
           fail(409, "图库文件缺失，自动备份未标记完成", "backup_media_missing");
         const key = active.id + "/media/" + image.id + ".enc";
-        await env.CHANNEL_BACKUPS.put(
-          key,
-          JSON.stringify(
-            await seal(
-              env,
-              { key: image.r2_key, text: await object.text() },
-              key,
-            ),
+        const encrypted = JSON.stringify(
+          await seal(
+            env,
+            { key: image.r2_key, text: await object.text() },
+            key,
           ),
         );
+        await env.CHANNEL_BACKUPS.put(key, encrypted);
         manifest.media_files ??= [];
-        manifest.media_files.push({ key, source_key: image.r2_key });
+        manifest.media_files.push({
+          key,
+          source_key: image.r2_key,
+          bytes: textBytes(encrypted).byteLength,
+        });
         if (!(await r.advanceBackup(active.id, active.manifest_json, manifest)))
           return { done: false, id: active.id, retry: true };
         active.manifest_json = JSON.stringify(manifest);
@@ -184,11 +187,10 @@ export async function continueBackup(env, at = now(), pageBudget = 12) {
       }
       const rows = await r.snapshotPage(active.id, file.table, file.offset),
         key = active.id + "/" + file.table + "/" + file.offset + ".enc";
-      await env.CHANNEL_BACKUPS.put(
-        key,
-        JSON.stringify(await seal(env, { ...file, rows }, key)),
-        { httpMetadata: { contentType: "application/octet-stream" } },
-      );
+      const encrypted = JSON.stringify(await seal(env, { ...file, rows }, key));
+      await env.CHANNEL_BACKUPS.put(key, encrypted, {
+        httpMetadata: { contentType: "application/octet-stream" },
+      });
       if (file.table === "tenants")
         manifest.tenant_ids.push(...rows.map((row) => row.id));
       if (!rows.length) fail(409, "备份暂存快照不完整，拒绝发布成功备份");
@@ -196,6 +198,7 @@ export async function continueBackup(env, at = now(), pageBudget = 12) {
         ...file,
         key,
         count: rows.length,
+        bytes: textBytes(encrypted).byteLength,
         tenants: [...new Set(rows.map((r) => r.tenant_id).filter(Boolean))],
       });
       if (!(await r.advanceBackup(active.id, active.manifest_json, manifest)))
@@ -213,11 +216,19 @@ export async function continueBackup(env, at = now(), pageBudget = 12) {
       !(await r.snapshotMedia(active.id, (manifest.media_files || []).length));
     if (done) {
       const key = active.id + "/manifest.enc";
-      await env.CHANNEL_BACKUPS.put(
-        key,
-        JSON.stringify(await seal(env, manifest, key)),
+      const encrypted = JSON.stringify(await seal(env, manifest, key));
+      await env.CHANNEL_BACKUPS.put(key, encrypted);
+      const size =
+        manifest.files.reduce((n, f) => n + (f.bytes || 0), 0) +
+        (manifest.media_files || []).reduce((n, f) => n + (f.bytes || 0), 0) +
+        textBytes(encrypted).byteLength;
+      await r.advanceBackup(
+        active.id,
+        active.manifest_json,
+        manifest,
+        true,
+        size,
       );
-      await r.advanceBackup(active.id, active.manifest_json, manifest, true);
     }
     return { done, id: active.id, tables: manifest.tables };
   } catch (e) {

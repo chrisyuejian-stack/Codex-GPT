@@ -57,7 +57,7 @@ function actionFor(row, user, policy) {
     confirm_submission: ["attendance", "confirm"],
     contact_lead: ["leads", "update"],
     renewal: ["packages", "read"],
-    schedule_makeup: ["lessons", "create"],
+    schedule_makeup: ["attendance", "create"],
     student_followup: ["followup", "update"],
     student_stage: ["students", "update"],
     resolve_payment: ["tuition", "update"],
@@ -65,7 +65,29 @@ function actionFor(row, user, policy) {
   };
   return {
     kind: row.action,
-    enabled: can(user, policy, ...checks[row.action], scope),
+    version: row.entity_version,
+    ...(row.type === "attendance" || row.type === "makeup"
+      ? {
+          lesson_version: row.lesson_version,
+          detail_url: "/api/lessons/" + row.lesson_id + "/review",
+        }
+      : {}),
+    ...(row.type === "makeup"
+      ? {
+          decision_version: row.decision_version,
+          original_participant_version: row.entity_version,
+          original_lesson_version: row.lesson_version,
+        }
+      : {}),
+    enabled:
+      can(user, policy, ...checks[row.action], scope) &&
+      (row.action !== "renewal" || can(user, policy, "exports", "export")),
+    ...(row.type === "makeup"
+      ? {
+          can_skip: can(user, policy, "attendance", "update"),
+          can_create_lesson: can(user, policy, "lessons", "create"),
+        }
+      : {}),
     id: row.entity_id,
     ...(row.student_id ? { student_id: row.student_id } : {}),
     ...(row.lesson_id ? { lesson_id: row.lesson_id } : {}),
@@ -80,7 +102,31 @@ function actionFor(row, user, policy) {
   };
 }
 async function dto(row, user, policy, at) {
+  const today = new Date(at + 28800000).toISOString().slice(0, 10),
+    dueDay = row.effective_due
+      ? new Date(row.effective_due + 28800000).toISOString().slice(0, 10)
+      : null;
+  const overdue_days =
+    !row.is_snoozed && dueDay
+      ? Math.max(
+          0,
+          Math.round((Date.parse(today) - Date.parse(dueDay)) / 86400000),
+        )
+      : 0;
   return {
+    id: row.entity_id,
+    group:
+      dueDay && dueDay < today
+        ? "overdue"
+        : dueDay === today
+          ? "today"
+          : "later",
+    overdue_days,
+    snooze_mode: ["lead_followup:lead", "student_followup:task"].includes(
+      row.type + ":" + row.subtype,
+    )
+      ? "business_date"
+      : "personal",
     item_key: row.item_key,
     type: row.type,
     subtype: row.subtype,
@@ -88,7 +134,7 @@ async function dto(row, user, policy, at) {
     reason: row.reason,
     due_at: atIso(row.due_at),
     effective_due_at: atIso(row.effective_due),
-    overdue: !row.is_snoozed && row.effective_due > 0 && row.effective_due < at,
+    overdue: overdue_days > 0,
     snoozed_until: atIso(row.snoozed_until),
     assignee: {
       id: row.owner_id || null,
@@ -204,7 +250,38 @@ export async function todoInboxApi(req, env, resolved, user, policy, url) {
         : morning +
           86400000 *
             (d.until === "tomorrow" ? 1 : (8 - day.getUTCDay()) % 7 || 7);
-    await r.snoozeTodo(row, until, user);
+    if (
+      ["lead_followup:lead", "student_followup:task"].includes(
+        row.type + ":" + row.subtype,
+      ) &&
+      d.until !== "clear"
+    ) {
+      const module = row.type === "lead_followup" ? "leads" : "followup",
+        resource = row.type === "lead_followup" ? "leads" : "followup_tasks",
+        field = row.type === "lead_followup" ? "next_followup" : "due_date";
+      if (!can(user, policy, module, "update"))
+        fail(403, "没有修改该业务到期日的权限", "forbidden");
+      const revision = await r.dataVersion(),
+        old = await r.businessGet(resource, row.entity_id);
+      if (!old || old.version !== row.entity_version)
+        fail(409, "业务记录已变化，请刷新", "version_conflict");
+      await r.commitBusiness(
+        revision,
+        [
+          {
+            resource,
+            previous: old,
+            data: {
+              ...old,
+              [field]: new Date(until + 28800000).toISOString().slice(0, 10),
+            },
+          },
+        ],
+        user,
+        module,
+        "snooze",
+      );
+    } else await r.snoozeTodo(row, until, user);
     const refreshed = (
       await r.inbox({
         ...base,
@@ -214,7 +291,10 @@ export async function todoInboxApi(req, env, resolved, user, policy, url) {
         limit: 1,
       })
     ).items[0];
-    return json({ ok: true, item: await dto(refreshed, user, policy, at) });
+    return json({
+      ok: true,
+      item: refreshed ? await dto(refreshed, user, policy, at) : null,
+    });
   }
   fail(404, "不存在", "not_found");
 }

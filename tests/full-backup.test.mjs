@@ -104,6 +104,10 @@ test("全量备份：密码派生AES-GCM、随机盐/IV、完整表/哈希/设�
       Object.keys(fullBackupTables).sort(),
     );
     assert.ok(!("sessions" in payload.tables));
+    assert.equal(payload.migration_version, 32);
+    assert.equal(file.version, 1);
+    for (const [name, rows] of Object.entries(payload.tables))
+      assert.equal(payload.counts[name], rows.length);
     assert.ok(!JSON.stringify(payload).includes(s.f.env.BACKUP_KEY));
     assert.ok(!JSON.stringify(payload).includes(s.f.env.PW_PEPPER));
     assert.equal(
@@ -133,7 +137,11 @@ test("全量备份：密码派生AES-GCM、随机盐/IV、完整表/哈希/设�
     );
     const listed = ok(await request(s, "backups")).items;
     assert.equal(listed.length, 2);
-    assert.ok(listed.every((x) => x.status === "completed" && x.download_url));
+    assert.ok(
+      listed.every(
+        (x) => x.status === "completed" && x.download_url && x.size_bytes > 0,
+      ),
+    );
   }));
 
 test("全量备份：仅主管，财务/教务/顾问/学员不能导出、预览、下载、确认或列表", () =>
@@ -398,6 +406,16 @@ test("自动备份：北京时间03点、R2冻结图库、列表/密码下载与
     assert.ok(entry);
     assert.equal(entry.status, "completed");
     assert.ok(entry.download_url);
+    assert.ok(entry.size_bytes > 0);
+    const objects = await s.f.env.CHANNEL_BACKUPS.list({
+      prefix: entry.id + "/",
+    });
+    let bytes = 0;
+    for (const x of objects.objects)
+      bytes += Buffer.byteLength(
+        await (await s.f.env.CHANNEL_BACKUPS.get(x.key)).text(),
+      );
+    assert.equal(entry.size_bytes, bytes);
     const manifestObject = await s.f.env.CHANNEL_BACKUPS.get(
       entry.id + "/manifest.enc",
     );
@@ -642,4 +660,56 @@ test("历史停用个人账号及已归档档案可完整往返，仍拒绝有�
         .prepare("SELECT deleted_at FROM students WHERE id=?")
         .get(s.students[0]).deleted_at,
     );
+  }));
+
+test("恢复预览逐表对比当前行数和差值，文件内行数不匹配与0031旧迁移版本拒绝", () =>
+  school(async (s) => {
+    const file = await exportFile(s);
+    ok(await request(s, "data/students", "POST", { name: "预览前新增" }));
+    const result = ok(await preview(s, file), 201);
+    assert.equal(result.migration_version, 32);
+    assert.equal(result.current_counts.students, 3);
+    assert.deepEqual(result.comparison.students, {
+      backup: 2,
+      current: 3,
+      delta: -1,
+    });
+    let payload = await passwordOpen(file, PASSWORD);
+    payload.counts.students = 999;
+    ok(await preview(s, await passwordSeal(payload, PASSWORD)), 422);
+    payload = await passwordOpen(file, PASSWORD);
+    payload.schema_version = 31;
+    payload.migration_version = 31;
+    const denied = await preview(s, await passwordSeal(payload, PASSWORD));
+    ok(denied, 422);
+    assert.match(denied.body.message, /0032/);
+  }));
+
+test("不补课决定进入全量备份并整体恢复，恢复不会残留更新后的决定", () =>
+  school(async (s) => {
+    await pack(s);
+    const lid = await lesson(s, "2026-11-09T09:00");
+    ok(await status(s, lid, "student_leave"));
+    const item = ok(await request(s, "todo/inbox?scope=all&type=makeup"))
+      .items[0];
+    const d = {
+      version: item.primary_action.version,
+      decision_version: 0,
+      skip: true,
+      reason: "确认不补",
+    };
+    ok(await request(s, "todo/makeups/" + item.id + "/skip", "POST", d));
+    const file = await exportFile(s),
+      decoded = await passwordOpen(file, PASSWORD);
+    assert.equal(decoded.tables.makeup_decisions[0].skipped, 1);
+    ok(
+      await request(s, "todo/makeups/" + item.id + "/skip", "POST", {
+        ...d,
+        decision_version: 1,
+        skip: false,
+      }),
+    );
+    const p = ok(await preview(s, file), 201);
+    ok(await confirm(s, p.id));
+    assert.equal((await s.r.makeupDecision(item.id)).skipped, 1);
   }));

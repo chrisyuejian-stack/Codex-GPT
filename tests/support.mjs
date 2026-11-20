@@ -187,7 +187,7 @@ export async function fixture({migrateIncome=true,migrateSettings=true,migratePl
   if(migrateSettings && migrateStorage) db.raw.exec(await readFile(new URL('../migrations/0027_gallery_storage.sql',import.meta.url),'utf8'));
   if(migrateSettings && migratePlans && migrateStorage) db.raw.exec(await readFile(new URL('../migrations/0028_plan_v2.sql',import.meta.url),'utf8'));
   if (migrateRemoval) db.raw.exec(await readFile(new URL("../migrations/0029_remove_modules.sql", import.meta.url), "utf8"));
-  if(migrateSingleTenant){db.raw.exec(await readFile('migrations/0030_single_tenant.sql','utf8'));db.raw.exec(await readFile('migrations/0031_backup_and_todo.sql','utf8'));}
+  if(migrateSingleTenant){db.raw.exec(await readFile('migrations/0030_single_tenant.sql','utf8'));db.raw.exec(await readFile('migrations/0031_backup_and_todo.sql','utf8'));db.raw.exec(await readFile('migrations/0032_backup_todo_actions.sql','utf8'));}
  const env={CHANNEL_DB:db,CHANNEL_BACKUPS:new LocalR2(),CHANNEL_MEDIA:new LocalR2(),APP_HOST:'school.test',FIELD_KEY:b64(bytes(32)),BACKUP_KEY:b64(bytes(32)),HMAC_KEY:b64(bytes(32)),PW_PEPPER:b64(bytes(32)),SETUP_KEY:b64(bytes(32))};
  env.ASSETS={fetch:async(req)=>{const path=new URL(req.url).pathname,map={'/tenant.html':'src/tenant/index.html','/assets/tenant.js':'src/tenant/app.js','/assets/tenant.css':'src/tenant/app.css'};if(!map[path])return new Response('not found',{status:404});
  if(process.env.TEST_BUNDLE!=='1'&&['/assets/tenant.js','/assets/tenant.css'].includes(path)){const a=await tenantAssets();return new Response(path.endsWith('.js')?a.js:a.css,{headers:{'Content-Type':path.endsWith('.js')?'text/javascript':'text/css'}});}
