@@ -1,1 +1,1040 @@
-/* 枫琴教务中心 · teacher 页面样式。打包在 fq.css 之前；选择器用 html 前缀并以本页根类名开头。 */
+/* 枫琴教务中心 · teacher 页面样式。打包在 fq.css 之前；选择器用 html 前缀并以本页根类名开头。
+   设计稿 05（手机，≤760px）：深色顶部、今天的课按时间排列、待点名卡片内点名与点评、底部磨砂导航；
+   电脑版与学员端同一外壳：深茄紫侧栏 + 米白底光晕 + 磨砂卡片。 */
+
+html .fq-teacher {
+  --tc-ink: #2a1f3e;
+  --tc-sub: #655c72;
+  --tc-faint: #726a7e;
+  --tc-violet: #6a35b8;
+  --tc-plum: #8e2f8c;
+  --tc-amber: #f6a54a;
+  --tc-red: #c2331f;
+  --tc-line: rgba(214, 203, 188, 0.62);
+  --tc-input: #dcd3c6;
+  --tc-card: rgba(255, 253, 249, 0.74);
+  --tc-solid: #fffdf9;
+  --tc-serif: "FQ Cormorant", "Cormorant Garamond", "Cormorant", "Iowan Old Style", Georgia, serif;
+  --tc-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --tc-ribbon: linear-gradient(90deg, #7a3fc0, #e8352e 55%, #f6a54a);
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  font-family: var(--tc-sans);
+  font-size: 14px;
+  color: var(--tc-ink);
+  background:
+    radial-gradient(900px 520px at 88% -8%, rgba(122, 63, 192, 0.13), transparent 62%),
+    radial-gradient(760px 480px at 30% 105%, rgba(246, 165, 74, 0.12), transparent 60%),
+    #f4efe8;
+  background-attachment: fixed;
+}
+html .fq-teacher *,
+html .fq-teacher *::before,
+html .fq-teacher *::after {
+  box-sizing: border-box;
+}
+html .fq-teacher button {
+  font: inherit;
+  color: inherit;
+}
+html .fq-teacher .fq-logo {
+  display: block;
+  flex: none;
+  width: 84px;
+  height: 50px;
+  background: var(--fq-logo-light) left center / contain no-repeat;
+}
+html .fq-teacher .fq-tc-muted {
+  color: var(--tc-sub);
+}
+html .fq-teacher .fq-tc-eb {
+  margin: 0;
+  font-family: var(--tc-serif);
+  font-style: italic;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--tc-plum);
+}
+html .fq-teacher .fq-tc-link {
+  min-height: 44px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--tc-violet);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+html .fq-teacher .fq-tc-link:hover {
+  color: #4e2490;
+}
+html .fq-teacher .fq-tc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #d8cfc2;
+  border-radius: 10px;
+  background: var(--tc-solid);
+  color: #4a4158;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+html .fq-teacher .fq-tc-btn:hover {
+  border-color: #c9bdad;
+  color: var(--tc-ink);
+}
+html .fq-teacher .fq-tc-av {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--tc-amber);
+  color: var(--tc-ink);
+  font-weight: 700;
+  font-size: 14px;
+}
+html .fq-teacher .fq-tc-av.is-big {
+  width: 56px;
+  height: 56px;
+  font-size: 22px;
+}
+
+/* ---------- 电脑版外壳 ---------- */
+html .fq-teacher.is-desk {
+  display: flex;
+  align-items: stretch;
+  padding-top: 5px;
+}
+html .fq-teacher .fq-tc-side {
+  position: sticky;
+  top: 5px;
+  flex: 0 0 244px;
+  width: 244px;
+  height: calc(100vh - 5px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 14px 18px;
+  background: linear-gradient(180deg, rgba(42, 31, 62, 0.97), rgba(48, 36, 70, 0.93));
+  color: #d3c9e1;
+}
+html .fq-teacher .fq-tc-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 10px;
+}
+html .fq-teacher .fq-tc-brand b {
+  display: block;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+html .fq-teacher .fq-tc-brand i {
+  display: block;
+  font-family: var(--tc-serif);
+  font-style: italic;
+  font-size: 15px;
+  color: #bfb2d2;
+}
+html .fq-teacher .fq-tc-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+html .fq-teacher .fq-tc-nl {
+  margin: 0 0 6px;
+  padding: 0 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  color: #9d90b3;
+}
+html .fq-teacher .fq-tc-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #d3c9e1;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+html .fq-teacher .fq-tc-item svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+html .fq-teacher .fq-tc-item:hover {
+  background: #352a4b;
+  color: #ffffff;
+}
+html .fq-teacher .fq-tc-item[aria-current="page"] {
+  background: #43355e;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--tc-amber);
+}
+html .fq-teacher .fq-tc-me {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 4px 0;
+  border-top: 1px solid #44385a;
+  font-size: 13px;
+}
+html .fq-teacher .fq-tc-mecard {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px;
+}
+html .fq-teacher .fq-tc-mename {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.4;
+}
+html .fq-teacher .fq-tc-mename b {
+  font-weight: 500;
+  color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html .fq-teacher .fq-tc-mename small {
+  font-size: 12px;
+  color: #9d90b3;
+}
+html .fq-teacher .fq-tc-out {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #bfb2d2;
+  font-size: 12px;
+  cursor: pointer;
+}
+html .fq-teacher .fq-tc-out:hover {
+  color: #ffffff;
+  background: #352a4b;
+}
+html .fq-teacher .fq-tc-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+html .fq-teacher .fq-tc-top,
+html .fq-teacher .fq-tc-phead {
+  height: auto;
+}
+html .fq-teacher .fq-tc-top {
+  position: sticky;
+  top: 5px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 32px;
+  border-bottom: 1px solid rgba(214, 203, 188, 0.7);
+  background: rgba(251, 248, 243, 0.62);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+html .fq-teacher .fq-tc-top h1 {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+html .fq-teacher .fq-tc-sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--tc-sub);
+}
+html .fq-teacher.is-desk .fq-tc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 24px 32px 40px;
+}
+html .fq-teacher.is-desk .fq-tc-body > :not(.fq-tc-cols) {
+  width: 100%;
+  max-width: 880px;
+}
+/* 复用的课表、课酬页自带标题，外壳页头已显示，避免重复 */
+html .fq-teacher .fq-tc-body > h1:first-child,
+html .fq-teacher .fq-tc-body > .v-m-head:first-child h1 {
+  display: none;
+}
+html .fq-teacher .fq-tc-body > .v-m-head:first-child:not(:has(.ui-button, p)) {
+  display: none;
+}
+
+/* ---------- 今天：时间线 ---------- */
+html .fq-teacher .fq-tc-cols {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+html .fq-teacher .fq-tc-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+html .fq-teacher .fq-tc-aside {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  position: sticky;
+  top: 112px;
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+html .fq-teacher .fq-tc-panel,
+html .fq-teacher .fq-tc-card,
+html .fq-teacher .fq-tc-row,
+html .fq-teacher .fq-tc-todo {
+  min-width: 0;
+  background-color: var(--tc-card);
+  border: 1px solid var(--tc-line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(42, 31, 62, 0.04), 0 8px 24px rgba(42, 31, 62, 0.05);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+}
+html .fq-teacher .fq-tc-time {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tc-violet);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+html .fq-teacher .fq-tc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+}
+html .fq-teacher .fq-tc-row:hover {
+  border-color: #cfc3b3;
+}
+html .fq-teacher .fq-tc-row:focus-visible,
+html .fq-teacher .fq-tc-done:focus-visible {
+  outline: 3px solid rgba(106, 53, 184, 0.35);
+  outline-offset: 2px;
+}
+html .fq-teacher .fq-tc-rowtext {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+html .fq-teacher .fq-tc-row .fq-tc-time {
+  font-size: 14px;
+}
+html .fq-teacher .fq-tc-rowtext strong {
+  font-size: 15px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html .fq-teacher .fq-tc-rowtext small {
+  font-size: 12px;
+  color: var(--tc-sub);
+}
+html .fq-teacher .fq-tc-rel {
+  flex: none;
+  font-size: 12px;
+  color: var(--tc-sub);
+  white-space: nowrap;
+}
+html .fq-teacher .fq-tc-rel.is-now {
+  color: var(--tc-violet);
+  font-weight: 700;
+}
+html .fq-teacher .fq-tc-row.is-cancelled {
+  opacity: 0.6;
+}
+html .fq-teacher .fq-tc-row.is-cancelled strong {
+  text-decoration: line-through;
+}
+html .fq-teacher .fq-tc-donelist {
+  display: flex;
+  flex-direction: column;
+  margin-top: 2px;
+}
+html .fq-teacher .fq-tc-done {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 1px dashed rgba(214, 203, 188, 0.8);
+  background: transparent;
+  color: var(--tc-sub);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+html .fq-teacher .fq-tc-done:last-child {
+  border-bottom: 0;
+}
+html .fq-teacher .fq-tc-done b {
+  color: #2f7d4f;
+  font-size: 15px;
+}
+html .fq-teacher .fq-tc-missed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid rgba(194, 51, 31, 0.35);
+  border-radius: 12px;
+  background: rgba(194, 51, 31, 0.06);
+  color: var(--tc-red);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+html .fq-teacher .fq-tc-missed b {
+  flex: none;
+  font-size: 13px;
+}
+html .fq-teacher .fq-tc-note {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 253, 249, 0.6);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--tc-sub);
+}
+html .fq-teacher .fq-tc-note.is-warn {
+  background: rgba(246, 165, 74, 0.14);
+  color: #8a4b0e;
+}
+
+/* ---------- 待点名卡片（嵌入原点名表单） ---------- */
+html .fq-teacher .fq-tc-todo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 2px solid var(--tc-red);
+  background-color: rgba(255, 253, 249, 0.92);
+}
+html .fq-teacher .fq-tc-todo-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+html .fq-teacher .fq-tc-flag {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tc-red);
+}
+html .fq-teacher .fq-tc-todo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+html .fq-teacher .fq-tc-todo-info strong {
+  font-size: 17px;
+  font-weight: 700;
+}
+html .fq-teacher .fq-tc-todo-info small {
+  font-size: 13px;
+  color: var(--tc-sub);
+}
+html .fq-teacher .fq-tc-embed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+html .fq-teacher .fq-tc-embed > p {
+  margin: 0;
+  font-size: 13px;
+}
+/* 只留点名表单和原有提示；课程概要、已确认点评等在卡片头已显示或不需要。 */
+html .fq-teacher .fq-tc-embed > :not(form):not(.impact-note):not(.fq-tc-keep) {
+  display: none;
+}
+html .fq-teacher .fq-tc-embed .impact-note {
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(246, 165, 74, 0.14);
+  color: #8a4b0e;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+html .fq-teacher .fq-tc-embed form.v-m-checkin {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+html .fq-teacher .fq-tc-embed .v-m-roll,
+html .fq-teacher .fq-tc-embed .v-m-review {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+html .fq-teacher .fq-tc-embed .v-m-roll-head {
+  padding: 0 0 6px;
+}
+html .fq-teacher .fq-tc-embed .v-m-roll-head h2 {
+  font-size: 14px;
+  color: #4a4158;
+}
+html .fq-teacher .fq-tc-embed .v-m-roll-head .ui-button,
+html .fq-teacher .fq-tc-embed .v-m-roll-head .ui-button-face {
+  min-height: 44px;
+}
+html .fq-teacher .fq-tc-embed form.is-single .v-m-roll-head,
+html .fq-teacher .fq-tc-embed .v-m-review > .v-m-roll-head {
+  display: none;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: flex-start;
+  gap: 6px 10px;
+  margin: 0;
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px solid #f0eae0;
+  background: none;
+}
+html .fq-teacher .fq-tc-embed form.is-single .c3-checkin-row {
+  padding-top: 0;
+  border-top: 0;
+}
+html .fq-teacher .fq-tc-embed form.is-single .c3-checkin-row > strong {
+  display: none;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row > strong {
+  font-size: 15px;
+  font-weight: 500;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row > strong {
+  order: 0;
+  flex: 1 1 100%;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row > .c2-attendance-buttons {
+  order: 2;
+  flex: 1 1 100%;
+  margin: 0 0 2px;
+  justify-self: stretch;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row > section {
+  order: 3;
+  flex: 1 1 0;
+  min-width: 0;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row > .ui-menu-holder {
+  order: 4;
+  flex: none;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row .ui-disclosure-toggle {
+  min-height: 44px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--tc-violet);
+  font-size: 13px;
+  font-weight: 500;
+  justify-content: flex-start;
+  gap: 4px;
+  white-space: nowrap;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row .ui-menu-holder .ui-button-face {
+  padding: 0 12px;
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  color: var(--tc-sub);
+  font-size: 13px;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row > small {
+  order: 1;
+  flex: 1 1 100%;
+  font-size: 12px;
+  color: var(--tc-sub);
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row > section,
+html .fq-teacher .fq-tc-embed .c3-checkin-row > .ui-menu-holder {
+  grid-column: 1 / -1;
+}
+html .fq-teacher .fq-tc-embed .c2-attendance-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: none;
+}
+html .fq-teacher .fq-tc-embed .c2-attendance-buttons > .ui-button {
+  min-width: 0;
+  min-height: 46px;
+  border-radius: 10px;
+}
+html .fq-teacher .fq-tc-embed .c2-attendance-buttons > .ui-button > .ui-button-face {
+  width: 100%;
+  height: 46px;
+  min-height: 46px;
+  padding: 0;
+  justify-content: center;
+  border: 1px solid var(--tc-input);
+  border-radius: 10px;
+  background: var(--tc-solid);
+  color: var(--tc-ink);
+  font-size: 15px;
+  font-weight: 400;
+  box-shadow: none;
+}
+html .fq-teacher .fq-tc-embed .c2-attendance-buttons > .ui-button[aria-pressed="true"] > .ui-button-face {
+  border-color: var(--tc-ink);
+  background: var(--tc-ink);
+  color: #f7f1e8;
+  font-weight: 500;
+}
+html .fq-teacher .fq-tc-embed .c2-attendance-buttons > .ui-button[data-attendance="student_leave"][aria-pressed="true"] > .ui-button-face {
+  border-color: #b5671b;
+  background: #b5671b;
+}
+html .fq-teacher .fq-tc-embed .c2-attendance-buttons > .ui-button[data-attendance="no_show"][aria-pressed="true"] > .ui-button-face {
+  border-color: var(--tc-red);
+  background: var(--tc-red);
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row .ui-disclosure,
+html .fq-teacher .fq-tc-embed .c3-checkin-row details {
+  font-size: 13px;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row .ui-menu-holder {
+  justify-self: start;
+}
+html .fq-teacher .fq-tc-embed .c3-checkin-row .ui-menu-holder .ui-button,
+html .fq-teacher .fq-tc-embed .c3-checkin-row .ui-menu-holder .ui-button-face,
+html .fq-teacher .fq-tc-embed .c3-checkin-row .ui-disclosure summary,
+html .fq-teacher .fq-tc-embed .c3-checkin-row .ui-disclosure > button {
+  min-height: 44px;
+}
+html .fq-teacher .fq-tc-embed .v-m-review label,
+html .fq-teacher .fq-tc-embed .c3-checkin-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #4a4158;
+}
+html .fq-teacher .fq-tc-embed textarea {
+  width: 100%;
+  min-height: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--tc-input);
+  border-radius: 10px;
+  background: var(--tc-solid);
+  color: var(--tc-ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+html .fq-teacher .fq-tc-embed textarea:focus {
+  outline: 2px solid rgba(106, 53, 184, 0.35);
+  outline-offset: 1px;
+  border-color: var(--tc-violet);
+}
+html .fq-teacher .fq-tc-embed .v-m-submitbar {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+html .fq-teacher .fq-tc-embed .v-m-submitbar .ui-button,
+html .fq-teacher .fq-tc-embed .v-m-submitbar .ui-button-face {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+}
+html .fq-teacher .fq-tc-embed .v-m-submitbar .ui-button-face {
+  justify-content: center;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tc-violet);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+}
+html .fq-teacher .fq-tc-embed .v-m-submitbar .ui-button:hover .ui-button-face {
+  background: #5a2aa3;
+}
+html .fq-teacher .fq-tc-embed .v-m-submitbar small {
+  text-align: center;
+  font-size: 12px;
+  color: var(--tc-faint);
+}
+html .fq-teacher .fq-tc-embed .form-error {
+  margin: 0;
+  color: var(--tc-red);
+  font-size: 13px;
+}
+
+/* ---------- 电脑版今天：右侧概览 ---------- */
+html .fq-teacher .fq-tc-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+}
+html .fq-teacher .fq-tc-panel h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+html .fq-teacher .fq-tc-panel p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+html .fq-teacher .fq-tc-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+html .fq-teacher .fq-tc-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+html .fq-teacher .fq-tc-stat b {
+  font-family: var(--tc-serif);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--tc-violet);
+  font-variant-numeric: lining-nums;
+}
+html .fq-teacher .fq-tc-stat b.is-red {
+  color: var(--tc-red);
+}
+html .fq-teacher .fq-tc-stat span {
+  font-size: 12px;
+  color: var(--tc-sub);
+}
+html .fq-teacher .fq-tc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+/* ---------- 我的 ---------- */
+html .fq-teacher .fq-tc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 16px;
+}
+html .fq-teacher .fq-tc-card.fq-tc-mebox {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+}
+html .fq-teacher .fq-tc-mebox > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+html .fq-teacher .fq-tc-mebox b {
+  font-size: 17px;
+}
+html .fq-teacher .fq-tc-mebox span {
+  font-size: 13px;
+}
+html .fq-teacher .fq-tc-card.fq-tc-menu {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+html .fq-teacher .fq-tc-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 0 18px;
+  border: 0;
+  border-top: 1px solid #f0eae0;
+  background: transparent;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+html .fq-teacher .fq-tc-menu-item:first-child {
+  border-top: 0;
+}
+html .fq-teacher .fq-tc-menu-item:hover {
+  background: rgba(106, 53, 184, 0.05);
+}
+html .fq-teacher .fq-tc-menu-item.is-danger {
+  color: var(--tc-red);
+}
+html .fq-teacher.is-desk .fq-tc-card.fq-tc-mebox,
+html .fq-teacher.is-desk .fq-tc-card.fq-tc-menu,
+html .fq-teacher.is-desk .fq-tc-body > .fq-tc-note {
+  max-width: 560px;
+}
+
+/* 复用的课表、课程详情、课酬：卡片换成磨砂 */
+html .fq-teacher .v-m-lesson,
+html .fq-teacher .v-m-day:not(.is-on),
+html .fq-teacher .v-panel,
+html .fq-teacher .v-m-sum,
+html .fq-teacher .v-m-roll,
+html .fq-teacher .v-m-review {
+  background-color: var(--tc-card);
+  border-color: var(--tc-line);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+}
+html .fq-teacher .v-m-hero {
+  background: linear-gradient(120deg, rgba(42, 31, 62, 0.97), rgba(70, 44, 104, 0.93));
+}
+html .fq-teacher.is-desk .fq-tc-embed .c2-attendance-buttons {
+  max-width: 480px;
+}
+html .fq-teacher.is-desk .fq-tc-embed .v-m-submitbar {
+  align-items: flex-start;
+}
+html .fq-teacher.is-desk .fq-tc-embed .v-m-submitbar .ui-button {
+  width: auto;
+  min-width: 240px;
+}
+html .fq-teacher.is-desk .fq-tc-body > form.v-m-checkin .v-m-submitbar {
+  bottom: 0;
+}
+
+/* ---------- 手机版 ---------- */
+html .fq-teacher.is-phone {
+  display: flex;
+  flex-direction: column;
+  padding: 5px 0 calc(78px + env(safe-area-inset-bottom));
+  background:
+    radial-gradient(420px 300px at 90% 30%, rgba(122, 63, 192, 0.14), transparent 65%),
+    radial-gradient(380px 300px at 0% 95%, rgba(246, 165, 74, 0.14), transparent 60%),
+    #f6f2ec;
+  background-attachment: fixed;
+}
+html .fq-teacher .fq-tc-phead {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 18px 20px 20px;
+  background: #2a1f3e;
+  color: #f7f1e8;
+}
+html .fq-teacher .fq-tc-phead.is-today {
+  gap: 14px;
+  padding: 24px 20px 22px;
+}
+html .fq-teacher .fq-tc-prow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+html .fq-teacher .fq-tc-phead .fq-logo {
+  width: 64px;
+  height: 38px;
+}
+html .fq-teacher .fq-tc-phead .fq-tc-eb {
+  color: #f2a14a;
+}
+html .fq-teacher .fq-tc-phead:not(.is-today) .fq-tc-eb {
+  margin-top: 2px;
+  font-size: 14px;
+}
+html .fq-teacher .fq-tc-phead h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+html .fq-teacher .fq-tc-phead:not(.is-today) h1 {
+  font-size: 20px;
+}
+html .fq-teacher .fq-tc-rule {
+  display: block;
+  width: 72px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #7b3fc4, #e0452e, #f2a14a);
+}
+html .fq-teacher .fq-tc-avbtn {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+html .fq-teacher.is-phone .fq-tc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px 16px 20px;
+}
+html .fq-teacher.is-phone .fq-tc-cols {
+  display: block;
+}
+html .fq-teacher.is-phone .fq-tc-line {
+  max-width: none;
+}
+html .fq-teacher .fq-tc-tabs {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 8;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  padding: 6px 4px max(14px, env(safe-area-inset-bottom));
+  background: rgba(255, 253, 249, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(214, 203, 188, 0.7);
+}
+html .fq-teacher .fq-tc-tab {
+  height: 50px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #4a4158;
+  font-size: 12px;
+  cursor: pointer;
+}
+html .fq-teacher .fq-tc-tab i {
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
+  background: transparent;
+}
+html .fq-teacher .fq-tc-tab[aria-current="page"] {
+  color: var(--tc-violet);
+  font-weight: 700;
+}
+html .fq-teacher .fq-tc-tab[aria-current="page"] i {
+  background: var(--tc-violet);
+}
+/* 课程详情页的提交栏停在底部导航上方；外壳底部留白保持（覆盖 .v-personal:has(.v-m-submitbar)）。 */
+html .fq-teacher.is-phone.v-personal {
+  padding-bottom: calc(78px + env(safe-area-inset-bottom));
+}
+html .fq-teacher.is-phone .fq-tc-body:has(> form .v-m-submitbar) {
+  padding-bottom: 20px;
+}
+html .fq-teacher.is-phone .fq-tc-body > form .v-m-submitbar {
+  bottom: calc(70px + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 1100px) and (min-width: 761px) {
+  html .fq-teacher .fq-tc-side {
+    flex-basis: 212px;
+    width: 212px;
+  }
+  html .fq-teacher .fq-tc-top,
+  html .fq-teacher.is-desk .fq-tc-body {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  html .fq-teacher .fq-tc-aside {
+    flex-basis: 260px;
+  }
+}
+@media (max-width: 960px) and (min-width: 761px) {
+  html .fq-teacher .fq-tc-cols {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  html .fq-teacher .fq-tc-aside {
+    position: static;
+    flex-basis: auto;
+    max-width: 720px;
+  }
+}
