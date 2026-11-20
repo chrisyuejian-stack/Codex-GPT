@@ -123,6 +123,21 @@ const apiCache = new Map(),
 const apiEpoch = new Map();
 // 保存操作计数：每次可能改了数据的写操作加一，页面自己的短期缓存据此判断是否还能用。
 let apiWriteSeq = 0;
+// 启动预取：页面刚打开、/api/me 还没回来时，按上次登录的身份先把首屏数据请求出去（老师端、学员端）。
+// 每条只给第一次读取用一次；20 秒内且期间没有写操作才算数，否则照常重新请求。
+const apiWarm = new Map(),
+  WARM_MS = 20 * 1000,
+  BOOT_HINT = "fq_boot_hint";
+function apiPrefetch(paths) {
+  for (const path of paths || []) {
+    const key = apiKey(path);
+    if (apiWarm.has(key) || apiInflight.has(key)) continue;
+    const pending = apiGet(path);
+    pending.catch(() => {});
+    apiWarm.set(key, { pending, at: Date.now(), seq: apiWriteSeq });
+  }
+  setTimeout(() => apiWarm.clear(), WARM_MS);
+}
 const apiRule = (path) => API_CACHE_RULES.find((r) => r.re.test(path));
 const apiOptionKind = (path) => apiRule(path)?.kind || "";
 // 统一写法：data/<选项>?offset=0&q= 与 data/<选项>?offset=0 是同一份数据。只去掉空的 q，其他参数原样保留。
@@ -175,6 +190,17 @@ async function api(path, method = "GET", data) {
     kind = apiOptionKind(key),
     hit = apiCache.get(key);
   if (hit && Date.now() - hit.at < (apiRule(key)?.ms || 0)) return structuredClone(hit.value);
+  const warm = apiWarm.get(key);
+  if (warm) {
+    apiWarm.delete(key);
+    if (Date.now() - warm.at < WARM_MS && warm.seq === apiWriteSeq) {
+      try {
+        return structuredClone(await warm.pending);
+      } catch {
+        // 预取失败（断网、权限变化等）：下面按正常流程重新请求一次，报错照原样给调用方。
+      }
+    }
+  }
   if (apiInflight.has(key)) return structuredClone(await apiInflight.get(key));
   const epoch = apiEpoch.get(kind) || 0,
     pending = apiGet(path);
@@ -197,6 +223,7 @@ const BATCH_EXACT = new Set([
   "c2/students", "c2/students/counts", "credits/packages", "schedule-templates",
   "data/schedule_templates", "data/schedule_enrollments", "data/teachers", "data/locations",
   "data/course_types", "data/course_categories", "data/students", "todo/summary",
+  "student/comments", "c3/student-comments", "credits/payments",
 ]);
 const batchable = (path) => {
   const name = path.split("?")[0];
@@ -1226,6 +1253,8 @@ function shell() {
       const wantCounts = !financeOnly && enabled("home");
       const countsRequest = wantCounts ? api("todo/summary") : null;
       countsRequest?.catch(() => {});
+      // 枫琴：侧栏“待办”角标与收件箱同一个数（fq-today.js 提供 fqTodoCount，读 /api/todo/inbox 的 total），和上面同时发出。
+      const inboxRequest = wantCounts && typeof globalThis.fqTodoCount === "function" ? globalThis.fqTodoCount().catch(() => null) : null;
       if (wantCounts) {
         const counts = await countsRequest;
         todoCounts = counts;
@@ -1236,8 +1265,7 @@ function shell() {
             tab.append(el("span", String(n), { class: "ui-tab-count" }));
         }
         moveTabInk(true);
-        // 枫琴：侧栏“待办”角标与收件箱同一个数（fq-today.js 提供 fqTodoCount，读 /api/todo/inbox 的 total）。
-        const inboxTotal = typeof globalThis.fqTodoCount === "function" ? await globalThis.fqTodoCount().catch(() => null) : null;
+        const inboxTotal = await inboxRequest;
         const n =
           inboxTotal ??
           (counts.unchecked_lessons || 0) +
@@ -1816,12 +1844,31 @@ function applyTheme(color) {
   }
   themeSheet.replaceSync(":root{--theme:" + color + "}");
 }
+// 品牌字体与登录页大图在单独的样式文件里，脚本一开始就挂上，不挡首屏渲染（字体到了再换上）。
+try {
+  const deferred = document.querySelector('meta[name="fq-deferred-css"]')?.content;
+  if (deferred && !document.querySelector('link[data-fq-deferred]'))
+    document.head.append(el("link", null, { rel: "stylesheet", href: deferred, "data-fq-deferred": "" }));
+} catch {}
 (async () => {
   try {
     // 枫琴教务中心：单机构，所有角色走 /login，接口统一在根 /api/。
     const isLogin = location.pathname.endsWith("/login");
     const meRequest = isLogin ? null : api("me");
     meRequest?.catch(() => {});
+    // 上次是老师或学员：不等 /api/me，先把首屏数据和它一起请求（整段脚本执行完后才跑，各页面的预取函数已就位）。
+    if (!isLogin) {
+      let hint = null;
+      try {
+        hint = JSON.parse(localStorage.getItem(BOOT_HINT) || "null");
+      } catch {}
+      if (hint?.role)
+        Promise.resolve().then(() => {
+          try {
+            apiPrefetch(globalThis.fqPrefetch?.[hint.role]?.paths(hint.flags || {}));
+          } catch {}
+        });
+    }
     brand = await api("public/brand?lite=1").catch(() => ({ display_name: "枫琴教务中心" }));
     brand.display_name = "枫琴教务中心";
     if (isLogin) {
@@ -1832,6 +1879,14 @@ function applyTheme(color) {
     } else {
       me = await meRequest;
       scheduleView = me.policy.settings.default_schedule_view || "calendar";
+      // 记下身份和首屏要用的开关，下次打开时据此预取；员工或需要改密码时不预取。
+      try {
+        const roles = me.user.roles || [];
+        const role = me.user.must_change ? null : roles.includes("teacher") ? "teacher" : roles.includes("student") ? "student" : null;
+        const prefetch = role && globalThis.fqPrefetch?.[role];
+        if (prefetch) localStorage.setItem(BOOT_HINT, JSON.stringify({ role, flags: prefetch.flags() }));
+        else localStorage.removeItem(BOOT_HINT);
+      } catch {}
       shell();
     }
   } catch (e) {

@@ -334,7 +334,7 @@ html .fq-login-side {
   color: #f7f1e8;
   background:
     linear-gradient(90deg, rgba(42, 31, 62, 0.96) 0%, rgba(42, 31, 62, 0.82) 40%, rgba(42, 31, 62, 0.35) 100%),
-    var(--fq-login-photo) right center / cover no-repeat,
+    var(--fq-login-photo, none) right center / cover no-repeat,
     var(--fq-ink);
 }
 html .fq-login-side .fq-logo {

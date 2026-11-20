@@ -74,7 +74,11 @@ import {
 } from "./accounts.js";
 import { encrypt, decrypt } from "./crypto.js";
 import { randomId } from "./core.js";
-const staticTenant = new Set(["/assets/tenant.js", "/assets/tenant.css"]);
+const staticTenant = new Set([
+  "/assets/tenant.js",
+  "/assets/tenant.css",
+  "/assets/tenant-fonts.css",
+]);
 
 const offsetOf = (url) => {
   const n = Number(url.searchParams.get("offset") || 0);

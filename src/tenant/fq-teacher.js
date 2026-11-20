@@ -200,6 +200,17 @@
     if (isTeacher() && frame && root.contains(frame)) render();
   });
 
+  // 启动预取（见 app.js apiPrefetch）：“今天”页的两段课表，路径须与 todayPage 里 scheduleRows 发出的第一页完全一致。
+  const schedulePath = (from, to) => "schedule?from=" + from + "&to=" + to + "&offset=0";
+  (globalThis.fqPrefetch ||= {}).teacher = {
+    flags: () => ({ schedule: enabled("schedule") }),
+    paths: (f) => {
+      if (!f.schedule) return [];
+      const today = todayBJ();
+      return [schedulePath(today, dateShift(today, 1)), schedulePath(dateShift(today, -2), today)];
+    },
+  };
+
   personalShell = () => {
     // 初始密码未改：沿用原来的强制改密流程。
     if (!isTeacher() || me.user.must_change) return original();

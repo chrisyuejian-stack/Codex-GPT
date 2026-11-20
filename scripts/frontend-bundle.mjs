@@ -57,8 +57,6 @@ export async function tenantAssets() {
       "\n" +
       (await read("src/tenant/v2.css")) +
       "\n" +
-      (await read("src/tenant/fq-fonts.css")) +
-      "\n" +
       (await read("src/tenant/fq-assets.css")) +
       "\n" +
       (await read("src/tenant/fq-today.css")) +
@@ -72,5 +70,11 @@ export async function tenantAssets() {
       (await read("src/tenant/fq-backup.css")) +
       "\n" +
       (await read("src/tenant/fq.css")),
+    // 品牌字体与登录页大图（约 120KB 压缩后）单独成文件，由页面脚本在首屏之后加载，不挡渲染，
+    // 而且它们很少变，发新版时浏览器缓存仍然有效。
+    deferredCss:
+      (await read("src/tenant/fq-fonts.css")) +
+      "\n" +
+      (await read("src/tenant/fq-photo.css")),
   };
 }
