@@ -62,6 +62,9 @@ function yxNavRework(daily, manage, register) {
   // 财务排在管理的第一位。
   const finance = take(daily, "finance") || take(manage, "finance");
   if (finance) manage.unshift(finance);
+
+  // 各页面改版文件（fq-*.js）在这里调整自己的导航：hook(daily, manage, register)。
+  for (const hook of globalThis.fqNavHooks || []) hook(daily, manage, register);
 }
 // 一个导航页里放一个或几个设置区块。
 async function yxSettingsPage(c, keys) {
