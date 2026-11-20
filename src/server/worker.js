@@ -965,6 +965,16 @@ const worker = {
   async fetch(req, env) {
     const timerStart = performance.now(),
       timing = { trips: 0, dbMs: 0 };
+    // 前置 CDN（EdgeOne）回源专用域名：ORIGIN_HOST 的 DNS 始终指向 Pages，与用户访问的 APP_HOST 解耦。
+    // 从它进来的请求按 APP_HOST 处理，浏览器发来的 Origin（APP_HOST）因此仍能通过同源写入检查。
+    // 未设置 ORIGIN_HOST 时行为不变；直接在浏览器打开 ORIGIN_HOST 时写入会因 Origin 不符被拒绝。
+    if (env.ORIGIN_HOST) {
+      const incoming = new URL(req.url);
+      if (incoming.hostname === env.ORIGIN_HOST && env.APP_HOST && env.ORIGIN_HOST !== env.APP_HOST) {
+        incoming.hostname = env.APP_HOST;
+        req = new Request(incoming, req);
+      }
+    }
     env = {
       ...env,
       CHANNEL_DB: measureDatabase(env.CHANNEL_DB, timing),
