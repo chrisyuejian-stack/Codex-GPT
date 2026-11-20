@@ -1,10 +1,21 @@
-import { fixedTenant } from './tenant.js';
+import {
+  FULL_BACKUP_VERSION,
+  fullBackupTables,
+  fullTableSignature,
+  environmentFingerprint,
+} from "./full-backup-format.js";
+import { fixedTenant } from "./tenant.js";
 import { repo } from "./repo.js";
-import { backupTables, restoreTables, BUSINESS_SETTINGS } from "./backup-model.js";
+import {
+  backupTables,
+  restoreTables,
+  BUSINESS_SETTINGS,
+} from "./backup-model.js";
 import { bytes, unb64, textBytes, fail, now, randomId } from "./core.js";
 export function backupConfig(env) {
   if (
     !env.CHANNEL_BACKUPS ||
+    !env.CHANNEL_MEDIA ||
     !env.BACKUP_KEY ||
     unb64(env.BACKUP_KEY).length !== 32
   )
@@ -69,6 +80,10 @@ export async function startBackup(env, at = now()) {
     randomId("bak");
   const manifest = {
     schema: 10,
+    schema_version: FULL_BACKUP_VERSION,
+    table_signature: await fullTableSignature(),
+    environment_fingerprint: await environmentFingerprint(env),
+    media_files: [],
     id,
     created_at: at,
     kind: "full",
@@ -85,7 +100,7 @@ export async function startBackup(env, at = now()) {
   }
   const counts = await r.backupCounts(id);
   manifest.tables = Object.fromEntries(
-    Object.keys(backupTables).map((k) => [k, 0]),
+    Object.keys(fullBackupTables).map((k) => [k, 0]),
   );
   for (const row of counts) manifest.tables[row.table_name] = row.n;
   await r.advanceBackup(
@@ -125,7 +140,7 @@ export async function continueBackup(env, at = now(), pageBudget = 12) {
   // If a Cron invocation stopped after capturing rows, recover counts from the immutable snapshot.
   if (!manifest.tables) {
     manifest.tables = Object.fromEntries(
-      Object.keys(backupTables).map((k) => [k, 0]),
+      Object.keys(fullBackupTables).map((k) => [k, 0]),
     );
     for (const row of await r.backupCounts(active.id))
       manifest.tables[row.table_name] = row.n;
@@ -140,7 +155,33 @@ export async function continueBackup(env, at = now(), pageBudget = 12) {
           .reduce((n, x) => n + x.count, 0);
         return offset < count ? [{ table, offset }] : [];
       })[0];
-      if (!file) break;
+      if (!file) {
+        const image = await r.snapshotMedia(
+          active.id,
+          (manifest.media_files || []).length,
+        );
+        if (!image) break;
+        const object = await env.CHANNEL_MEDIA.get(image.r2_key);
+        if (!object)
+          fail(409, "图库文件缺失，自动备份未标记完成", "backup_media_missing");
+        const key = active.id + "/media/" + image.id + ".enc";
+        await env.CHANNEL_BACKUPS.put(
+          key,
+          JSON.stringify(
+            await seal(
+              env,
+              { key: image.r2_key, text: await object.text() },
+              key,
+            ),
+          ),
+        );
+        manifest.media_files ??= [];
+        manifest.media_files.push({ key, source_key: image.r2_key });
+        if (!(await r.advanceBackup(active.id, active.manifest_json, manifest)))
+          return { done: false, id: active.id, retry: true };
+        active.manifest_json = JSON.stringify(manifest);
+        continue;
+      }
       const rows = await r.snapshotPage(active.id, file.table, file.offset),
         key = active.id + "/" + file.table + "/" + file.offset + ".enc";
       await env.CHANNEL_BACKUPS.put(
@@ -161,12 +202,15 @@ export async function continueBackup(env, at = now(), pageBudget = 12) {
         return { done: false, id: active.id, retry: true };
       active.manifest_json = JSON.stringify(manifest);
     }
-    const done = Object.entries(manifest.tables).every(
+    const tablesDone = Object.entries(manifest.tables).every(
       ([table, count]) =>
         manifest.files
           .filter((x) => x.table === table)
           .reduce((n, x) => n + x.count, 0) === count,
     );
+    const done =
+      tablesDone &&
+      !(await r.snapshotMedia(active.id, (manifest.media_files || []).length));
     if (done) {
       const key = active.id + "/manifest.enc";
       await env.CHANNEL_BACKUPS.put(
@@ -175,15 +219,22 @@ export async function continueBackup(env, at = now(), pageBudget = 12) {
       );
       await r.advanceBackup(active.id, active.manifest_json, manifest, true);
     }
-    await retainBackups(env, at);
     return { done, id: active.id, tables: manifest.tables };
   } catch (e) {
-    await r.backupLog(
-      active.id,
-      "failed",
-      "备份分批处理失败；暂存快照保留，下一次定时任务继续；此前成功备份不受影响",
-    );
+    if (e.code === "backup_media_missing")
+      await r.failBackupSnapshot(
+        active.id,
+        "图库文件缺失，当前快照失败；下一次每日任务将重新捕获",
+      );
+    else
+      await r.backupLog(
+        active.id,
+        "failed",
+        "备份分批处理失败；暂存快照保留，下一次定时任务继续；此前成功备份不受影响",
+      );
     throw e;
+  } finally {
+    await retainBackups(env, at);
   }
 }
 export async function backupManifest(env, id) {
@@ -229,16 +280,35 @@ export async function backupPage(env, id, table, offset, tenantId) {
 
 const worker = {
   async scheduled(controller, env, ctx) {
-    const tenant=await fixedTenant(env);if(!tenant)return;
+    const tenant = await fixedTenant(env);
+    if (!tenant) return;
     if (controller.cron === "0 19 * * *")
       await startBackup(env, controller.scheduledTime);
     try {
       if (controller.cron === "*/5 * * * *") {
-
         await repo(env, tenant.id).aiCleanup(controller.scheduledTime);
       }
     } finally {
-      await continueBackup(env, controller.scheduledTime);
+      try {
+        await continueBackup(env, controller.scheduledTime);
+      } finally {
+        const scoped = repo(env, tenant.id),
+          expired = await scoped.expiredFullBackupFiles(
+            controller.scheduledTime - 30 * 86400000,
+          );
+        if (expired.length) {
+          await env.CHANNEL_BACKUPS.delete(expired.map((x) => x.r2_key));
+          await scoped.deleteFullBackupFiles(expired.map((x) => x.id));
+        }
+        const previews = await scoped.expiredRestorePreviews(
+          controller.scheduledTime,
+        );
+        if (previews.length) {
+          await env.CHANNEL_BACKUPS.delete(previews.map((x) => x.object_key));
+          await scoped.deleteRestorePreviews(previews.map((x) => x.id));
+        }
+        await scoped.cleanupFullSnapshots(controller.scheduledTime - 86400000);
+      }
     }
   },
   async fetch() {

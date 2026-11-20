@@ -5,9 +5,21 @@
   "custom_domain": "edu.fantasmearts.com",
   "backup_worker": "fengqin-backup-prod",
   "bindings": {
-    "CHANNEL_DB": {"type": "d1", "resource_name": "fengqin-crm-prod", "database_id": null},
-    "CHANNEL_MEDIA": {"type": "r2", "resource_name": "fengqin-media-prod", "public_access": false},
-    "CHANNEL_BACKUPS": {"type": "r2", "resource_name": "fengqin-backups-prod", "public_access": false}
+    "CHANNEL_DB": {
+      "type": "d1",
+      "resource_name": "fengqin-crm-prod",
+      "database_id": null
+    },
+    "CHANNEL_MEDIA": {
+      "type": "r2",
+      "resource_name": "fengqin-media-prod",
+      "public_access": false
+    },
+    "CHANNEL_BACKUPS": {
+      "type": "r2",
+      "resource_name": "fengqin-backups-prod",
+      "public_access": false
+    }
   },
   "variables": {
     "APP_HOST": "edu.fantasmearts.com",
@@ -16,11 +28,45 @@
     "AI_FAST_DAILY_LIMIT": "80",
     "AI_DEEP_DAILY_LIMIT": "50"
   },
-  "optional_variables": {"TENANT_ID": "可选；初始化时固定，否则首次初始化自动生成并保存；以后不可切换"},
-  "secret_names": ["FIELD_KEY", "BACKUP_KEY", "HMAC_KEY", "PW_PEPPER", "SETUP_KEY", "DEEPSEEK_API_KEY"],
-  "backup_worker_secrets": ["FIELD_KEY", "BACKUP_KEY"],
-  "crons": ["0 19 * * *", "*/5 * * * *"],
-  "database_target_migration": "0030_single_tenant.sql",
-  "isolation": {"production_and_preview_must_use_separate_resources": true, "reuse_legacy_database": false, "reuse_legacy_r2": false, "reuse_legacy_secrets": false},
-  "secret_configuration_note": "FIELD_KEY/BACKUP_KEY 为32字节Base64；HMAC_KEY/PW_PEPPER/SETUP_KEY 至少32字符。初始化成功后可移除SETUP_KEY。AI密钥仅在Pages，模型与额度允许主管内部设置覆盖；备份Worker与Pages使用相同库、桶和备份密钥。"
+  "optional_variables": {
+    "TENANT_ID": "可选；初始化时固定，否则首次初始化自动生成并保存；以后不可切换"
+  },
+  "secret_names": [
+    "FIELD_KEY",
+    "BACKUP_KEY",
+    "HMAC_KEY",
+    "PW_PEPPER",
+    "SETUP_KEY",
+    "DEEPSEEK_API_KEY"
+  ],
+  "backup_worker_secrets": [
+    "FIELD_KEY",
+    "BACKUP_KEY",
+    "HMAC_KEY",
+    "PW_PEPPER"
+  ],
+  "crons": [
+    "0 19 * * *",
+    "*/5 * * * *"
+  ],
+  "database_target_migration": "0031_backup_and_todo.sql",
+  "isolation": {
+    "production_and_preview_must_use_separate_resources": true,
+    "reuse_legacy_database": false,
+    "reuse_legacy_r2": false,
+    "reuse_legacy_secrets": false
+  },
+  "secret_configuration_note": "FIELD_KEY/BACKUP_KEY 为32字节Base64；HMAC_KEY/PW_PEPPER/SETUP_KEY 至少32字符。初始化成功后可移除SETUP_KEY。AI密钥仅在Pages，模型与额度允许主管内部设置覆盖；备份Worker与Pages使用相同库、桶及 FIELD_KEY/BACKUP_KEY/HMAC_KEY/PW_PEPPER。",
+  "backup_worker_bindings": [
+    "CHANNEL_DB",
+    "CHANNEL_MEDIA",
+    "CHANNEL_BACKUPS"
+  ],
+  "backup_format": {
+    "download": "fengqin-full-backup-v1",
+    "schema_version": 31,
+    "encryption": "PBKDF2-SHA256 (100000) + AES-256-GCM",
+    "max_plaintext_bytes": 16777216,
+    "max_upload_bytes": 25165824
+  }
 }

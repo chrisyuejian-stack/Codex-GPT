@@ -1,3 +1,5 @@
+import {todoInboxApi,todoInboxPath} from './todo-inbox.js';
+import {fullBackupApi,fullBackupPath} from './full-backup.js';
 import { feedbackPath, feedbackApi } from "./feedback.js";
 import { aiPath, aiApi } from "./ai.js";
 
@@ -111,6 +113,7 @@ async function serveStatic(env, req, url) {
 }
 
 const tenantAuthenticatedApi = (path) =>
+  fullBackupPath(path) || todoInboxPath(path) ||
   toolSettingsPath(path) ||
   aiPath(path) ||
   feedbackPath(path) ||
@@ -292,6 +295,10 @@ async function tenantApi(req, env, resolved, url, context) {
   )
     fail(403, "请先修改初始密码", "PASSWORD_CHANGE_REQUIRED");
 
+  const inboxResult=await todoInboxApi(req,env,resolved,user,policy,url);
+  if(inboxResult!==undefined)return inboxResult;
+  const backupResult=await fullBackupApi(req,env,resolved,user);
+  if(backupResult!==undefined)return backupResult;
   const aiSettings = await aiSettingsApi(req, env, resolved, user);
   if (aiSettings !== undefined) return aiSettings;
   const aiResult = await aiApi(req, env, resolved, user, policy, url);

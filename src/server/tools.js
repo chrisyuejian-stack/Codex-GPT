@@ -135,6 +135,9 @@ async function normalize(env, t, r, kind, d, user, old) {
     row.time = text(d, "time", 70, true);
     row.content = text(d, "content", 1000, true);
   } else if (kind === "leads") {
+    row.phone_enc=old?.phone_enc??null;
+    row.parent_phone_enc=old?.parent_phone_enc??null;
+    row.phone_last4=old?.phone_last4??'';
     if (old?.student_id) fail(409, "已转正线索不可更改，请编辑学员档案");
     row.name = text(d, "name", 100, true);
     row.grade = text(d, "grade");
