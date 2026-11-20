@@ -138,6 +138,32 @@ function apiPrefetch(paths) {
   }
   setTimeout(() => apiWarm.clear(), WARM_MS);
 }
+// 一个汇总请求拆给多条原有读取（例如老师今日汇总 → 两段课表 + 各节点名详情）：
+// 先为每条读取登记“等待中”的一次性预取，结果到了再分别交付；汇总失败时这些读取自动按原样单独请求。
+// split = { path, parts: [[读取路径, (汇总结果) => 该读取的结果]], extra: (汇总结果) => [[读取路径, 结果]] }
+function apiPrefetchSplit(split) {
+  if (!split?.path) return;
+  const at = Date.now(),
+    seq = apiWriteSeq,
+    pending = apiGet(split.path);
+  // 先登记 extra（点名详情等），再交付各条读取，保证页面拿到课表时详情已经在预取里。
+  const ready = pending.then((value) => {
+    for (const [path, part] of split.extra?.(value) || []) {
+      const key = apiKey(path);
+      if (!apiWarm.has(key) && !apiInflight.has(key)) apiWarm.set(key, { pending: Promise.resolve(part), at: Date.now(), seq });
+    }
+    return value;
+  });
+  ready.catch(() => {});
+  for (const [path, pick] of split.parts || []) {
+    const key = apiKey(path);
+    if (apiWarm.has(key) || apiInflight.has(key)) continue;
+    const part = ready.then(pick);
+    part.catch(() => {});
+    apiWarm.set(key, { pending: part, at, seq });
+  }
+  setTimeout(() => apiWarm.clear(), WARM_MS);
+}
 // ---------- PWA 第二版：老师、学员离线查看 ----------
 // 老师、学员读过的少数只读接口（本人信息、课表、课时与缴费、点评、点名详情）在本机留一份；
 // 断网时用它显示，并在顶部提示“离线模式”。员工账号不保存；登出、换人登录、超过 14 天
@@ -330,11 +356,19 @@ const BATCH_EXACT = new Set([
   "data/schedule_templates", "data/schedule_enrollments", "data/teachers", "data/locations",
   "data/course_types", "data/course_categories", "data/students", "todo/summary",
   "student/comments", "c3/student-comments", "credits/payments",
+  // 2026-11-20 后端扩充（见 接口变更.md「接口合并与后端提速」）；renewal-brand 会写审计，不在名单内。
+  "todo/inbox", "todo/followups", "tools/leads", "tools/followup_tasks", "tools/classes",
+  "c3/leads-summary", "c3/report", "c3/receipts", "c3/costs-summary", "c3/teachers",
+  "finance/payroll", "finance/settlement", "finance/costs", "finance/rates",
+  "schedule-next", "data/student_schedule_blocks", "settings/brand", "accounts", "logs", "teacher/today",
 ]);
+const BATCH_ID = "[a-z]+_[a-f0-9]{24}",
+  BATCH_PATTERN = new RegExp(
+    "^(?:c2\\/students\\/[a-zA-Z0-9_-]+(?:\\/history)?|data\\/students\\/[a-zA-Z0-9_-]+|lessons\\/" + BATCH_ID + "\\/review|students\\/" + BATCH_ID + "\\/fixed-rules)$",
+  );
 const batchable = (path) => {
   const name = path.split("?")[0];
-  return path.length <= 2048 && !/[\\#\s]/.test(path) &&
-    (BATCH_EXACT.has(name) || /^(?:c2\/students\/[a-zA-Z0-9_-]+(?:\/history)?|data\/students\/[a-zA-Z0-9_-]+)$/.test(name));
+  return path.length <= 2048 && !/[\\#\s]/.test(path) && (BATCH_EXACT.has(name) || BATCH_PATTERN.test(name));
 };
 let batchOff = false,
   batchQueue = [],
@@ -1994,7 +2028,11 @@ try {
         Promise.resolve().then(() => {
           try {
             // 显示开关未知（刚登录）时按全开预取；无权的读取会被服务器拒绝、前端忽略。
-            apiPrefetch(globalThis.fqPrefetch?.[hint.role]?.paths(hint.flags || new Proxy({}, { get: () => true })));
+            const prefetch = globalThis.fqPrefetch?.[hint.role],
+              flags = hint.flags || new Proxy({}, { get: () => true });
+            const split = prefetch?.split?.(flags);
+            if (split) apiPrefetchSplit(split);
+            else apiPrefetch(prefetch?.paths(flags));
           } catch {}
         });
     }

@@ -87,3 +87,13 @@ test("read-batch 扩充：新加入的只读路径批量与单独请求一致、
     f.restore();
   }
 });
+
+test("read-batch 白名单：前端合批名单与后端完全一致（前端多加会让整批 400）", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const app = await readFile("src/tenant/app.js", "utf8");
+  const server = await readFile("src/server/read-batch.js", "utf8");
+  const fe = new Function(app.slice(app.indexOf("const BATCH_EXACT"), app.indexOf("let batchOff")) + ";return {BATCH_EXACT,BATCH_PATTERN};")();
+  const be = new Function(server.slice(server.indexOf("const exact"), server.indexOf("export function")) + ";return {exact,patterns};")();
+  assert.deepEqual([...fe.BATCH_EXACT].sort(), [...be.exact].sort());
+  assert.equal(fe.BATCH_PATTERN.source, be.patterns.source);
+});
