@@ -1512,11 +1512,6 @@ async function accounts(c, offset = 0) {
   const { items } = await api("accounts?offset=" + offset),
     tools = el("div", null, { class: "row" });
   tools.append(
-    el(
-      "p",
-      `员工账号上限 ${me.limits.staff} · 学员账号上限 ${me.limits.student}`,
-      { class: "muted" },
-    ),
     button("＋ 新增账号", () => newAccount(c), "primary"),
   );
   c.append(tools);

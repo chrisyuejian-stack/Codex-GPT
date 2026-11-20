@@ -912,7 +912,7 @@ function errorResponse(e, env, url) {
     );
   } else {
     const incident = randomId("err");
-    console.error("request_failure", incident, e?.name);
+    console.error("request_failure", incident, e?.name, String(e?.message || "").slice(0, 300));
     response = json(
       { error: "暂时无法完成操作，请稍后重试", code: incident },
       500,
