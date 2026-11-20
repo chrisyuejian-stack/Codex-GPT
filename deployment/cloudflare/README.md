@@ -7,7 +7,7 @@
 | 类型 | 名称 | 说明 |
 |---|---|---|
 | Pages | `fengqin-crm-prod` | 站点，地址 https://fengqin-crm-prod.pages.dev（尚未绑定自定义域名） |
-| D1 | `fengqin-crm-prod`（f4eaf652-ce6d-4098-909b-0f6563dbfd31，APAC） | 已执行迁移 0001–0031 |
+| D1 | `fengqin-crm-prod`（f4eaf652-ce6d-4098-909b-0f6563dbfd31，APAC） | 已执行迁移 0001–0032 |
 | R2 | `fengqin-media-prod`、`fengqin-backups-prod` | 私有 |
 | Worker | `fengqin-backup-prod` | 定时备份，cron `0 19 * * *`、`*/5 * * * *`，无公开地址 |
 
@@ -47,3 +47,13 @@ curl -X POST "https://api.cloudflare.com/client/v4/accounts/<账户ID>/pages/pro
 npm run build
 npx wrangler deploy --config deployment/cloudflare/backup-wrangler.toml
 ```
+
+## 部署记录
+
+| 时间（UTC） | 代码 | 内容 |
+|---|---|---|
+| 2026-11-20 07:58 | b1db8a2 | 首次部署，迁移 0001–0031 |
+| 2026-11-20 08:20 | d4938f6 | 修复账号页席位上限报错 |
+| 2026-11-20 11:02 | d82b8b0 | 合入 main（PR #7：备份行数/大小、单条待办操作）；线上执行迁移 0032；同时重新部署备份 Worker。执行 0032 前的 D1 书签：`0000002a-00000000-00005129-b75c43ccc381025bb320986e102e9f3e` |
+
+D1 没有 `d1_migrations` 表，迁移是逐个文件手动执行的；新增迁移后在上表登记。
