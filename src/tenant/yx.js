@@ -73,19 +73,8 @@ function yxLoginForm(card) {
     go.textContent = "登录中…";
     try {
       const res = await api("auth/login", "POST", { phone: d.phone, password: d.password });
-      // 记下身份，进入系统时首屏数据和 /api/me 同时请求（见 app.js apiPrefetch）；开关未知时按默认全开，无权的那条会被忽略。
-      try {
-        const roles = res?.user?.roles || [];
-        const role = res?.must_change ? null : roles.includes("teacher") ? "teacher" : roles.includes("student") ? "student" : null;
-        if (role) {
-          const old = JSON.parse(localStorage.getItem("fq_boot_hint") || "null");
-          const flags = old?.role === role ? old.flags : { schedule: true, balance: true, comments: true };
-          localStorage.setItem("fq_boot_hint", JSON.stringify({ role, flags }));
-        } else localStorage.removeItem("fq_boot_hint");
-        // 换了人登录：清掉上一位留在本机的离线数据（见 app.js 离线查看）。
-        const offline = JSON.parse(localStorage.getItem("fq_offline_v1") || "null");
-        if (offline && offline.user_id !== res?.user?.id) localStorage.removeItem("fq_offline_v1");
-      } catch {}
+      // 记下身份供启动预取，换人登录清掉上一位的离线数据（app.js rememberLogin，两个登录表单共用）。
+      rememberLogin(res);
       location.assign(base + "app/");
     } catch (err) {
       show(err.message || "登录失败，请稍后重试");

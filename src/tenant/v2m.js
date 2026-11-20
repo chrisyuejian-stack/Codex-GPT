@@ -257,10 +257,14 @@
     const diff = Math.round((Date.parse(d + "T12:00:00Z") - Date.parse(todayBJ() + "T12:00:00Z")) / 86400000);
     return diff === 0 ? "今天" : diff === 1 ? "明天" : diff === 2 ? "后天" : diff > 0 ? diff + " 天后" : "";
   };
+  // “下一节课”与看哪一周无关：翻周时 2 分钟内复用，不再每翻一周都请求一次。
+  let nextLesson = null;
   async function studentWeek(c) {
     const from = weekStart(personalDate),
       to = dateShift(from, 6);
-    const [items, next] = await Promise.all([scheduleRows(from, to), api("schedule-next").then((x) => x.record).catch(() => null)]);
+    if (!nextLesson || Date.now() - nextLesson.at > 2 * 60 * 1000 || nextLesson.writes !== apiWriteSeq)
+      nextLesson = { at: Date.now(), writes: apiWriteSeq, value: api("schedule-next").then((x) => x.record).catch(() => null) };
+    const [items, next] = await Promise.all([scheduleRows(from, to), nextLesson.value]);
     const back = () => studentWeek(c);
     c.replaceChildren();
     head(c, "我的课表", null, enabled("exports", "export") ? linkBtn("保存课表图", () => timetableImage(c, from)) : null);

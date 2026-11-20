@@ -203,6 +203,19 @@ function offlineBanner(at) {
   }
   bar.classList.remove("is-online");
 }
+// 登录成功后（两个登录表单共用）：按身份记下启动预取提示，进入系统时首屏数据与 /api/me 同时请求；
+// 换了人登录就清掉上一位留在本机的离线数据。显示开关未知时按默认全开，无权的那条读取会被忽略。
+function rememberLogin(res) {
+  try {
+    const user = res?.user || {};
+    const roles = user.roles || [];
+    const role = res?.must_change || user.must_change ? null : roles.includes("teacher") ? "teacher" : roles.includes("student") ? "student" : roles.length ? "staff" : null;
+    const old = JSON.parse(localStorage.getItem(BOOT_HINT) || "null");
+    if (role) localStorage.setItem(BOOT_HINT, JSON.stringify({ role, flags: old?.role === role && old.flags ? old.flags : null }));
+    else localStorage.removeItem(BOOT_HINT);
+    if (offlineLoad() && offlineLoad().user_id !== user.id) offlineClear();
+  } catch {}
+}
 function offlineFallback(path, e) {
   const hit = isNetworkError(e) && offlineGet(path);
   if (!hit) throw e;
@@ -267,8 +280,17 @@ async function api(path, method = "GET", data) {
   if (warm) {
     apiWarm.delete(key);
     if (Date.now() - warm.at < WARM_MS && warm.seq === apiWriteSeq) {
+      // 预取还在路上时，同一时刻的其他读取（例如侧栏角标与今天页）共用这一次请求。
+      if (!apiInflight.has(key)) {
+        apiInflight.set(key, warm.pending);
+        warm.pending.then(
+          () => apiInflight.get(key) === warm.pending && apiInflight.delete(key),
+          () => apiInflight.get(key) === warm.pending && apiInflight.delete(key),
+        );
+      }
       try {
         const value = await warm.pending;
+        if (kind) apiCache.set(key, { at: Date.now(), value: structuredClone(value) });
         offlineSave(path, value);
         return structuredClone(value);
       } catch {
@@ -525,11 +547,12 @@ async function login() {
   submit(form, "登录", async (data) => {
     if (turnstileEnabled && !challenge) throw Error("请先完成人机验证");
     try {
-      await api(
+      const res = await api(
         "login",
         "POST",
         turnstileEnabled ? { ...data, turnstile: challenge } : data,
       );
+      rememberLogin(res);
       location.assign(base + "app/");
     } catch (e) {
       if (turnstileEnabled && window.turnstile && widget !== undefined)
@@ -1343,13 +1366,16 @@ function shell() {
     try {
       // 待办数字和未读消息同时请求，不再排队。
       const wantCounts = !financeOnly && enabled("home");
-      const countsRequest = wantCounts ? api("todo/summary") : null;
+      // 旧版 todo/summary 只在页面上还有旧待办子页签（要显示各自数字）或没有收件箱计数时才取；
+      // 侧栏角标用收件箱总数，平时每次切页不再多一个请求。
+      const needSummary = wantCounts && (typeof globalThis.fqTodoCount !== "function" || !!headTabs.querySelector('[data-tab-key^="todo-"]'));
+      const countsRequest = needSummary ? api("todo/summary") : null;
       countsRequest?.catch(() => {});
       // 枫琴：侧栏“待办”角标与收件箱同一个数（fq-today.js 提供 fqTodoCount，读 /api/todo/inbox 的 total），和上面同时发出。
       const inboxRequest = wantCounts && typeof globalThis.fqTodoCount === "function" ? globalThis.fqTodoCount().catch(() => null) : null;
       if (wantCounts) {
-        const counts = await countsRequest;
-        todoCounts = counts;
+        const counts = countsRequest ? await countsRequest : {};
+        if (countsRequest) todoCounts = counts;
         for (const tab of headTabs.querySelectorAll("[data-tab-key]")) {
           const n = tabCount(tab.dataset.tabKey);
           tab.querySelector(".ui-tab-count")?.remove();
@@ -1358,6 +1384,9 @@ function shell() {
         }
         moveTabInk(true);
         const inboxTotal = await inboxRequest;
+        // 收件箱计数没取到时，才退回旧统计算角标。
+        if ((inboxTotal === null || inboxTotal === undefined) && !countsRequest)
+          Object.assign(counts, await api("todo/summary").catch(() => ({})));
         const n =
           inboxTotal ??
           (counts.unchecked_lessons || 0) +
@@ -1964,11 +1993,29 @@ try {
       if (hint?.role)
         Promise.resolve().then(() => {
           try {
-            apiPrefetch(globalThis.fqPrefetch?.[hint.role]?.paths(hint.flags || {}));
+            // 显示开关未知（刚登录）时按全开预取；无权的读取会被服务器拒绝、前端忽略。
+            apiPrefetch(globalThis.fqPrefetch?.[hint.role]?.paths(hint.flags || new Proxy({}, { get: () => true })));
           } catch {}
         });
     }
-    brand = await api("public/brand?lite=1").catch(() => ({ display_name: "枫琴教务中心" }));
+    // 品牌信息很少变：本机缓存一天，过期才请求（缓存可用时不等它，后台更新）。
+    let cachedBrand = null;
+    try {
+      cachedBrand = JSON.parse(localStorage.getItem("fq_brand_v1") || "null");
+    } catch {}
+    const brandFresh = cachedBrand?.value && Date.now() - cachedBrand.at < 24 * 3600 * 1000;
+    const brandRequest = brandFresh
+      ? null
+      : api("public/brand?lite=1").then((value) => {
+          try {
+            localStorage.setItem("fq_brand_v1", JSON.stringify({ at: Date.now(), value }));
+          } catch {}
+          return value;
+        });
+    brandRequest?.catch(() => {});
+    brand = cachedBrand?.value
+      ? { ...cachedBrand.value }
+      : await brandRequest.catch(() => ({ display_name: "枫琴教务中心" }));
     brand.display_name = "枫琴教务中心";
     if (isLogin) {
       // 系统还没初始化时，登录页换成一次性初始化页（创建第一位主管）。
@@ -1988,7 +2035,7 @@ try {
       // 记下身份和首屏要用的开关，下次打开时据此预取；员工或需要改密码时不预取。
       try {
         const roles = me.user.roles || [];
-        const role = me.user.must_change ? null : roles.includes("teacher") ? "teacher" : roles.includes("student") ? "student" : null;
+        const role = me.user.must_change ? null : roles.includes("teacher") ? "teacher" : roles.includes("student") ? "student" : roles.length ? "staff" : null;
         const prefetch = role && globalThis.fqPrefetch?.[role];
         if (prefetch) localStorage.setItem(BOOT_HINT, JSON.stringify({ role, flags: prefetch.flags() }));
         else localStorage.removeItem(BOOT_HINT);

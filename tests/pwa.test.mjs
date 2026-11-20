@@ -118,8 +118,11 @@ test("PWA 第二版：离线只保存老师/学员的只读接口，员工与写
   assert.match(app, /offlineOwner = !me\.user\.must_change && \(roles\.includes\("teacher"\) \|\| roles\.includes\("student"\)\) \? me\.user\.id : null;/);
   assert.match(app, /if \(path === "logout"\) offlineClear\(\);/);
   assert.match(app, /const isNetworkError = \(e\) => !!e && !e\.status/);
+  // 换人登录清除：两个登录表单（app.js login、yx.js）都调用 rememberLogin。
+  assert.match(app, /function rememberLogin\(res\) \{[\s\S]*?if \(offlineLoad\(\) && offlineLoad\(\)\.user_id !== user\.id\) offlineClear\(\);/);
+  assert.match(app, /"login",\s*"POST",[\s\S]{0,120}\);\s*rememberLogin\(res\);/);
   const login = await readFile("src/tenant/yx.js", "utf8");
-  assert.match(login, /offline\.user_id !== res\?\.user\?\.id\) localStorage\.removeItem\("fq_offline_v1"\)/);
+  assert.match(login, /rememberLogin\(res\);/);
   // Service Worker 仍不碰 /api/；断网时给缓存外壳，由页面决定显示离线数据还是提示。
   const sw = await readFile("src/tenant/pwa/sw.js", "utf8");
   assert.match(sw, /startsWith\("\/api\/"\)\) return;/);

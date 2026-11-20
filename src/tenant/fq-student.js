@@ -514,11 +514,17 @@
     const more = n("div", null, { class: "fq-st-more" });
     const p = panel("全部点评", null);
     const load = async () => {
-      const page = await api("student/comments?offset=" + next + "&limit=20");
+      // 第一页：点评与本月、上月课表同时取（点评要用课表补课程名、老师、出勤），省掉一轮等待。
+      const today = todayBJ();
+      const seedMonths =
+        next === 0 && canSchedule()
+          ? [today.slice(0, 7), dateShift(today.slice(0, 7) + "-01", -1).slice(0, 7)].map((m) => scheduleRows(...monthBounds(m)).catch(() => []))
+          : [];
+      const [page, ...seeds] = await Promise.all([api("student/comments?offset=" + next + "&limit=20"), ...seedMonths]);
       total = page.total ?? total;
       next = page.next_offset;
       items.push(...page.items);
-      const map = await lessonMap(page.items);
+      const map = await lessonMap(page.items, seeds.flat());
       for (const x of page.items) list.append(noteCard(noteOf(x, map), { full: true }));
       p.querySelector(".fq-st-ph p")?.remove();
       p.querySelector(".fq-st-ph div").append(n("p", "共 " + total + " 条 · 每节课后老师写给你的反馈"));

@@ -170,6 +170,35 @@
   };
 
   // ---------- 读数据（今天页） ----------
+  // 启动预取（见 app.js apiPrefetch）：员工打开系统时与 /api/me 同时请求今天页数据；路径须与 load() 完全一致。
+  (globalThis.fqPrefetch ||= {}).staff = {
+    flags: () => {
+      const roles = me.user.roles || [];
+      const financeOnly = roles.includes("finance") && !roles.some((r) => ["supervisor", "academic"].includes(r));
+      return {
+        today: enabled("home") && !financeOnly,
+        schedule: enabled("schedule"),
+        unchecked: enabled("schedule") && enabled("attendance", "update"),
+        confirm: enabled("attendance", "confirm"),
+        makeups: enabled("attendance", "create"),
+        leads: enabled("leads"),
+      };
+    },
+    paths: (f) => {
+      if (!f.today) return [];
+      const day = todayBJ();
+      return [
+        "c2/home",
+        ...(f.schedule ? ["schedule?from=" + day + "&to=" + dateShift(day, 1)] : []),
+        ...(f.unchecked ? ["c2/unchecked?offset=0"] : []),
+        ...(f.confirm ? ["submissions?status=pending&from=" + dateShift(day, -60) + "&to=" + dateShift(day, 1) + "&offset=0"] : []),
+        ...(f.makeups ? ["c2/makeups?offset=0"] : []),
+        ...(f.leads ? ["tools/leads?offset=0"] : []),
+        inboxUrl({ scope: "mine", limit: 1 }),
+        inboxUrl({ scope: "all", type: "attendance", limit: 100 }),
+      ];
+    },
+  };
   async function load() {
     const day = todayBJ();
     const may = (ok, run) => (ok ? run().catch(() => null) : Promise.resolve(null));
