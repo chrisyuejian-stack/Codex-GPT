@@ -1,0 +1,21 @@
+name = "fengqin-backup-prod"
+main = "../../backup-dist/backup-worker.js"
+compatibility_date = "2026-11-16"
+workers_dev = false
+no_bundle = true
+
+[triggers]
+crons = ["0 19 * * *", "*/5 * * * *"]
+
+[[d1_databases]]
+binding = "CHANNEL_DB"
+database_name = "fengqin-crm-prod"
+database_id = "f4eaf652-ce6d-4098-909b-0f6563dbfd31"
+
+[[r2_buckets]]
+binding = "CHANNEL_MEDIA"
+bucket_name = "fengqin-media-prod"
+
+[[r2_buckets]]
+binding = "CHANNEL_BACKUPS"
+bucket_name = "fengqin-backups-prod"

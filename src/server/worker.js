@@ -74,7 +74,11 @@ import {
 } from "./accounts.js";
 import { encrypt, decrypt } from "./crypto.js";
 import { randomId } from "./core.js";
-const staticTenant = new Set(["/assets/tenant.js", "/assets/tenant.css"]);
+const staticTenant = new Set([
+  "/assets/tenant.js",
+  "/assets/tenant.css",
+  "/assets/tenant-fonts.css",
+]);
 
 const offsetOf = (url) => {
   const n = Number(url.searchParams.get("offset") || 0);
@@ -915,7 +919,7 @@ function errorResponse(e, env, url) {
     );
   } else {
     const incident = randomId("err");
-    console.error("request_failure", incident, e?.name);
+    console.error("request_failure", incident, e?.name, String(e?.message || "").slice(0, 300));
     response = json(
       { error: "暂时无法完成操作，请稍后重试", code: incident },
       500,

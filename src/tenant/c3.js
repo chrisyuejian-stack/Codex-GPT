@@ -1530,13 +1530,6 @@
     const data = await api("accounts?offset=" + offset);
     clear(c);
     c.append(
-      n(
-        "p",
-        "员工账号上限 " +
-          me.limits.staff +
-          " · 学员账号上限 " +
-          me.limits.student,
-      ),
       b("＋新增账号", () => newAccount(c), "primary"),
     );
     table(

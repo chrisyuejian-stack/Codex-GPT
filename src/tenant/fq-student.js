@@ -165,6 +165,19 @@
     }
     return box;
   }
+  // 启动预取（见 app.js apiPrefetch）：首页数据，路径须与 homeData 发出的请求完全一致。
+  const schedulePath = (from, to) => "schedule?from=" + from + "&to=" + to + "&offset=0";
+  (globalThis.fqPrefetch ||= {}).student = {
+    flags: () => ({ schedule: canSchedule(), balance: canBalance(), comments: canComments() }),
+    paths: (f) => {
+      const today = todayBJ();
+      return [
+        ...(f.schedule ? ["schedule-next", schedulePath(...monthBounds(today.slice(0, 7))), schedulePath(today, dateShift(today, 30))] : []),
+        ...(f.balance ? ["credits/packages"] : []),
+        ...(f.comments ? ["student/comments?limit=50", "c3/student-comments"] : []),
+      ];
+    },
+  };
   async function homeData() {
     const today = todayBJ(),
       month = today.slice(0, 7);

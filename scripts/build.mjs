@@ -55,6 +55,7 @@ for (const app of ["tenant"]) {
 const frontend = await tenantAssets();
 await writeFile(out + "/assets/tenant.js", frontend.js);
 await writeFile(out + "/assets/tenant.css", frontend.css);
+await writeFile(out + "/assets/tenant-fonts.css", frontend.deferredCss);
 await writeFile(
   out + "/_routes.json",
   JSON.stringify({ version: 1, include: ["/*"], exclude: [] }),
@@ -114,7 +115,7 @@ console.log("生产JS已压缩与变量名混淆，无source map；构建工具�
 // 内容变了地址就变，浏览器可以长期缓存（配合后端对带 v 的静态文件返回长缓存头）。
 const { createHash } = await import("node:crypto");
 for (const [page, files] of [
-  ["dist/tenant.html", ["/assets/tenant.css", "/assets/tenant.js"]],
+  ["dist/tenant.html", ["/assets/tenant.css", "/assets/tenant.js", "/assets/tenant-fonts.css"]],
 ]) {
   let html = await readFile(page, "utf8");
   for (const file of files) {
