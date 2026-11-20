@@ -14,3 +14,6 @@ release/
 *.db-*
 __pycache__/
 .DS_Store
+
+# 并行代理的临时工作副本
+.claude/worktrees/
