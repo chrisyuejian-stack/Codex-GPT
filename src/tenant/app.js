@@ -1852,6 +1852,11 @@ try {
   if (deferred && !lean && !document.querySelector('link[data-fq-deferred]'))
     document.head.append(el("link", null, { rel: "stylesheet", href: deferred, "data-fq-deferred": "" }));
 } catch {}
+// PWA：注册 /sw.js（缓存带版本号的静态文件与页面外壳，接口不缓存）。只在 https 或本机预览下注册，失败不影响使用。
+try {
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost"))
+    addEventListener("load", () => navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {}), { once: true });
+} catch {}
 (async () => {
   try {
     // 枫琴教务中心：单机构，所有角色走 /login，接口统一在根 /api/。

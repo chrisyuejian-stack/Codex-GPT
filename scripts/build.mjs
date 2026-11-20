@@ -56,6 +56,11 @@ const frontend = await tenantAssets();
 await writeFile(out + "/assets/tenant.js", frontend.js);
 await writeFile(out + "/assets/tenant.css", frontend.css);
 await writeFile(out + "/assets/tenant-fonts.css", frontend.deferredCss);
+// PWA：图标放 /assets/（带版本号长缓存），manifest 与 sw.js 放根路径（不长缓存，版本号在下面注入）。
+for (const icon of ["icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"])
+  await copyFile("src/tenant/pwa/" + icon, out + "/assets/" + icon);
+await copyFile("src/tenant/pwa/manifest.webmanifest", out + "/manifest.webmanifest");
+await copyFile("src/tenant/pwa/sw.js", out + "/sw.js");
 await writeFile(
   out + "/_routes.json",
   JSON.stringify({ version: 1, include: ["/*"], exclude: [] }),
@@ -115,7 +120,8 @@ console.log("生产JS已压缩与变量名混淆，无source map；构建工具�
 // 内容变了地址就变，浏览器可以长期缓存（配合后端对带 v 的静态文件返回长缓存头）。
 const { createHash } = await import("node:crypto");
 for (const [page, files] of [
-  ["dist/tenant.html", ["/assets/tenant.css", "/assets/tenant.js", "/assets/tenant-fonts.css"]],
+  ["dist/tenant.html", ["/assets/tenant.css", "/assets/tenant.js", "/assets/tenant-fonts.css", "/assets/apple-touch-icon.png"]],
+  ["dist/manifest.webmanifest", ["/assets/icon-192.png", "/assets/icon-512.png", "/assets/icon-maskable-512.png"]],
 ]) {
   let html = await readFile(page, "utf8");
   for (const file of files) {
@@ -127,3 +133,26 @@ for (const [page, files] of [
   await writeFile(page, html);
 }
 console.log("静态文件已加版本号。");
+
+// Service Worker：预缓存当前版本的 CSS/JS/图标（地址与 HTML、manifest 里的 ?v= 一致）；
+// VERSION 取这些地址的哈希，发新版时缓存名随之改变，旧缓存在激活时清理。
+{
+  const html = await readFile("dist/tenant.html", "utf8");
+  const manifest = await readFile("dist/manifest.webmanifest", "utf8");
+  const shell = [
+    ...new Set([
+      ...html.matchAll(/"(\/assets\/(?:tenant\.css|tenant\.js|apple-touch-icon\.png)\?v=[a-f0-9]{12})"/g),
+      ...manifest.matchAll(/"(\/assets\/icon-[a-z0-9-]+\.png\?v=[a-f0-9]{12})"/g),
+    ].map((m) => m[1])),
+  ];
+  if (shell.length !== 6) throw Error("Service Worker 预缓存清单不完整：" + shell.join(","));
+  const version = createHash("sha256").update(shell.join("\n")).digest("hex").slice(0, 12);
+  let sw = await readFile("dist/sw.js", "utf8");
+  const before = sw;
+  sw = sw
+    .replace('const VERSION = "dev";', `const VERSION = "${version}";`)
+    .replace("/*SHELL*/ [] /*END*/", JSON.stringify(shell));
+  if (sw === before || sw.includes("/*SHELL*/")) throw Error("sw.js 版本注入失败");
+  await writeFile("dist/sw.js", sw);
+  console.log("Service Worker 已注入版本 " + version + "，预缓存 " + shell.length + " 个文件。");
+}
