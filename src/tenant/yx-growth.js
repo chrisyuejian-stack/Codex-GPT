@@ -411,74 +411,30 @@ function yxRepForm(studentId, r, again) {
   panel.append(form);
 }
 
-// ---------- 家长端 ----------
-async function yxParentFeed(type) {
-  const r = await api("parent/children/" + encodeURIComponent(yxState.child) + "/feed?limit=50");
-  return (r.items || []).filter((x) => x.type === type);
+// 课后反馈用到的两个小工具（原在已删除的招生内容模块里）。
+function yxcArea(value, label, on, ro, rows = 3) {
+  const t = el("textarea", null, { rows: String(rows), "aria-label": label });
+  t.value = value;
+  t.disabled = ro;
+  const fit = () => {
+    t.style.setProperty("height", "auto");
+    t.style.setProperty("height", t.scrollHeight + 2 + "px");
+  };
+  t.addEventListener("input", () => (on(t.value), fit()));
+  requestAnimationFrame(fit);
+  return t;
 }
-async function yxParentFeedback(content) {
-  const items = await yxParentFeed("feedback");
-  // 还没有新版反馈时，沿用原来的上课记录页面。
-  if (!items.length) return globalThis["ChannelV2" + "Mobile"].studentRecords(content);
-  const V = globalThis.ChannelV2;
-  content.replaceChildren(el("h1", "课后反馈"));
-  // 课后反馈卡片（设计稿 v3）：主色抬头 + 四段，颜色跟机构主色。
-  const n = items.length;
-  const th = getComputedStyle(document.documentElement).getPropertyValue("--theme").trim();
-  const on = /^#[0-9a-f]{6}$/i.test(th) && yxdContrast("#ffffff", th) < 4.5 ? "#211a30" : "#ffffff";
-  items.forEach((x, i) => {
-    const card = el("article", null, { class: "yxfc" });
-    card.style.setProperty("--fc-on", on);
-    const hd = el("div", null, { class: "yxfc-head" });
-    const l = el("div");
-    l.append(el("small", brand?.display_name || ""), el("strong", "课后反馈"), el("span", [x.title, yxgDate(x.at).slice(5, 10).replace("-", " 月 ") + " 日"].filter(Boolean).join(" · ")));
-    hd.append(l, el("span", "No." + (n - i), { class: "yxfc-no" }));
-    card.append(hd);
-    const body = el("div", null, { class: "yxfc-body" });
-    if (x.tags?.length) {
-      const t = el("div", null, { class: "yxfc-tags" });
-      for (const g of x.tags) t.append(el("span", g));
-      body.append(t);
-    }
-    for (const [k, t] of YXG_MSG)
-      if (x.message?.[k]) {
-        const r = el("div", null, { class: "yxfc-row" });
-        r.append(el("b", t), el("p", x.message[k], { class: "preserve-text" }));
-        body.append(r);
-      }
-    if (x.public_comment) {
-      const r = el("div", null, { class: "yxfc-row" });
-      r.append(el("b", "全班"), el("p", x.public_comment, { class: "preserve-text" }));
-      body.append(r);
-    }
-    if (x.image_urls?.length) {
-      const g = el("div", null, { class: "yxfc-imgs" });
-      for (const u of x.image_urls) g.append(el("img", null, { src: u, alt: "课堂照片", loading: "lazy" }));
-      body.append(g);
-    }
-    card.append(body);
-    content.append(card);
-  });
-}
-async function yxParentReports(content) {
-  const items = await yxParentFeed("report");
-  const V = globalThis.ChannelV2;
-  content.replaceChildren(el("h1", "成长报告"));
-  if (!items.length) return content.append(UI.empty({ text: "老师发布阶段报告后，会显示在这里。" }));
-  const box = V.panel("已发布的报告");
-  for (const x of items) {
-    const line = el("button", null, { type: "button", class: "yxp-item" }),
-      who = el("span", null, { class: "yxp-item-main" });
-    who.append(el("strong", x.title || "成长报告"), el("small", yxgDate(x.at).slice(0, 10), { class: "v-muted" }));
-    line.append(who);
-    line.addEventListener("click", async () => {
-      const r = await api("parent/reports/" + encodeURIComponent(x.id));
-      content.replaceChildren(button("‹ 成长报告", () => yxParentReports(content)));
-      content.append(yxReportDocument(r.render_data, r.manifest, (id) => base + "api/parent/media/" + encodeURIComponent(id)));
-      content.append(el("div", null, { class: "yxg-submit" }));
-      content.lastChild.append(button("保存为图片或 PDF", () => print()));
-    });
-    box.append(line);
+async function yxcCopyText(text, html) {
+  try {
+    if (html && globalThis.ClipboardItem) await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([html], { type: "text/html" }), "text/plain": new Blob([text], { type: "text/plain" }) })]);
+    else await navigator.clipboard.writeText(text);
+  } catch {
+    const t = el("textarea", null, { class: "yxc-offscreen", "aria-hidden": "true" });
+    t.value = text;
+    document.body.append(t);
+    t.select();
+    document.execCommand("copy");
+    t.remove();
   }
-  content.append(box);
+  notice("已复制，可以粘贴到微信群", "success");
 }
