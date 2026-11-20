@@ -868,6 +868,14 @@ html .fq-teacher .v-m-hero {
 html .fq-teacher.is-desk .fq-tc-embed .c2-attendance-buttons {
   max-width: 480px;
 }
+/* 电脑版：出勤按钮限宽后，“逐人点评”和“其他缺勤”按自身宽度排在右侧，不再被挤压重叠。 */
+html .fq-teacher.is-desk .fq-tc-embed .c3-checkin-row > section {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+html .fq-teacher.is-desk .fq-tc-embed .c3-checkin-row > section .ui-disclosure-toggle {
+  white-space: nowrap;
+}
 html .fq-teacher.is-desk .fq-tc-embed .v-m-submitbar {
   align-items: flex-start;
 }
