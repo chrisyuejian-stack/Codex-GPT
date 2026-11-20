@@ -999,6 +999,8 @@ const worker = {
     }
     env = {
       ...env,
+      // 原始绑定：给机构缓存（tenant.js）做键，包装后的对象每个请求都不同。
+      __rawDb: env.CHANNEL_DB,
       CHANNEL_DB: measureDatabase(env.CHANNEL_DB, timing),
       __requestScope: true,
       __identityContract: new URL(req.url).pathname.startsWith("/api/"),
