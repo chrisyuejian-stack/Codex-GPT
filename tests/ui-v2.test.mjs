@@ -276,59 +276,6 @@ test("UI重构v2：教师手机课程详情/点名页只重排原页面——原
   assert.match(css, /\.v-m-submitbar \{[^}]*position: sticky; bottom: calc\(65px \+ max\(8px, env\(safe-area-inset-bottom, 0px\)\)\)/);
   assert.match(css, /\.v-personal:has\(\.v-m-submitbar\) \{ padding-bottom: 0; \}/);
 });
-test("推广中心改版（机构端）：只读既有推广接口，申请/名单/上传沿用原表单；会议信息只在员工页面；下载文件名为英文", async () => {
-  const js = await readFile("src/tenant/v2promo.js", "utf8"),
-    assets = await tenantAssets();
-  // 推广文件排在手机端之后（v2.js、app.js 里只有带 ?. 的调用）。
-  assert.ok(assets.js.lastIndexOf("ChannelV2Promo") > assets.js.lastIndexOf("ChannelV2Mobile"));
-  assert.doesNotMatch(js, /\.innerHTML\s*=|\.style\.|setAttribute\(["']style["']/);
-  assert.ok(!/(?<![.\w])(?:alert|prompt|confirm)\(/.test(js));
-  for (const m of js.matchAll(/api\(\s*"([a-z0-9/_?=-]+)/g)) assert.ok(m[1].startsWith("promo") || m[1].startsWith("system-messages"), m[1]);
-  const writes = [...js.matchAll(/api\(\s*"([^"]+)"[^)]*?"(PATCH|DELETE|POST|PUT)"/g)].map((m) => m[1] + " " + m[2]);
-  assert.deepEqual([...new Set(writes)].sort(), ["promo/ POST", "promo/assets PUT", "system-messages/ POST"].sort());
-  for (const reuse of ["promoApplication(", "promoRoster(", "promoUpload(", "promoCachedImage(", "promoContain("]) assert.ok(js.includes(reuse), reuse);
-  // 同一张图整个使用过程只下载一次（账号每分钟请求数有上限）；合成好的海报也复用。
-  assert.match(js, /const load = \(id, fallback\) => promoCachedImage\(id, fallback\);/);
-  assert.match(js, /if \(composed\.has\(key\)\) return promoCacheTouch\(composed, key\);/);
-  // 下载文件名不用中文（部分浏览器会改成 download）。
-  assert.match(js, /download: kind \+ "-" \+ \+\+saved \+ "-" \+ day \+ "\.png"/);
-  // 免费、讲座、应付金额、已收款、二维码旁文字：后端字段有就显示，没有就不显示。
-  assert.match(js, /row\.is_free === 1 \|\| row\.is_free === true/);
-  assert.match(js, /row\.format === "lecture"/);
-  assert.match(js, /a\.amount_due \?\?/);
-  assert.match(js, /if \(a\.paid !== undefined\)/);
-  // 二维码旁文字（0013 起总有该字段）：没上传过素材也能填，最多 12 个字。
-  assert.match(js, /if \(\[\.\.\.text\]\.length > 12\) return notice/);
-  // 只接管页面主体里的推广中心。
-  assert.match(js, /promoCenter = \(c, type, offset\) => \(inPage\(c\) \? home\(c, type\) : oldCenter\(c, type, offset\)\)/);
-});
-test("推广推送（P7/P8）：今天页枫琴推荐一次一条可“不再提示”；铃铛分“来自枫琴/系统”；招生旁“新 N”；合作升学按平台开关隐藏", async () => {
-  const js = await readFile("src/tenant/v2promo.js", "utf8"),
-    v2 = await readFile("src/tenant/v2.js", "utf8"),
-    app = await readFile("src/tenant/app.js", "utf8"),
-    css = await readFile("src/tenant/v2.css", "utf8");
-  // 推荐卡：读 promo/recommend，“不再提示”写 promo/:id/dismiss；只对有推广权限的人放进今天页右栏。
-  assert.match(js, /api\("promo\/recommend"\)/);
-  assert.match(js, /api\("promo\/" \+ item\.id \+ "\/dismiss", "POST", \{\}\)/);
-  assert.match(v2, /if \(enabled\("promo"\) && globalThis\.ChannelV2Promo\?\.recommend\) side\.append/);
-  // 截止提醒用后端给的 reason，不自己猜。
-  assert.match(js, /item\.reason === "deadline"/);
-  // 铃铛：按 source 分组；横幅等旧用法仍走原函数。
-  assert.match(js, /items\.filter\(\(x\) => x\.source === "fengqin"\)/);
-  assert.match(js, /if \(banner \|\| !\(panel \|\| inPage\(c\)\)\) return oldMessages\(c, banner, offset\);/);
-  assert.match(js, /systemMessages = messages;/);
-  // “新 N”来自铃铛同一份数据（已按权限裁剪），刷新角标时一起更新。
-  assert.match(js, /x\.source === "fengqin" && !x\.is_read/);
-  assert.match(app, /globalThis\.ChannelV2Promo\?\.navBadge\?\.\(data\);/);
-  // 合作升学推荐：平台开关关闭时，所有入口（菜单、学员详情）统一隐藏。
-  assert.match(app, /if \(module === "referrals" && me\.features\?\.referrals === false\) return false;/);
-  // 推荐卡低调：浅底、无红色；离开动效只用透明度/位移，并有减少动态兜底。
-  assert.match(css, /\.v-pr-rec \{[^}]*background: var\(--ui-page\)/);
-  assert.match(css, /\.v-pr-rec\.is-leaving \{ opacity: 0; transform: translateY\(-4px\); \}/);
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.v-pr-rec \{ transition: none; \}/);
-  assert.match(css, /@media \(hover: hover\) \{\s*\.v-msg:hover/);
-});
-
 test("提速：同页内切换只换变化的区域；请求并行；字典缓存遇写即清；静态文件带内容版本号", async () => {
   const app = await readFile("src/tenant/app.js", "utf8"),
     v2p = await readFile("src/tenant/v2p.js", "utf8"),
@@ -398,8 +345,8 @@ test("二级页面改版·通用：顶栏全局区常驻、本页按钮单独一
   // 菜单：贴着触发按钮，默认向左展开，放不下就翻转；不支持锚点定位的浏览器居中显示。
   assert.match(css, /position-area: block-end span-inline-start;\s*position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;/);
   assert.match(css, /\.ui-root\.ui-more-menu > \.ui-button--danger > \.ui-button-face \{\s*color: var\(--ui-error\);/);
-  // 铃铛：先显示占位并打开，再取数据。
-  assert.match(app, /messagePanel\.replaceChildren\(skel\);\s*messagePanel\.showPopover\(\{ source: bell \}\);/);
+  // 枫琴：平台公告铃铛已删除。
+  assert.doesNotMatch(app, /system-messages/);
 });
 
 test("二级页面改版·表单：侧边栏表单分组、两列、必填 *、排序收进高级设置、保存取消固定底部；学员叫姓名、颜色用色块、新建不提示留空", async () => {
@@ -516,20 +463,13 @@ test("二级页面改版·线索详情与周课表：线索详情有阶段进度
 test("QA-01/02/03 前端：待确认出勤提交的课不能走普通销课；控制台日志不撑宽；机构设置不露平台品牌", async () => {
   const v2 = await readFile("src/tenant/v2.js", "utf8"),
     c2 = await readFile("src/tenant/c2.js", "utf8"),
-    v2a = await readFile("src/tenant/v2a.js", "utf8"),
-    con = await readFile("src/console/app.js", "utf8"),
-    css = await readFile("src/console/app.css", "utf8");
+    v2a = await readFile("src/tenant/v2a.js", "utf8");
   // 课程面板：有待确认出勤提交时不显示逐人出勤按钮、确认销课、教师请假/机构取消。
   assert.match(v2, /canMark = planned && enabled\("attendance", "update"\) && !pendingAtt;/);
   assert.match(v2, /if \(planned && enabled\("attendance", "update"\) && !pendingAtt\)/);
   assert.match(v2, /enabled\("attendance", "update"\) && !pendingAtt && \(planned \|\| data\.status === "completed"\)/);
   assert.match(v2, /button\("去确认"/);
   assert.match(c2, /老师已提交，去确认/);
-  // 控制台日志：中文操作名、机构名、长内容在日志区域内换行并可展开。
-  assert.match(con, /const LOG_ACTIONS = \{/);
-  assert.match(con, /names\.get\(item\.tenant_id\)/);
-  assert.match(css, /\.log-full\{[^}]*overflow-wrap:anywhere/);
-  assert.doesNotMatch(con.slice(con.indexOf("async function logs"), con.indexOf("async function boot")), /item\.action \+ " · "/);
   // 机构设置：中性文案。
   assert.doesNotMatch(v2a, /由枫琴在平台后台统一设置/);
   assert.match(v2a, /机构品牌信息由管理员统一维护，如需修改请联系管理员。/);
@@ -568,7 +508,6 @@ test("B1 前端：登记缴费可分多个课时包、剩余进预收、其他�
 test("D1 前端与界面修复：删除按钮、机构停用/彻底删除、公告撤回；空日期从今天开始；排课选学员改为搜索+卡片；强制保存只在冲突后出现", async () => {
   const app = await readFile("src/tenant/app.js", "utf8"),
     ui = await readFile("src/ui/components.js", "utf8"),
-    con = await readFile("src/console/app.js", "utf8"),
     v2f = await readFile("src/tenant/v2f.js", "utf8"),
     v2t = await readFile("src/tenant/v2t.js", "utf8"),
     v2s = await readFile("src/tenant/v2s.js", "utf8"),
@@ -579,10 +518,6 @@ test("D1 前端与界面修复：删除按钮、机构停用/彻底删除、公�
   assert.match(c3, /path: "credits\/stages\/" \+ r\.id/);
   assert.match(v2t, /path: "tools\/leads\/" \+ row\.id/);
   assert.match(v2s, /path: "tools\/classes\/" \+ cls\.id/);
-  assert.match(con, /"tenants\/" \+ t\.id \+ "\/disable"/);
-  assert.match(con, /"tenants\/" \+ t\.id \+ "\/purge\/step"/);
-  assert.match(con, /"announcements\/" \+ row\.id \+ "\/withdraw"/);
-  assert.match(con, /api\("promo\/" \+ id, "DELETE"/);
   assert.match(ui, /active = selected \|\| today;/);
   assert.match(ui, /popup\.classList\.toggle\("is-end"/);
   assert.match(app, /function studentPicker\(form, \{ students, selected = \[\], locked = false/);

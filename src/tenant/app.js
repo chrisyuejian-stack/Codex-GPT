@@ -193,10 +193,10 @@ async function api(path, method = "GET", data) {
 // 后端没有这个接口（旧版本、404/405）时自动关掉合批、逐条重发。白名单与后端 read-batch.js 一致。
 const BATCH_EXACT = new Set([
   "c2/home", "schedule", "c2/unchecked", "submissions", "c2/makeups",
-  "finance/receivable-summary", "c2/renewals", "system-messages", "c2/followups",
+  "finance/receivable-summary", "c2/renewals", "c2/followups",
   "c2/students", "c2/students/counts", "credits/packages", "schedule-templates",
   "data/schedule_templates", "data/schedule_enrollments", "data/teachers", "data/locations",
-  "data/course_types", "data/course_categories", "data/students", "promo/recommend", "todo/summary",
+  "data/course_types", "data/course_categories", "data/students", "todo/summary",
 ]);
 const batchable = (path) => {
   const name = path.split("?")[0];
@@ -264,9 +264,6 @@ async function flushBatch() {
   });
 }
 async function apiRequest(path, method = "GET", data) {
-  // 艺界星途：家长查看某个孩子时自动带上 student_id（见 yx.js）。
-  // 只单独运行 app.js（旧登录回归测试）时没有 yx.js，下面几处都先判断函数是否存在。
-  if (typeof yxScopedPath === "function") path = yxScopedPath(path);
   const response = await fetch(base + "api/" + path, {
     method,
     headers: method === "GET" ? {} : { "Content-Type": "application/json" },
@@ -280,17 +277,15 @@ async function apiRequest(path, method = "GET", data) {
     result = { error: "记录或页面不存在" };
   }
   if (!response.ok) {
-    const loginRequest = typeof yxLoginPath === "function" ? yxLoginPath(path) : path.startsWith("login");
+    const loginRequest = /^(auth\/)?login|^setup/.test(path);
     if (response.status === 401 && !loginRequest)
       location.assign(base + "login");
     // 新接口错误为 {error: 代码, message: 中文}；旧接口为 {error: 中文, code}。两种都显示中文。
     const code = result.message ? result.error : result.code;
-    if (response.status === 403 && code === "tenant_expired" && !loginRequest && typeof yxTenantPaused === "function")
-      yxTenantPaused(result.message);
     const raw = result.message || result.error || "操作失败";
     // 学科没开通或没导入学科包时，后端只说“学科未开放”，这里告诉用户去哪里处理。
     const STO = { storage_full: "图库容量已满：请先删除不用的图片，或联系平台扩容。", storage_pending: "正在统计图库容量，请过几秒再上传。", storage_unavailable: "图库暂时连不上，请稍后再试。" };
-    const e = Error(STO[code] ? STO[code] : raw === "学科未开放" ? "这个学科还没开放：请先在“机构设置 › 课程与教室 › 报价课程与价目表”里导入学科包；列表里没有这个学科时，请联系平台开通。" : raw);
+    const e = Error(STO[code] ? STO[code] : raw);
     e.status = response.status;
     e.code = code;
     e.details = result.details;
@@ -669,12 +664,6 @@ function shell() {
             icon: "link",
             tabs: [
               register("enrol-leads", "线索", "leads", (c) => leadsPage(c)),
-              register("enrol-referrals", "合作升学", "referrals", (c) =>
-                referralsPage(c),
-              ),
-              register("enrol-promo", "推广中心", "promo", (c) =>
-                promoCenter(c),
-              ),
             ],
           },
         ]
@@ -811,7 +800,6 @@ function shell() {
   const dailyGroups = tidy(daily),
     manageGroups = tidy(manage),
     groups = [...dailyGroups, ...manageGroups];
-  register("settings-messages", "系统消息", "home", (c) => systemMessages(c));
   const nav = el("nav", null, { class: "v-nav staff-nav", "aria-label": "员工导航" });
   const navButton = (g) => {
     const item = button(g.label, () => navigate(g.tabs[0].key));
@@ -1227,38 +1215,6 @@ function shell() {
     menu.element.querySelector(".ui-button-face")?.prepend(UI.icon("plus"));
     tools.append(menu.element);
   }
-  let unreadBadge = null;
-  if (enabled("home")) {
-    const messagePanel = el("section", null, {
-      class: "ui-root c1-message-panel",
-      popover: "auto",
-      "aria-label": "系统消息",
-    });
-    // 点下立刻打开面板，先放灰色占位，数据回来再换上；不再等数据才弹出。
-    let bellSequence = 0;
-    const bell = UI.iconButton("系统消息", "bell", () => {
-      const request = ++bellSequence;
-      const skel = el("div", null, { class: "v-msg-skel", "aria-label": "正在加载通知" });
-      for (let i = 0; i < 5; i++) skel.append(el("span"));
-      messagePanel.replaceChildren(skel);
-      messagePanel.showPopover({ source: bell });
-      void (async () => {
-        try {
-          // 消息页先取数据、取到后才清空容器，所以占位会一直留到内容出现。
-          await systemMessages(messagePanel);
-          if (request !== bellSequence) return;
-          await refreshCounts();
-        } catch (error) {
-          if (request === bellSequence) messagePanel.replaceChildren(el("p", error.message, { class: "v-muted" }));
-        }
-      })();
-    });
-    bell.classList.add("v-bell");
-    bell.setAttribute("aria-haspopup", "dialog");
-    unreadBadge = el("span", "", { class: "c1-unread-badge", hidden: "" });
-    bell.append(unreadBadge);
-    tools.append(bell, messagePanel);
-  }
   tools.append(avatar.element);
   header.append(headTitle, headTabs, el("div", null, { class: "v-spacer" }), tools);
   main.append(header, toolbar, content);
@@ -1269,9 +1225,7 @@ function shell() {
       // 待办数字和未读消息同时请求，不再排队。
       const wantCounts = !financeOnly && enabled("home");
       const countsRequest = wantCounts ? api("todo/summary") : null;
-      const messagesRequest = unreadBadge ? api("system-messages?offset=0") : null;
       countsRequest?.catch(() => {});
-      messagesRequest?.catch(() => {});
       if (wantCounts) {
         const counts = await countsRequest;
         todoCounts = counts;
@@ -1298,12 +1252,6 @@ function shell() {
               el("span", String(n), { class: "c1-todo-badge" }),
             );
         }
-      }
-      if (unreadBadge) {
-        const data = await messagesRequest;
-        unreadBadge.textContent = String(data.unread_count || 0);
-        unreadBadge.hidden = !data.unread_count;
-        globalThis.ChannelV2Promo?.navBadge?.(data);
       }
     } catch (e) {
       notice(e.message);
@@ -1522,26 +1470,6 @@ async function home(c) {
   side.append(tasks);
   grid.append(today, side);
   c.append(grid);
-  if (enabled("promo")) {
-    const promos = await api("promo");
-    const latest = promos.items[0];
-    if (latest) {
-      const news = button(
-        "合作资讯" + (latest.is_read ? "" : " · 新") + " · " + latest.title,
-        () => promoDetail(c, latest.id),
-        "promo-banner",
-      );
-      c.append(news);
-      const nav = [...document.querySelectorAll(".staff-nav button")].find(
-        (x) => x.textContent.startsWith("推广中心"),
-      );
-      if (nav)
-        nav.setAttribute(
-          "data-unread",
-          String(promos.items.some((x) => !x.is_read)),
-        );
-    }
-  }
 }
 function drawer(title) {
   let dirty = false;
@@ -1878,7 +1806,6 @@ function profile(c) {
   changePassword(c);
   c.append(
     button("我的登录设备", () => devices()),
-    button("系统消息", () => systemMessages(c)),
   );
 }
 // 主题色不单独请求一份样式表（它会挡住页面脚本启动）；品牌数据到手后直接设置。
@@ -1893,59 +1820,24 @@ function applyTheme(color) {
 }
 (async () => {
   try {
-    // 品牌和“我是谁”互不依赖，同时发出，少等一次往返。
-    // 艺界星途：课程方案公开分享页 /s/{token} 复用本脚本，只渲染方案，不请求登录信息、不进入 CRM 外壳。
-    if (/^\/s\/[^/]+$/.test(location.pathname) && typeof yxSharePage === "function") return yxSharePage();
+    // 枫琴教务中心：单机构，所有角色走 /login，接口统一在根 /api/。
     const isLogin = location.pathname.endsWith("/login");
-    const rootBase = typeof yxIsRoot === "function" && yxIsRoot();
     const meRequest = isLogin ? null : api("me");
     meRequest?.catch(() => {});
-    // 轻量品牌：不含登录背景大图（背景改为单独的图片地址，可长期缓存）；Logo 也是图片地址。
-    // 艺界星途：根地址（管理者入口）没有机构路径，登录页用平台品牌，登录后再按 me 的机构代号取机构品牌；不做本机缓存。
-    const brandRequest = rootBase ? Promise.resolve(yxPlatformBrand()) : api("public/brand?lite=1");
-    // 登录后不必等品牌数据（里面有一张约 100KB 的登录背景图）：用这台设备上次记下的机构名称、Logo、主题色先进系统，
-    // 后台再取最新的并记下来。按机构地址分开记，不会串到别的机构；登录背景图不记。第一次在这台设备上打开时照旧等待。
-    const brandKey = "fq_brand:" + base;
-    let saved = null;
-    if (!isLogin && !rootBase)
-      try {
-        saved = JSON.parse(localStorage.getItem(brandKey) || "null");
-      } catch {
-        saved = null;
-      }
-    const remember = (b) => {
-      try {
-        const { login_bg, ...rest } = b || {};
-        localStorage.setItem(brandKey, JSON.stringify(rest));
-      } catch {
-        // 存不下或浏览器禁止存储时忽略，下次照旧等待。
-      }
-    };
-    if (saved?.display_name) {
-      brand = saved;
-      void brandRequest.then((fresh) => {
-        remember(fresh);
-        if (fresh?.theme_color !== saved.theme_color) applyTheme(fresh.theme_color);
-        Object.assign(brand, fresh);
-      }, () => {});
+    brand = await api("public/brand?lite=1").catch(() => ({ display_name: "枫琴教务中心" }));
+    brand.display_name = "枫琴教务中心";
+    if (isLogin) {
+      // 系统还没初始化时，登录页换成一次性初始化页（创建第一位主管）。
+      const status = await api("setup").catch(() => ({ initialized: true }));
+      if (!status.initialized && typeof fqSetupPage === "function") return fqSetupPage();
+      await login();
     } else {
-      brand = await brandRequest;
-      if (!isLogin && !rootBase) remember(brand);
-    }
-    applyTheme(brand?.theme_color);
-    if (isLogin) await login();
-    else {
       me = await meRequest;
-      if (rootBase && me.tenant_slug) {
-        brand = await yxTenantBrand(me.tenant_slug);
-        yxApplyTheme(brand.theme_color);
-      }
-      if (me.user.roles.includes("parent") && typeof yxParentShell === "function") return yxParentShell();
       scheduleView = me.policy.settings.default_schedule_view || "calendar";
       shell();
     }
   } catch (e) {
-    if (e.code !== "tenant_expired") root.replaceChildren(el("p", e.message, { class: "loading" }));
+    root.replaceChildren(el("p", e.message, { class: "loading" }));
   }
 })();
 
@@ -5921,53 +5813,6 @@ async function toolPage(kind, filter = null, offset = 0) {
 function pager(c, next, offset, load) {
   if (offset) c.append(button("上一页", () => load(Math.max(0, offset - 200))));
   if (next !== null) c.append(button("下一页", () => load(next)));
-}
-async function systemMessages(c, banner = false, offset = 0) {
-  const data = await api("system-messages?offset=" + offset);
-  const unread = document.querySelector(".c1-unread-badge");
-  if (unread) {
-    unread.textContent = String(data.unread_count || 0);
-    unread.hidden = !data.unread_count;
-  }
-  c.replaceChildren();
-  if (!banner) c.append(el("h1", "系统消息"));
-  const rows = banner ? data.items.slice(0, 1) : data.items;
-  for (const row of rows) {
-    if (banner) {
-      const line = el("div", null, { class: "system-banner" });
-      line.append(
-        el("strong", row.title),
-        el("span", row.content, { class: "preserve-text" }),
-      );
-      if (!row.is_read)
-        line.append(
-          button("标记已读", async () => {
-            await api("system-messages/" + row.id + "/read", "POST", {});
-            await systemMessages(c, true);
-          }),
-        );
-      c.append(line);
-      continue;
-    }
-    const p = card(row.title, row.is_read ? "已读" : "未读");
-    p.append(el("p", row.content, { class: "preserve-text" }));
-    if (!row.is_read)
-      p.append(
-        button("标记已读", async () => {
-          await api("system-messages/" + row.id + "/read", "POST", {});
-          await systemMessages(c, banner, offset);
-        }),
-      );
-    c.append(p);
-  }
-  if (!banner && !rows.length)
-    c.append(el("p", "暂无系统消息", { class: "empty" }));
-  if (!banner) {
-    if (offset)
-      c.append(button("上一页", () => systemMessages(c, false, offset - 200)));
-    if (data.items.length === 200)
-      c.append(button("下一页", () => systemMessages(c, false, offset + 200)));
-  }
 }
 async function classesPage(c, offset = 0, selected = null) {
   const data = await toolPage("classes", null, offset);

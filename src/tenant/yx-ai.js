@@ -35,7 +35,6 @@ async function yxAi(route, body, fresh) {
   if (fresh || !yxAiKeys[sig]) yxAiKeys[sig] = yxUuid();
   const key = yxAiKeys[sig];
   let path = "ai/" + route;
-  if (typeof yxScopedPath === "function") path = yxScopedPath(path);
   for (let i = 0; ; i++) {
     let res;
     try {
@@ -70,7 +69,6 @@ async function yxAi(route, body, fresh) {
       continue;
     }
     if (res.status === 401) location.assign(base + "login");
-    if (res.status === 403 && code === "tenant_expired" && typeof yxTenantPaused === "function") yxTenantPaused(data.message);
     if (code !== "rate_limited") delete yxAiKeys[sig];
     const e = Error(YXAI_ERR[code] || data.message || "AI 请求失败");
     e.code = code;

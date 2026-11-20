@@ -55,7 +55,7 @@ test('YXF me 使用固定实例与根 API 路径', async () => {
 });
 
 test('YXF 新增前端文件无 HTML 注入汇、内联事件或动态执行，并已进入机构端打包', async () => {
-  for (const file of ['src/tenant/yx.js', 'src/tenant/yx-settings.js', 'src/tenant/yx-plans.js', 'src/tenant/yx-home.js', 'src/tenant/yx-ai.js', 'src/tenant/yx-content.js', 'src/tenant/yx-growth.js', 'src/tenant/yx-reports.js']) {
+  for (const file of ['src/tenant/yx.js', 'src/tenant/yx-settings.js', 'src/tenant/yx-home.js', 'src/tenant/yx-ai.js', 'src/tenant/yx-growth.js']) {
     const source = await readFile(file, 'utf8');
     assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\s*\(|new\s+Function\s*\(/.test(source), file);
     assert.ok(!/style\s*=\s*["']/.test(source), file + ' 不写内联 style 属性（CSP 不允许）');
@@ -63,15 +63,9 @@ test('YXF 新增前端文件无 HTML 注入汇、内联事件或动态执行，�
   const assets = await tenantAssets();
   assert.ok(assets.js.includes('function yxLoginPage('));
   assert.ok(assets.js.includes('async function yxSettingsSection('));
-  assert.ok(assets.js.includes('async function yxPlanEditor('));
-  assert.ok(assets.js.includes('async function yxContentEditor('));
   assert.ok(assets.js.includes('async function yxAi('));
   assert.ok(assets.js.includes('async function yxFeedbackEditor('));
-  assert.ok(assets.js.includes('async function yxReportEditor('));
-  // 分享页 /s/{token} 复用机构端脚本：启动时先进入 yxSharePage，不请求 me、不进登录页。
-  const appSource = await readFile('src/tenant/app.js', 'utf8');
-  assert.match(appSource, /if \(\/\^\\\/s\\\/\[\^\/\]\+\$\/\.test\(location\.pathname\) && typeof yxSharePage === "function"\) return yxSharePage\(\);\n    const isLogin/);
+  // 枫琴：单机构启动、首次初始化页。
+  assert.ok(assets.js.includes('function fqSetupPage('));
   assert.ok(assets.css.includes('.yx-login'));
-  const consoleSource = await readFile('src/console/app.js', 'utf8');
-  assert.ok(consoleSource.includes('async function yxOpsPanel('));
 });

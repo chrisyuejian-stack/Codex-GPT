@@ -60,7 +60,7 @@ async function app() {
     new URL("../src/tenant/app.js", import.meta.url),
     "utf8",
   );
-  const a = source.indexOf("(async () => {\n  try {\n    // 品牌和“我是谁”"),
+  const a = source.indexOf("(async () => {\n  try {\n    // 枫琴教务中心：单机构"),
     b = source.indexOf("})();", a) + 5;
   assert.ok(a >= 0);
   source = source.slice(0, a) + source.slice(b);
