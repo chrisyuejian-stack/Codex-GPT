@@ -5,6 +5,16 @@ import { jsonChunks, boundedText, storedRecord, auditChunks, checkBindings, asse
 import { backupTables, creditTables, BACKUP_STATUS_LABELS } from "./backup-model.js";
 import { randomId, now, fail } from "./core.js";
 
+// D1 每个 compound SELECT 最多 5 段（实测第 6 段报 too many terms in compound SELECT，本地 SQLite 允许 500 段）。
+// 超过时按 5 段一组嵌套成子查询；行、列名与顺序不变，参数仍按文本顺序绑定。
+const D1_COMPOUND_MAX = 5;
+function unionAll(parts) {
+  if (parts.length <= D1_COMPOUND_MAX) return parts.join(" UNION ALL ");
+  const groups = [];
+  for (let i = 0; i < parts.length; i += D1_COMPOUND_MAX)
+    groups.push("SELECT * FROM (" + parts.slice(i, i + D1_COMPOUND_MAX).join(" UNION ALL ") + ")");
+  return unionAll(groups);
+}
 const stage6ReferenceSql = {
   students:
     "SELECT id FROM class_members WHERE tenant_id=?1 AND student_id=?2 AND deleted_at IS NULL UNION ALL SELECT id FROM followup_notes WHERE tenant_id=?1 AND student_id=?2 AND deleted_at IS NULL UNION ALL SELECT id FROM followup_tasks WHERE tenant_id=?1 AND student_id=?2 AND deleted_at IS NULL UNION ALL SELECT id FROM student_routines WHERE tenant_id=?1 AND student_id=?2 AND deleted_at IS NULL UNION ALL SELECT id FROM leads WHERE tenant_id=?1 AND student_id=?2 AND deleted_at IS NULL LIMIT 1",
@@ -1158,8 +1168,8 @@ const inboxUnion = [
  'SELECT '+inboxProjection({type:"'student_followup'",subtype:"'stage'",entity_id:'x.id',student_id:'x.student_id',title:"s.name||' · '||x.name",reason:"'学习阶段已结束，需跟进后续安排'",due_at:"strftime('%s',x.date_to||'T18:00:00+08:00')*1000",assignee_id:'s.created_by',assignee_role:"'academic'",source_version:'CAST(x.version AS TEXT)',action:"'student_stage'",entity_version:"x.version"})+` FROM student_stages x JOIN args a ON x.tenant_id=a.tenant_id JOIN students s ON s.tenant_id=x.tenant_id AND s.id=x.student_id WHERE x.deleted_at IS NULL AND x.status='active' AND x.date_to<a.today AND s.deleted_at IS NULL`,
  'SELECT '+inboxProjection({type:"'payment_check'",subtype:"'payment'",entity_id:'p.id',student_id:'p.student_id',title:"s.name||' · 收款待核对'",reason:"'缴费尚未关联课时包或确认分类'",due_at:"strftime('%s',p.paid_at||'T18:00:00+08:00')*1000",assignee_role:"'finance'",source_version:'CAST(p.version AS TEXT)',action:"'resolve_payment'",entity_version:"p.version"})+` FROM pending_student_payments p JOIN args a ON p.tenant_id=a.tenant_id JOIN students s ON s.tenant_id=p.tenant_id AND s.id=p.student_id WHERE s.deleted_at IS NULL`,
  'SELECT '+inboxProjection({type:"'payment_check'",subtype:"'price'",entity_id:'p.id',student_id:'p.student_id',course_type_id:'p.course_type_id',title:"s.name||' · 课时包待定价'",reason:"'课时包尚未确认价格，收款金额待核对'",due_at:"strftime('%s',p.purchase_date||'T18:00:00+08:00')*1000",assignee_role:"'finance'",source_version:'CAST(p.version AS TEXT)',action:"'price_package'",entity_version:"p.version"})+` FROM packages p JOIN args a ON p.tenant_id=a.tenant_id JOIN students s ON s.tenant_id=p.tenant_id AND s.id=p.student_id WHERE p.deleted_at IS NULL AND p.amount IS NULL AND s.deleted_at IS NULL`
-].join(' UNION ALL ');
-const inboxCte=`WITH args AS(SELECT ?1 tenant_id,?2 today,?3 at,?4 low,?5 days,?6 user_id,?7 allowed,?8 scope,?9 roles,?10 teacher_id)`+renewalGroups+`, raw_inbox AS(${inboxUnion}), assigned AS (
+];
+const inboxCte=`WITH args AS(SELECT ?1 tenant_id,?2 today,?3 at,?4 low,?5 days,?6 user_id,?7 allowed,?8 scope,?9 roles,?10 teacher_id)`+renewalGroups+`, raw_inbox AS(${unionAll(inboxUnion)}), assigned AS (
  SELECT x.*,x.type||':'||x.subtype||':'||x.entity_id item_key,u.id owner_id,u.name owner_name,u.roles owner_roles
  FROM raw_inbox x CROSS JOIN args a LEFT JOIN users u ON u.tenant_id=a.tenant_id AND u.id=x.assignee_id AND u.active=1 AND u.deleted_at IS NULL
  WHERE x.type||':'||x.subtype IN(SELECT value FROM json_each(a.allowed)) AND (a.teacher_id IS NULL OR x.teacher_id=a.teacher_id)
@@ -1532,12 +1542,12 @@ export function repo(env, tenantId) {
     async currentFullCounts() {
       scoped();
       const rows = await all(
-        Object.entries(fullBackupTables)
-          .map(
+        unionAll(
+          Object.entries(fullBackupTables).map(
             ([table, spec]) =>
               `SELECT '${table}' name,COUNT(*) n FROM ${table} WHERE ${table === "tenants" ? "id=?1" : spec.tenant ? "tenant_id=?1" : "?1 IS NOT NULL"}`,
-          )
-          .join(" UNION ALL "),
+          ),
+        ),
         tenantId,
       );
       return Object.fromEntries(rows.map((x) => [x.name, x.n]));
@@ -3632,9 +3642,24 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
 
       const statements = {
         students:
-          "SELECT id FROM users WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL UNION ALL SELECT id FROM lesson_participants WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL UNION ALL SELECT id FROM schedule_enrollments WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL UNION ALL SELECT id FROM packages WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL UNION ALL SELECT id FROM student_schedule_blocks WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL UNION ALL SELECT id FROM student_stages WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL UNION ALL SELECT id FROM student_payments WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL LIMIT 1",
+          unionAll([
+            "SELECT id FROM users WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL",
+            "SELECT id FROM lesson_participants WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL",
+            "SELECT id FROM schedule_enrollments WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL",
+            "SELECT id FROM packages WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL",
+            "SELECT id FROM student_schedule_blocks WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL",
+            "SELECT id FROM student_stages WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL",
+            "SELECT id FROM student_payments WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL",
+          ]) + " LIMIT 1",
         teachers:
-          "SELECT id FROM users WHERE tenant_id=? AND teacher_id=? AND deleted_at IS NULL UNION ALL SELECT id FROM lessons WHERE tenant_id=? AND (teacher_id=? OR assistant_id=?) AND deleted_at IS NULL UNION ALL SELECT id FROM schedule_templates WHERE tenant_id=? AND (teacher_id=? OR assistant_id=?) AND deleted_at IS NULL UNION ALL SELECT id FROM teacher_rates WHERE tenant_id=? AND teacher_id=? AND deleted_at IS NULL UNION ALL SELECT id FROM teacher_payments WHERE tenant_id=? AND teacher_id=? AND deleted_at IS NULL UNION ALL SELECT id FROM teacher_adjustments WHERE tenant_id=? AND teacher_id=? AND deleted_at IS NULL LIMIT 1",
+          unionAll([
+            "SELECT id FROM users WHERE tenant_id=? AND teacher_id=? AND deleted_at IS NULL",
+            "SELECT id FROM lessons WHERE tenant_id=? AND (teacher_id=? OR assistant_id=?) AND deleted_at IS NULL",
+            "SELECT id FROM schedule_templates WHERE tenant_id=? AND (teacher_id=? OR assistant_id=?) AND deleted_at IS NULL",
+            "SELECT id FROM teacher_rates WHERE tenant_id=? AND teacher_id=? AND deleted_at IS NULL",
+            "SELECT id FROM teacher_payments WHERE tenant_id=? AND teacher_id=? AND deleted_at IS NULL",
+            "SELECT id FROM teacher_adjustments WHERE tenant_id=? AND teacher_id=? AND deleted_at IS NULL",
+          ]) + " LIMIT 1",
         locations:
           "SELECT id FROM lessons WHERE tenant_id=? AND location_id=? AND deleted_at IS NULL UNION ALL SELECT id FROM schedule_templates WHERE tenant_id=? AND location_id=? AND deleted_at IS NULL LIMIT 1",
         course_categories:

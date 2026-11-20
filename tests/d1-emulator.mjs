@@ -8,6 +8,12 @@ export const byteSize = (value) =>
 export function validateD1(sql, params = []) {
   if (Buffer.byteLength(sql) > 100000) throw Error("D1_SQL_TOO_LONG");
   const stack = [];
+  // D1 每个 compound SELECT 最多 5 段（实测第 6 段报 too many terms in compound SELECT）。
+  // 按括号层级分别统计 UNION / INTERSECT / EXCEPT，嵌套子查询各算各的。
+  const compound = [0];
+  const checkCompound = (n) => {
+    if (n + 1 > 5) throw Error("D1_TOO_MANY_COMPOUND_TERMS: too many terms in compound SELECT");
+  };
   let quoted = false;
   for (let i = 0; i < sql.length; i++) {
     const c = sql[i];
@@ -20,6 +26,14 @@ export function validateD1(sql, params = []) {
       continue;
     }
     if (quoted) continue;
+    if (
+      (c === "U" || c === "u" || c === "I" || c === "i" || c === "E" || c === "e") &&
+      !/[A-Za-z0-9_]/.test(sql[i - 1] || "") &&
+      /^(?:UNION|INTERSECT|EXCEPT)(?![A-Za-z0-9_])/i.test(sql.slice(i, i + 10))
+    )
+      compound[compound.length - 1]++;
+    if (c === "(") compound.push(0);
+    else if (c === ")" && compound.length > 1) checkCompound(compound.pop());
     if (c === "(")
       stack.push({
         name: sql
@@ -40,6 +54,7 @@ export function validateD1(sql, params = []) {
         throw Error("D1_TOO_MANY_FUNCTION_ARGUMENTS");
     }
   }
+  for (const n of compound) checkCompound(n);
   if (params.length > 100) throw Error("D1_TOO_MANY_PARAMETERS");
   if (params.some((x) => byteSize(x) > 2000000))
     throw Error("D1_VALUE_TOO_BIG");
