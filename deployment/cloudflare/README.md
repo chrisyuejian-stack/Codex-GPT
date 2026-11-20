@@ -6,17 +6,17 @@
 
 | 类型 | 名称 | 说明 |
 |---|---|---|
-| Pages | `fengqin-crm-prod` | 站点，地址 https://fengqin-crm-prod.pages.dev（尚未绑定自定义域名） |
+| Pages | `fengqin-crm-prod` | 站点，正式地址 https://edu.fantasmearts.com（腾讯云 DNS：`edu` CNAME → `fengqin-crm-prod.pages.dev`）；`pages.dev` 地址因 APP_HOST 限制返回 404 |
 | D1 | `fengqin-crm-prod`（f4eaf652-ce6d-4098-909b-0f6563dbfd31，APAC） | 已执行迁移 0001–0032 |
 | R2 | `fengqin-media-prod`、`fengqin-backups-prod` | 私有 |
 | Worker | `fengqin-backup-prod` | 定时备份，cron `0 19 * * *`、`*/5 * * * *`，无公开地址 |
 
-Pages 生产环境变量：`APP_HOST=fengqin-crm-prod.pages.dev`、`AI_FAST_MODEL`、`AI_DEEP_MODEL`、`AI_FAST_DAILY_LIMIT`、`AI_DEEP_DAILY_LIMIT`；
+Pages 生产环境变量：`APP_HOST=edu.fantasmearts.com`（2026-11-20 起）、`AI_FAST_MODEL`、`AI_DEEP_MODEL`、`AI_FAST_DAILY_LIMIT`、`AI_DEEP_DAILY_LIMIT`；
 密钥：`FIELD_KEY`、`BACKUP_KEY`、`HMAC_KEY`、`PW_PEPPER`、`SETUP_KEY`（暂未配置 `DEEPSEEK_API_KEY`，AI 功能不可用）。
 备份 Worker 密钥：`FIELD_KEY`、`BACKUP_KEY`、`HMAC_KEY`、`PW_PEPPER`（与 Pages 相同）。密钥值由用户自行保管，不在仓库中。
 兼容日期 2026-11-16，与原艺界星途线上一致。
 
-注意：`edu.fantasmearts.com` 目前绑定在旧站点 Pages `fantasme-academic` 上，切换前须确认；`edu.yijiexingtu.com` 属于艺界星途站点，不要占用。
+注意：`edu.fantasmearts.com` 已于 2026-11-20 从旧站点 Pages `fantasme-academic` 解绑并绑定到本项目；`edu.yijiexingtu.com` 属于艺界星途站点，不要占用。
 
 ## 更新站点
 
@@ -57,3 +57,5 @@ npx wrangler deploy --config deployment/cloudflare/backup-wrangler.toml
 | 2026-11-20 11:02 | d82b8b0 | 合入 main（PR #7：备份行数/大小、单条待办操作）；线上执行迁移 0032；同时重新部署备份 Worker。执行 0032 前的 D1 书签：`0000002a-00000000-00005129-b75c43ccc381025bb320986e102e9f3e` |
 
 D1 没有 `d1_migrations` 表，迁移是逐个文件手动执行的；新增迁移后在上表登记。
+| 2026-11-20 11:46 | e9dd0bc | 手机端提速（字体/登录图延迟加载、老师学员首屏预取） |
+| 2026-11-20 11:50 | e9dd0bc | 自定义域名切到 `edu.fantasmearts.com`，APP_HOST 同步修改并重新部署 |
