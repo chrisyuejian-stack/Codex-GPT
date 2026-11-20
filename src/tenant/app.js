@@ -1845,9 +1845,11 @@ function applyTheme(color) {
   themeSheet.replaceSync(":root{--theme:" + color + "}");
 }
 // 品牌字体与登录页大图在单独的样式文件里，脚本一开始就挂上，不挡首屏渲染（字体到了再换上）。
+// 手机（窄屏）或开了省流量时不加载：英文小标题改用系统衬线斜体，登录页顶部只显示深紫底色、不显示照片。
 try {
   const deferred = document.querySelector('meta[name="fq-deferred-css"]')?.content;
-  if (deferred && !document.querySelector('link[data-fq-deferred]'))
+  const lean = globalThis.matchMedia?.("(max-width: 760px)").matches || navigator.connection?.saveData === true;
+  if (deferred && !lean && !document.querySelector('link[data-fq-deferred]'))
     document.head.append(el("link", null, { rel: "stylesheet", href: deferred, "data-fq-deferred": "" }));
 } catch {}
 (async () => {
