@@ -11,7 +11,11 @@ const types = {
   ".js": "application/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".png": "image/png",
 };
+// 二进制文件（图标）以 base64 内嵌，运行时还原成字节；文本文件原样内嵌。
+const binary = new Set([".png"]);
 async function walk(dir) {
   const files = [];
   for (const name of await readdir(dir)) {
@@ -25,7 +29,10 @@ const assets = {};
 for (const file of await walk(dist)) {
   const rel = "/" + relative(dist, file).split("\\").join("/");
   if (rel === "/_worker.js" || rel === "/_routes.json") continue;
-  assets[rel] = { type: types[extname(file)] || "application/octet-stream", body: await readFile(file, "utf8") };
+  const ext = extname(file);
+  assets[rel] = binary.has(ext)
+    ? { type: types[ext], base64: (await readFile(file)).toString("base64") }
+    : { type: types[ext] || "application/octet-stream", body: await readFile(file, "utf8") };
 }
 let worker = await readFile(join(dist, "_worker.js"), "utf8");
 const tail = /export default ([A-Za-z0-9_$.]+);\s*$/;
@@ -41,7 +48,8 @@ const __fqStatic = {
     if (path.endsWith("/")) path += "index.html";
     const hit = __fqAssets[path];
     if (!hit) return new Response("Not Found", { status: 404 });
-    return new Response(hit.body, { headers: { "Content-Type": hit.type } });
+    const body = hit.base64 !== undefined ? Uint8Array.from(atob(hit.base64), (c) => c.charCodeAt(0)) : hit.body;
+    return new Response(body, { headers: { "Content-Type": hit.type } });
   },
 };
 export default {

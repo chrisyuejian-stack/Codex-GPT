@@ -23,7 +23,7 @@ test("第七阶段：全部自有前端无HTML注入汇、内联事件或动态�
       )
     ).flat();
   const files = await walk("dist");
-  assert.equal(files.length, 7); // 含延迟加载的 assets/tenant-fonts.css
+  assert.equal(files.length, 13); // 含延迟加载的 assets/tenant-fonts.css 与 PWA 的 manifest、sw.js、4 个图标
   assert.ok(!files.some(p=>/console|share/.test(p)));
   assert.ok(!files.some((p) => /\.map$|\/src\/|\/tests\//.test(p)));
   for (const file of [
