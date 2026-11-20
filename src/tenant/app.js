@@ -1236,12 +1236,15 @@ function shell() {
             tab.append(el("span", String(n), { class: "ui-tab-count" }));
         }
         moveTabInk(true);
+        // 枫琴：侧栏“待办”角标与收件箱同一个数（fq-today.js 提供 fqTodoCount，读 /api/todo/inbox 的 total）。
+        const inboxTotal = typeof globalThis.fqTodoCount === "function" ? await globalThis.fqTodoCount().catch(() => null) : null;
         const n =
+          inboxTotal ??
           (counts.unchecked_lessons || 0) +
-          (counts.teacher_submissions || 0) +
-          (counts.makeup_recent ?? counts.makeup_pending ?? 0) +
-          (counts.followup_overdue || 0) +
-          (counts.followup_today || 0);
+            (counts.teacher_submissions || 0) +
+            (counts.makeup_recent ?? counts.makeup_pending ?? 0) +
+            (counts.followup_overdue || 0) +
+            (counts.followup_today || 0);
         for (const item of [
           ...nav.querySelectorAll("button"),
           ...tabbar.querySelectorAll("button"),
