@@ -61,7 +61,7 @@
     const again = () => accountsV(c, offset);
     const staff = items.filter((u) => u.roles.some((r) => ["supervisor", "consultant", "academic", "finance"].includes(r))).length,
       students = items.filter((u) => u.roles.includes("student")).length;
-    vHead?.sub(data.total > items.length ? "共 " + data.total + " 个账号" : "员工账号 " + staff + " / " + me.limits.staff + " · 学员账号 " + students + " / " + me.limits.student);
+    vHead?.sub(data.total > items.length ? "共 " + data.total + " 个账号" : "员工账号 " + staff + " · 学员账号 " + students);
     vHead?.actions(
       supervisor() ? button("＋ 新建员工账号", () => newAccount(P().sink(again)), "primary") : null,
     );
