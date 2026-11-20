@@ -17,8 +17,6 @@
     personalRecords,
     personalPay,
     leadForm,
-    referralForm,
-    promoCenter,
     staffTimetable,
     reviewScreen,
   };
@@ -334,95 +332,6 @@
         ),
       );
   }
-  referralsPage = async (c, studentId = null) => {
-    const rows = await take(
-      "tools/referrals" +
-        (studentId ? "?student_id=" + encodeURIComponent(studentId) : ""),
-    );
-    clear(c);
-    c.append(
-      n("p", "仅在家长明确同意后提交姓名、年级、方向、意向和家长联系方式。"),
-    );
-    if (enabled("referrals", "create"))
-      c.append(b("推荐学员", () => referralForm(c, studentId), "primary"));
-    table(
-      c,
-      [
-        { key: "name", label: "学员" },
-        { key: "grade", label: "年级" },
-        { key: "direction", label: "方向" },
-        { key: "intention", label: "意向" },
-        {
-          key: "consent_at",
-          label: "同意信息",
-          render: (r) =>
-            r.consent_name +
-            " · " +
-            F.date(r.consent_at) +
-            " " +
-            F.time(r.consent_at) +
-            " · " +
-            r.consent_method,
-        },
-        { key: "consent_operator", label: "经办" },
-        {
-          key: "status",
-          label: "状态",
-          render: (r) =>
-            ({ submitted: "已提交", received: "已接收", withdrawn: "已撤回" })[
-              r.status
-            ],
-        },
-      ],
-      rows,
-      {
-        more: (r) =>
-          r.status === "submitted" && enabled("referrals", "update")
-            ? [
-                {
-                  label: "撤回",
-                  danger: true,
-                  onSelect: async () => {
-                    if (
-                      !(await U.confirm({
-                        title: "撤回推荐",
-                        consequence: "保留历史推荐及同意记录。",
-                        danger: true,
-                      }))
-                    )
-                      return;
-                    await api("tools/referrals/" + r.id, "PATCH", {
-                      version: r.version,
-                      status: "withdrawn",
-                    });
-                    await referralsPage(c, studentId);
-                  },
-                },
-              ]
-            : [],
-      },
-    );
-  };
-  referralForm = async (c, id) => {
-    await old.referralForm(c, id);
-    const f = document.querySelector("dialog[open] form");
-    if (!f) return;
-    const group = n("fieldset");
-    group.append(
-      n("legend", "家长同意信息"),
-      n("p", "仅用于本次升学推荐，提交至合作服务专用列表。"),
-    );
-    for (const key of [
-      "consent_name",
-      "consent_at",
-      "consent_method",
-      "consent_operator",
-    ]) {
-      const input = f.elements[key];
-      if (input) group.append(input.closest("label"));
-    }
-    f.insertBefore(group, f.querySelector("button[type=submit]"));
-  };
   // Finance lists share the same table; all values are already yuan at the HTTP boundary.
   creditPage = async (c, kind = "packages", studentId = "", offset = 0) => {
     c.dataset.creditScope = studentId || "";

@@ -593,7 +593,6 @@
     else {
       const box = panel("更多");
       if (enabled("students", "read")) box.append(button("不可排时段", () => R().studentBlocks(c, id)));
-      if (enabled("referrals")) box.append(button("合作升学推荐", () => referralsPage(body, id)));
       body.append(box);
     }
     return { wrap, row, data, groups, urgent, remind };

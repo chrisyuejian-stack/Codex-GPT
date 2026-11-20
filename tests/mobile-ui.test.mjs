@@ -114,7 +114,7 @@ async function app() {
   await installFoundation(context, Node, document);
   vm.runInContext(
     source +
-      '\n globalThis.ui={set(value){me=value.me;brand=value.brand;personalMonth=value.month||"2026-11";},api(fn){api=fn;},schedule(fn){scheduleRows=fn;},monthPicker,personalRecords,personalPay,reviewScreen,brandInitial,timetableImage,shell,wrapCanvasText,renewalNotice,promoContain,partnerLabel,personalPartner,promoDetail,promoTime,media(fn){promoLoadImage=fn;}};',
+      '\n globalThis.ui={set(value){me=value.me;brand=value.brand;personalMonth=value.month||"2026-11";},api(fn){api=fn;},schedule(fn){scheduleRows=fn;},monthPicker,personalRecords,personalPay,reviewScreen,brandInitial,timetableImage,shell,wrapCanvasText,renewalNotice,partnerLabel,personalPartner};',
     context,
   );
   const me = {
@@ -437,20 +437,8 @@ test("第七阶段界面：续费图中文标点不居行首、无二维码默�
   assert.ok(!texts.some((t) => /^[，。！？、；：）》」』】〕〉]/u.test(t)));
 });
 
-test("第八阶段界面：合作课个人详情无销课/会议信息；Logo等比居中不拉伸", async () => {
+test("第八阶段界面：合作课个人详情无销课/会议信息", async () => {
   const { ui, root } = await app();
-  const image = { naturalWidth: 400, naturalHeight: 100 };
-  let drawn;
-  ui.promoContain(
-    {
-      drawImage(...args) {
-        drawn = args;
-      },
-    },
-    image,
-    { x: 10, y: 20, width: 200, height: 200 },
-  );
-  assert.deepEqual(drawn, [image, 10, 95, 200, 50]);
   ui.personalPartner(
     root,
     {
@@ -467,50 +455,3 @@ test("第八阶段界面：合作课个人详情无销课/会议信息；Logo等
   assert.equal(root.querySelectorAll("button").length, 1);
 });
 
-test("第八阶段收尾界面：课程信息/截止先于步骤条和营销长图，课程封面不占首屏；学员直播文案", async () => {
-  const { ui, root, me, brand } = await app();
-  me.labels.promo = { applications: {} };
-  ui.set({ me, brand });
-  ui.media(async () => ({ src: "blob:marketing" }));
-  ui.api(async (path) =>
-    path.endsWith("/read")
-      ? {}
-      : {
-          campaign: {
-            id: "course",
-            title: "合作课程",
-            type: "course",
-            cover: "cover",
-            lecturer: "合作讲师",
-            apply_deadline: Date.parse("2026-11-04T12:00:00+08:00"),
-            detail_image_key: "long",
-            body: "课程正文",
-          },
-          sessions: [{ start_at: "2026-11-05T19:00:00+08:00", duration: 45 }],
-          posters: [],
-          contacts: [],
-        },
-  );
-  await ui.promoDetail(root, "course");
-  const text = root.textContent;
-  assert.ok(text.indexOf("主讲：") < text.indexOf("申请加入"));
-  assert.ok(
-    text.indexOf("申请截止：2026-11-04 12:00:00") < text.indexOf("申请加入"),
-  );
-  assert.equal(root.querySelectorAll("img").length, 1);
-  assert.equal(root.querySelectorAll("img")[0].attrs.alt, "课程介绍");
-  const body = root.querySelectorAll("ol")[0];
-  assert.equal(body.children.length, 4);
-  ui.personalPartner(
-    root,
-    {
-      course_name: "合作课",
-      teacher_name: "讲师",
-      start_at: "2099-01-01T09:00:00+08:00",
-      duration: 45,
-    },
-    () => {},
-  );
-  assert.ok(root.textContent.includes("线上直播课，上课安排请联系机构老师。"));
-  assert.ok(!root.textContent.includes("无需机构销课"));
-});

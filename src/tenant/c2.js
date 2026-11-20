@@ -768,8 +768,6 @@
     } else {
       if (enabled("students", "read"))
         body.append(b("不可排时段", () => studentBlocks(c, id)));
-      if (enabled("referrals"))
-        body.append(b("合作升学推荐", () => referralsPage(body, id)));
     }
   }
   async function studentBlocks(c, id) {
