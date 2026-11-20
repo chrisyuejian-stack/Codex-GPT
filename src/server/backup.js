@@ -116,7 +116,8 @@ async function retainBackups(env, at) {
     cursor = await r.backupGcCursor();
   const page = await env.CHANNEL_BACKUPS.list({
     prefix: "daily/",
-    cursor,
+    // 没有保存过翻页位置时库里是空字符串；R2 拒绝空的 cursor，只能不传。
+    cursor: cursor || undefined,
     limit: 1000,
   });
   const old = page.objects

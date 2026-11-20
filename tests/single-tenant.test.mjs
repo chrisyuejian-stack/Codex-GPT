@@ -626,3 +626,40 @@ test("学员缴费开关打开时只看本人记录；伪造student_id和批量�
     f.restore();
   }
 });
+
+test("单机构：前置 CDN 回源域名 ORIGIN_HOST 按 APP_HOST 处理；未设置时仍 404，Origin 不符的写入被拒绝", async () => {
+  const f = await fixture({ legacyUrls: false });
+  try {
+    assert.equal((await initialize(f)).status, 201);
+    const viaOrigin = (path, method = "GET", data, cookieValue = "", originHeader = origin) =>
+      f
+        .directRequest("https://origin.school.test" + path, {
+          method,
+          headers: {
+            Origin: originHeader,
+            "Content-Type": "application/json",
+            ...(cookieValue ? { Cookie: cookieValue } : {}),
+          },
+          body: data === undefined ? undefined : JSON.stringify(data),
+        })
+        .then(async (r) => ({ status: r.status, headers: r.headers, body: JSON.parse((await r.text()) || "null") }));
+    // 未设置 ORIGIN_HOST：其他域名一律中性 404。
+    assert.equal((await viaOrigin("/api/setup")).status, 404);
+    f.env.ORIGIN_HOST = "origin.school.test";
+    assert.deepEqual((await viaOrigin("/api/setup")).body, { initialized: true });
+    // 浏览器在 APP_HOST 页面发起、经 CDN 回源的登录与写入（POST 带请求体）可以通过同源检查。
+    const signed = await viaOrigin("/api/auth/login", "POST", { phone: "13911112222", password });
+    assert.equal(signed.status, 200);
+    const c = signed.headers.get("set-cookie").split(";")[0];
+    assert.match(signed.headers.get("set-cookie"), /^__Host-fengqin_session=.*Path=\/.*Secure/);
+    assert.equal((await viaOrigin("/api/me", "GET", undefined, c)).status, 200);
+    assert.equal((await viaOrigin("/api/logout", "POST", {}, c)).status, 200);
+    // 直接在 ORIGIN_HOST 页面上发起的写入：Origin 与 APP_HOST 不符，拒绝。
+    const forged = await viaOrigin("/api/auth/login", "POST", { phone: "13911112222", password }, "", "https://origin.school.test");
+    assert.equal(forged.status, 403);
+    // APP_HOST 本身不受影响。
+    assert.equal((await http(f, "/api/setup")).body.initialized, true);
+  } finally {
+    f.restore();
+  }
+});

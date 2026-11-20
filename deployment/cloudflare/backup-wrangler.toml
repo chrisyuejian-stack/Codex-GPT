@@ -19,3 +19,6 @@ bucket_name = "fengqin-media-prod"
 [[r2_buckets]]
 binding = "CHANNEL_BACKUPS"
 bucket_name = "fengqin-backups-prod"
+
+[observability]
+enabled = true

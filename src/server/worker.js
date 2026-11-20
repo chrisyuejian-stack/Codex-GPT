@@ -78,7 +78,22 @@ const staticTenant = new Set([
   "/assets/tenant.js",
   "/assets/tenant.css",
   "/assets/tenant-fonts.css",
+  // PWA（manifest、Service Worker、图标）
+  "/manifest.webmanifest",
+  "/sw.js",
+  "/assets/icon-192.png",
+  "/assets/icon-512.png",
+  "/assets/icon-maskable-512.png",
+  "/assets/apple-touch-icon.png",
 ]);
+const staticTypes = {
+  ".js": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".png": "image/png",
+};
+// 地址固定、内容会变的文件（浏览器每次都要确认最新版）：Service Worker 与 manifest。
+const revalidateStatic = new Set(["/sw.js", "/manifest.webmanifest"]);
 
 const offsetOf = (url) => {
   const n = Number(url.searchParams.get("offset") || 0);
@@ -106,13 +121,20 @@ async function serve(env, req, path, replacements = {}) {
   return response;
 }
 async function serveStatic(env, req, url) {
-  const response = await serve(env, req, url.pathname);
+  let response = await serve(env, req, url.pathname);
   if (response.ok) {
     const versions = url.searchParams.getAll("v");
     env.__cacheControl =
-      versions.length === 1 && /^[a-f0-9]{8,64}$/.test(versions[0])
+      !revalidateStatic.has(url.pathname) &&
+      versions.length === 1 &&
+      /^[a-f0-9]{8,64}$/.test(versions[0])
         ? "public, max-age=31536000, immutable"
         : "no-cache";
+    const type = staticTypes[url.pathname.slice(url.pathname.lastIndexOf("."))];
+    if (type) {
+      response = new Response(response.body, response);
+      response.headers.set("Content-Type", type);
+    }
   }
   return response;
 }
@@ -965,6 +987,16 @@ const worker = {
   async fetch(req, env) {
     const timerStart = performance.now(),
       timing = { trips: 0, dbMs: 0 };
+    // 前置 CDN（EdgeOne）回源专用域名：ORIGIN_HOST 的 DNS 始终指向 Pages，与用户访问的 APP_HOST 解耦。
+    // 从它进来的请求按 APP_HOST 处理，浏览器发来的 Origin（APP_HOST）因此仍能通过同源写入检查。
+    // 未设置 ORIGIN_HOST 时行为不变；直接在浏览器打开 ORIGIN_HOST 时写入会因 Origin 不符被拒绝。
+    if (env.ORIGIN_HOST) {
+      const incoming = new URL(req.url);
+      if (incoming.hostname === env.ORIGIN_HOST && env.APP_HOST && env.ORIGIN_HOST !== env.APP_HOST) {
+        incoming.hostname = env.APP_HOST;
+        req = new Request(incoming, req);
+      }
+    }
     env = {
       ...env,
       CHANNEL_DB: measureDatabase(env.CHANNEL_DB, timing),
