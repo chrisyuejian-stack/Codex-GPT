@@ -45,6 +45,10 @@ async function capture(env, tenantId, kind) {
     const payload = {
       format: "fengqin-database",
       schema_version: FULL_BACKUP_VERSION,
+      migration_version: FULL_BACKUP_VERSION,
+      counts: Object.fromEntries(
+        Object.entries(tables).map(([t, rows]) => [t, rows.length]),
+      ),
       table_signature: await fullTableSignature(),
       tenant_id: tenantId,
       environment_fingerprint: await environmentFingerprint(env),
@@ -81,11 +85,10 @@ async function publish(env, tenantId, snapshot) {
     "/" +
     snapshot.id +
     ".enc";
-  await env.CHANNEL_BACKUPS.put(
-    key,
-    JSON.stringify(await seal(env, snapshot.payload, key)),
-    { httpMetadata: { contentType: "application/octet-stream" } },
-  );
+  const encrypted = JSON.stringify(await seal(env, snapshot.payload, key));
+  await env.CHANNEL_BACKUPS.put(key, encrypted, {
+    httpMetadata: { contentType: "application/octet-stream" },
+  });
   try {
     await repo(env, tenantId).saveFullBackup({
       id: snapshot.id,
@@ -94,6 +97,7 @@ async function publish(env, tenantId, snapshot) {
       r2_key: key,
       schema_version: FULL_BACKUP_VERSION,
       counts: counts(snapshot.payload),
+      size_bytes: textBytes(encrypted).byteLength,
     });
   } catch (e) {
     await env.CHANNEL_BACKUPS.delete(key);
@@ -120,12 +124,16 @@ async function loadBackup(env, tenantId, id) {
   )
     fail(
       422,
-      "旧自动备份版本不兼容，请使用0031之后生成的全量备份",
+      "旧自动备份版本不兼容，请使用0032之后生成的全量备份",
       "backup_version_mismatch",
     );
   const payload = {
     format: "fengqin-database",
     schema_version: manifest.schema_version,
+    migration_version: manifest.migration_version,
+    counts: Object.fromEntries(
+      Object.keys(fullBackupTables).map((t) => [t, manifest.tables[t]]),
+    ),
     table_signature: manifest.table_signature,
     environment_fingerprint: manifest.environment_fingerprint,
     tenant_id: tenantId,
@@ -248,6 +256,12 @@ export async function fullBackupApi(req, env, resolved, user) {
           id: x.id,
           kind: "automatic",
           status: x.status,
+          size_bytes:
+            x.size_bytes ||
+            [...(m.files || []), ...(m.media_files || [])].reduce(
+              (n, f) => n + (f.bytes || 0),
+              0,
+            ),
           at: x.at,
           schema_version: m.schema_version || null,
           compatible: m.schema_version === FULL_BACKUP_VERSION,
@@ -310,6 +324,17 @@ export async function fullBackupApi(req, env, resolved, user) {
     const payload = await passwordOpen(d.file, d.password);
     const summary = await validateFullPayload(payload, env, tenantId);
     await r.validateFullReferences(payload);
+    const current_counts = await r.currentFullCounts();
+    const comparison = Object.fromEntries(
+      Object.keys(fullBackupTables).map((t) => [
+        t,
+        {
+          backup: summary.counts[t],
+          current: current_counts[t],
+          delta: summary.counts[t] - current_counts[t],
+        },
+      ]),
+    );
     const id = randomId("rst"),
       key = "restore_staging/" + tenantId + "/" + id + ".enc",
       hash = await sha(JSON.stringify(payload));
@@ -327,6 +352,8 @@ export async function fullBackupApi(req, env, resolved, user) {
       {
         id,
         ...summary,
+        current_counts,
+        comparison,
         expires_at: now() + 1800000,
         requires_confirmation: true,
         current_account_in_backup: payload.tables.users.some(

@@ -160,12 +160,11 @@ test("我负责/全部、类型过滤、分页和完整计数独立；其他人�
       ok(await request(s, "todo/inbox?" + q), 422);
   }));
 
-test("稍后按本人独立保存：明天/下周一北京时间09点，可更新/撤回，过期自动恢复", () =>
+test("任务和线索稍后修改共享业务到期日、版本与later分组，其他用户也看到新日期", () =>
   school(async (s) => {
-    const peer = await accountToken(s, ["academic"]);
-    await task(s);
+    const row = await task(s),
+      peer = await accountToken(s, ["academic"]);
     let item = ok(await request(s, "todo/inbox")).items[0];
-    const before = s.f.db.raw.prepare("SELECT * FROM followup_tasks").all();
     let result = ok(
       await request(s, "todo/snooze", "POST", {
         item_key: item.item_key,
@@ -173,15 +172,18 @@ test("稍后按本人独立保存：明天/下周一北京时间09点，可更�
         until: "tomorrow",
       }),
     );
-    assert.equal(result.item.snoozed_until, "2026-11-11T09:00:00+08:00");
-    assert.equal(ok(await request(s, "todo/inbox")).total, 0);
-    assert.equal(ok(await request(s, "todo/inbox")).snoozed_count, 1);
+    assert.equal(result.item.group, "later");
+    assert.equal(result.item.snooze_mode, "business_date");
+    assert.equal(
+      (await s.r.businessGet("followup_tasks", row.id)).due_date,
+      "2026-11-11",
+    );
+    assert.equal((await s.r.businessGet("followup_tasks", row.id)).version, 2);
     assert.equal(
       ok(await request(s, "todo/inbox?scope=all", "GET", undefined, peer.token))
-        .total,
-      1,
+        .items[0].due_at,
+      "2026-11-11T18:00:00+08:00",
     );
-    assert.equal(ok(await request(s, "todo/inbox?include_snoozed=1")).total, 1);
     ok(
       await request(s, "todo/snooze", "POST", {
         item_key: item.item_key,
@@ -198,27 +200,32 @@ test("稍后按本人独立保存：明天/下周一北京时间09点，可更�
         until: "next_week",
       }),
     );
-    assert.equal(result.item.snoozed_until, "2026-11-16T09:00:00+08:00");
-    assert.deepEqual(
-      s.f.db.raw.prepare("SELECT * FROM followup_tasks").all(),
-      before,
+    assert.equal(
+      (await s.r.businessGet("followup_tasks", row.id)).due_date,
+      "2026-11-16",
     );
-    await s.move(Date.parse("2026-11-16T09:01:00+08:00"));
-    item = ok(await request(s, "todo/inbox")).items[0];
-    assert.ok(item.overdue);
-    const cleared = ok(
+    const lead = ok(
+      await s.call("tools/leads", "POST", {
+        name: "回访",
+        stage: "new",
+        next_followup: "2026-11-09",
+      }),
+    );
+    item = ok(await request(s, "todo/inbox?type=lead_followup")).items[0];
+    ok(
       await request(s, "todo/snooze", "POST", {
         item_key: item.item_key,
         version: item.version,
-        until: "clear",
+        until: "tomorrow",
       }),
     );
-    assert.equal(cleared.item.snoozed_until, null);
     assert.equal(
-      s.f.db.raw
-        .prepare("SELECT COUNT(*) n FROM audit_log WHERE action='snooze'")
-        .get().n,
-      3,
+      (await s.r.businessGet("leads", lead.id)).next_followup,
+      "2026-11-11",
+    );
+    assert.equal(
+      s.f.db.raw.prepare("SELECT COUNT(*) n FROM todo_snoozes").get().n,
+      0,
     );
   }));
 
@@ -235,7 +242,7 @@ test("源记录更新使旧稍后失效，完成任务自动消失，旧版本�
     );
     ok(
       await s.call("tools/followup_tasks/" + row.id, "PATCH", {
-        version: row.version,
+        version: (await s.r.businessGet("followup_tasks", row.id)).version,
         student_id: s.students[0],
         title: "更新任务",
         due_date: "2026-11-09",
@@ -370,4 +377,64 @@ test("请假补课完成及已核对缴费不再出现在收件箱，GET无业�
     const after = ok(await request(s, "todo/inbox?scope=all"));
     assert.equal(after.counts.payment_check.total, 0);
     assert.equal(after.counts.makeup.active, 1);
+  }));
+
+test("其他类型个人稍后服务器持久化、不影响同事，明天/下周一09点到期可恢复及撤回", () =>
+  school(async (s) => {
+    await seed(s);
+    const peer = await accountToken(s, ["finance"]);
+    let item = ok(await request(s, "todo/inbox?scope=all&type=payment_check"))
+      .items[0];
+    const prior = s.f.db.raw.prepare("SELECT * FROM student_payments").all();
+    let result = ok(
+      await request(s, "todo/snooze", "POST", {
+        item_key: item.item_key,
+        version: item.version,
+        until: "tomorrow",
+      }),
+    );
+    assert.equal(result.item.snoozed_until, "2026-11-11T09:00:00+08:00");
+    assert.equal(
+      ok(await request(s, "todo/inbox?scope=all&type=payment_check")).total,
+      0,
+    );
+    assert.equal(
+      ok(
+        await request(
+          s,
+          "todo/inbox?scope=all&type=payment_check",
+          "GET",
+          undefined,
+          peer.token,
+        ),
+      ).total,
+      1,
+    );
+    item = result.item;
+    result = ok(
+      await request(s, "todo/snooze", "POST", {
+        item_key: item.item_key,
+        version: item.version,
+        until: "next_week",
+      }),
+    );
+    assert.equal(result.item.snoozed_until, "2026-11-16T09:00:00+08:00");
+    assert.deepEqual(
+      s.f.db.raw.prepare("SELECT * FROM student_payments").all(),
+      prior,
+    );
+    await s.move(Date.parse("2026-11-16T09:01:00+08:00"));
+    item = ok(await request(s, "todo/inbox?scope=all&type=payment_check"))
+      .items[0];
+    assert.equal(item.group, "today");
+    assert.equal(item.overdue_days, 0);
+    result = ok(
+      await request(s, "todo/snooze", "POST", {
+        item_key: item.item_key,
+        version: item.version,
+        until: "clear",
+      }),
+    );
+    assert.equal(result.item.snoozed_until, null);
+    assert.equal(result.item.group, "overdue");
   }));
