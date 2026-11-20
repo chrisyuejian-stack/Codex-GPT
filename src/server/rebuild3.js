@@ -179,17 +179,21 @@ export async function rebuild3Api(req, env, t, user, policy, path, url, body) {
     const month = viewMonth(url, day);
     const trend = [];
     let current;
+    // 6 个月的数据彼此独立：一起取（原来逐月串行），欠课统计也同时取；计算与顺序不变。
+    const months = [5, 4, 3, 2, 1, 0].map((i) =>
+      new Date(
+        Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 - i, 1),
+      )
+        .toISOString()
+        .slice(0, 7),
+    );
+    const [contexts, debt] = await Promise.all([
+      Promise.all(months.map((m) => r.financeContext(m))),
+      can(user, policy, "packages", "read") ? r.creditDebtTotal() : null,
+    ]);
     for (let i = 5; i >= 0; i--) {
-      const m = new Date(
-          Date.UTC(
-            Number(month.slice(0, 4)),
-            Number(month.slice(5, 7)) - 1 - i,
-            1,
-          ),
-        )
-          .toISOString()
-          .slice(0, 7),
-        ctx = await r.financeContext(m),
+      const m = months[5 - i],
+        ctx = contexts[5 - i],
         policies = effectivePolicies({
           absence_policies: JSON.parse(
             ctx.absence_settings?.[0]?.value || "{}",
@@ -213,7 +217,6 @@ export async function rebuild3Api(req, env, t, user, policy, path, url, body) {
         cost_amount: report.cost_amount,
       });
     }
-    const debt = can(user, policy, "packages", "read") ? await r.creditDebtTotal() : null;
     return moneyOut(
       projectRecord(user, policy, "reports", { month, ...current, trend,
         ...(debt ? { debt_units: debt.debt_units, debt_student_count: debt.debt_student_count } : {}),

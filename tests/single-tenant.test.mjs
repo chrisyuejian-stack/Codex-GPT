@@ -663,3 +663,58 @@ test("单机构：前置 CDN 回源域名 ORIGIN_HOST 按 APP_HOST 处理；未�
     f.restore();
   }
 });
+
+test("单机构：机构记录按数据库绑定缓存 60 秒；未初始化不缓存，TENANT_ID 每次校验，初始化/恢复后清除", async () => {
+  const f = await fixture({ legacyUrls: false });
+  const original = f.db.prepare.bind(f.db);
+  let instanceQueries = 0;
+  f.db.prepare = (query) => {
+    if (/FROM app_instance i JOIN tenants/.test(query)) instanceQueries++;
+    return original(query);
+  };
+  const realNow = Date.now;
+  try {
+    // 未初始化：每次都查，不缓存“空”结果。
+    assert.equal((await http(f, "/api/auth/status")).body.initialized, false);
+    assert.equal((await http(f, "/api/auth/status")).body.initialized, false);
+    assert.equal(instanceQueries, 2);
+    assert.equal((await initialize(f)).status, 201);
+    instanceQueries = 0;
+    const c = cookie(await login(f));
+    assert.equal(instanceQueries, 1);
+    assert.equal((await http(f, "/api/me", "GET", undefined, c)).status, 200);
+    assert.equal((await http(f, "/api/me", "GET", undefined, c)).status, 200);
+    assert.equal(instanceQueries, 1, "60 秒内不再查机构");
+    // 另一套数据库（另一个 fixture）有自己的缓存，互不串用。
+    const g = await fixture({ legacyUrls: false });
+    try {
+      assert.equal((await http(g, "/api/auth/status")).body.initialized, false);
+    } finally {
+      g.restore();
+    }
+    // TENANT_ID 与缓存的机构不一致：照常拒绝。
+    f.env.TENANT_ID = "ten_other";
+    assert.equal((await http(f, "/api/me", "GET", undefined, c)).status, 503);
+    delete f.env.TENANT_ID;
+    // 超过 60 秒重新读取。
+    Date.now = () => realNow() + 61000;
+    assert.equal((await http(f, "/api/me", "GET", undefined, c)).status, 200);
+    assert.equal(instanceQueries, 2);
+    Date.now = realNow;
+    // 主动清除后重新读取（源码版；打包版的模块实例不同，只核对调用位置）。
+    if (process.env.TEST_BUNDLE !== "1") {
+      const { clearTenantCache } = await import("../src/server/tenant.js");
+      clearTenantCache({ CHANNEL_DB: f.db });
+      assert.equal((await http(f, "/api/me", "GET", undefined, c)).status, 200);
+      assert.equal(instanceQueries, 3);
+    }
+    const restore = await readFile("src/server/full-backup.js", "utf8");
+    assert.match(restore, /await r\.commitFullRestore\(job, payload, snapshot\.id, user\);\s*\/\/[^\n]*\n\s*clearTenantCache\(env\);/);
+    const setupSource = await readFile("src/server/setup.js", "utf8");
+    assert.match(setupSource, /initializeInstance\([^)]*\)[^;]*;\s*clearTenantCache\(env\);/);
+  } finally {
+    Date.now = realNow;
+    f.db.prepare = original;
+    f.restore();
+  }
+});

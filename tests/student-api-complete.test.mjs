@@ -39,6 +39,23 @@ test("学员根入口：下一节课/本人课表/课时余额/老师点评齐�
     assert.equal(comments.body.items.length, 1);
     assert.ok(comments.body.items.every((x) => x.student_id === s.students[0]));
     assert.equal(comments.body.items[0].message.good, "节奏稳定");
+    // 2026-11-20：每条点评带上课程开始时间、课程名、老师名、本人出勤，与本人课表同一节课的字段一致。
+    const note = comments.body.items[0];
+    assert.ok(note.lesson_id && note.start_at && note.course_name && note.teacher_name, JSON.stringify(note));
+    const d = note.start_at.slice(0, 10),
+      dayAfter = new Date(Date.parse(d + "T12:00:00Z") + 86400000).toISOString().slice(0, 10);
+    const row = (await get("schedule?from=" + d + "&to=" + dayAfter)).body.items.find((x) => x.id === note.lesson_id);
+    assert.ok(row, "点评对应的课在本人课表里");
+    for (const k of ["start_at", "course_name", "teacher_name", "own_attendance"]) assert.equal(note[k], row[k], k);
+    // 批量读取里同样带这些字段。
+    const batch = await s.f.directRequest("https://school.test/api/read-batch", {
+      method: "POST",
+      headers: { Cookie: "__Host-fengqin_session=" + s.student.token, Origin: "https://school.test", "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: ["student/comments"] }),
+    });
+    const batched = (await batch.json()).results[0];
+    assert.equal(batched.status, 200);
+    assert.equal(batched.body.items[0].course_name, row.course_name);
     await get("c3/student-comments");
     ok(
       await request(s, "credits/payments", "GET", undefined, s.student.token),

@@ -100,10 +100,11 @@ test("速度 S2/S3：认证固定往返与实测 D1 次数，成功及失败的 
     // /me no longer reads the retired referrals feature switch.
     const me = await f.request(root + "me", { headers });
     assert.equal(me.status, 200);
-    assert.equal(verifyTiming(me), 2);
+    // 机构记录走 isolate 缓存（tenant.js）后，每个请求少 1 个往返：me 2→1、data 3→2。
+    assert.equal(verifyTiming(me), 1);
     const data = await f.request(root + "data/students", { headers });
     assert.equal(data.status, 200);
-    assert.equal(verifyTiming(data), 3);
+    assert.equal(verifyTiming(data), 2);
     const denied = await f.request(root + "me");
     assert.equal(denied.status, 401);
     verifyTiming(denied);
