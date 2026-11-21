@@ -231,6 +231,12 @@
       records: tab === "records" && !standalone ? R().take("c2/students/" + key + "/history") : null,
     };
     for (const v of Object.values(extra)) v?.catch(() => {});
+    // 课表页签：本周课表与固定课规则也和基本资料同时发出（路径与 v2.js studentWeek 完全一致，一次性预取）。
+    if (tab === "schedule" && enabled("schedule")) {
+      const monday = weekStart(todayBJ()),
+        sid = encodeURIComponent(id);
+      apiPrefetch(["schedule?from=" + monday + "&to=" + dateShift(monday, 7) + "&student_id=" + sid + "&offset=0", "students/" + sid + "/fixed-rules"]);
+    }
     const [rec, data, history] = await studentBase(id);
     const row = rec.record,
       facts = data.facts || {},
@@ -587,7 +593,6 @@
     else {
       const box = panel("更多");
       if (enabled("students", "read")) box.append(button("不可排时段", () => R().studentBlocks(c, id)));
-      if (enabled("referrals")) box.append(button("合作升学推荐", () => referralsPage(body, id)));
       body.append(box);
     }
     return { wrap, row, data, groups, urgent, remind };
@@ -761,6 +766,10 @@
         to = dateShift(from, 7),
         monthFrom = day.slice(0, 8) + "01",
         start = monthFrom < from ? monthFrom : from;
+      // 课酬标准和在读学员名单与选中哪位老师无关：和名单、课表同一轮发出，详情直接复用。
+      const shared = {};
+      if (enabled("teacher_pay")) (shared.rates = R().take("finance/rates")).catch(() => {});
+      if (enabled("students")) (shared.students = R().take("c2/students?status=active")).catch(() => {});
       const [rows, lessons] = await Promise.all([
         api("c3/teachers").then((d) => d.items || []),
         enabled("schedule")
@@ -768,7 +777,7 @@
           : [],
       ]);
       data = tState.data = { rows, lessons, from, monthFrom };
-      tState.shared = {};
+      tState.shared = shared;
     }
     const { rows, lessons, from, monthFrom } = data;
     const active = rows.filter((t) => t.status === "active");

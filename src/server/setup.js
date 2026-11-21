@@ -7,6 +7,7 @@ import {
   encrypt,
 } from "./crypto.js";
 import { modules, publicUser } from "./permissions.js";
+import { clearTenantCache } from "./tenant.js";
 
 export async function setupApi(req, env) {
   const r = repo(env, null),
@@ -36,6 +37,7 @@ export async function setupApi(req, env) {
     };
   try {
     await r.initializeInstance({ id, name: "枫琴教务中心" }, user, modules);
+    clearTenantCache(env);
   } catch (e) {
     if (await r.instance()) fail(404, "初始化已关闭", "not_found");
     throw e;

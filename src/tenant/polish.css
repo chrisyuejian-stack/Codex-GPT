@@ -2,20 +2,6 @@
    动效遵守决定 #19：除侧栏展开与删除行收起外只用位移和透明度，减少动态效果时降级为透明度。 */
 
 /* ---------- 顶栏 ---------- */
-.staff-header .ui-menu-holder > .ui-button > .ui-button-face {
-  flex-direction: row-reverse;
-  gap: var(--ui-space-1);
-}
-.staff-header .ui-menu-holder > .ui-button svg {
-  width: 14px;
-  height: 14px;
-  color: var(--ui-muted);
-}
-.staff-header .header-title {
-  font-size: var(--ui-font-title);
-  font-weight: var(--ui-weight-heading);
-  letter-spacing: 0.01em;
-}
 
 /* ---------- 页内分页标签 ---------- */
 .ui-page-heading {
@@ -106,41 +92,6 @@
 }
 
 /* ---------- 今天：今日课程列表 ---------- */
-.c2-home-grid {
-  gap: var(--ui-space-4);
-  align-items: start;
-}
-.c2-home-grid > .ui-card,
-.c2-week {
-  padding: var(--ui-space-4) var(--ui-space-6) var(--ui-space-3);
-}
-.c2-home-grid .ui-card-title,
-.c2-week .ui-card-title {
-  font-size: var(--ui-font-section);
-  font-weight: var(--ui-weight-heading);
-  margin-bottom: var(--ui-space-2);
-}
-.c2-today > .c2-course-line {
-  margin: 0;
-  min-height: 52px;
-  border-radius: 0;
-  border: 0;
-  border-top: 1px solid var(--ui-divider);
-  background: transparent;
-}
-.c2-today > .c2-course-line > .ui-button-face {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: var(--ui-space-3) var(--ui-space-2);
-  align-items: center;
-  grid-template-columns: 96px minmax(96px, 1.1fr) minmax(0, 1fr) 80px auto;
-  font-weight: var(--ui-weight-regular);
-  min-height: 52px;
-}
-.c2-today > .c2-course-line:hover > .ui-button-face {
-  background: var(--ui-header);
-}
 .c2-course-line time {
   color: var(--ui-muted);
   font-variant-numeric: tabular-nums;
@@ -162,97 +113,8 @@
 }
 
 /* ---------- 今天：需要处理 ---------- */
-.c2-pending > .c2-pending-item {
-  margin: 0;
-  border: 0;
-  border-top: 1px solid var(--ui-divider);
-  border-radius: 0;
-  background: transparent;
-}
-.c2-pending > .c2-pending-item > .ui-button-face {
-  width: 100%;
-  justify-content: flex-start;
-  text-align: left;
-  border: 0;
-  border-radius: var(--ui-radius-control);
-  background: transparent;
-  padding: var(--ui-space-3) var(--ui-space-2) var(--ui-space-3)
-    var(--ui-space-4);
-  font-weight: var(--ui-weight-regular);
-  position: relative;
-  white-space: normal;
-}
-.c2-pending > .c2-pending-item > .ui-button-face::before {
-  content: "";
-  position: absolute;
-  left: var(--ui-space-1);
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  margin-top: -3px;
-  border-radius: 3px;
-  background: var(--ui-neutral);
-}
-.c2-pending > .c2-pending-item.is-overdue > .ui-button-face::before {
-  background: var(--ui-error);
-}
-.c2-pending > .c2-pending-item.is-today > .ui-button-face::before {
-  background: var(--ui-warning);
-}
-.c2-pending > .c2-pending-item:hover > .ui-button-face {
-  background: var(--ui-header);
-}
-.c2-pending > .c2-pending-all {
-  margin: var(--ui-space-2) 0 0;
-  border-top: 1px solid var(--ui-divider);
-  border-radius: 0;
-}
-.c2-pending > .c2-pending-all > .ui-button-face {
-  border: 0;
-  background: transparent;
-  color: var(--ui-primary);
-  justify-content: flex-start;
-  padding-inline: var(--ui-space-2);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
 
 /* ---------- 今天：本周概况 ---------- */
-.c2-week {
-  margin-top: var(--ui-space-4);
-}
-.c2-week-bars {
-  gap: var(--ui-space-3);
-  align-items: end;
-}
-.c2-week-bars > .ui-button {
-  border: 0;
-  background: transparent;
-}
-.c2-week-bars .ui-button-face {
-  border: 0;
-  border-radius: var(--ui-radius-control);
-  background: transparent;
-  gap: var(--ui-space-1);
-  min-height: 112px;
-  padding: var(--ui-space-2) var(--ui-space-1);
-}
-.c2-week-bars > .ui-button:hover .ui-button-face {
-  background: var(--ui-header);
-}
-.c2-week-bars .c2-bar {
-  width: 28px;
-  border-radius: var(--ui-radius-tag) var(--ui-radius-tag) 2px 2px;
-  background: var(--ui-primary);
-  opacity: 0.85;
-}
-.c2-week-bars strong {
-  font-size: var(--ui-font-sm);
-}
-.c2-week-bars .ui-button-face > span:last-child {
-  font-size: var(--ui-font-xs);
-  color: var(--ui-muted);
-}
 
 /* ---------- 周课表：一屏放下 7 天 ---------- */
 .c2-grid {
@@ -300,39 +162,6 @@
 }
 
 /* ---------- 线索看板 ---------- */
-.c3-board {
-  gap: var(--ui-space-3);
-}
-.c3-lead-column {
-  background: var(--ui-header);
-  border: 1px solid var(--ui-divider);
-  padding: var(--ui-space-3);
-}
-.c3-lead-column h2 {
-  margin: 0 0 var(--ui-space-3);
-  font-weight: var(--ui-weight-heading);
-  color: var(--ui-secondary);
-}
-.c3-lead-card {
-  padding: var(--ui-space-3) var(--ui-space-3);
-  gap: var(--ui-space-1);
-  margin-bottom: var(--ui-space-2);
-  border-color: var(--ui-border);
-  border-radius: var(--ui-radius-control);
-  font-weight: var(--ui-weight-regular);
-  color: var(--ui-secondary);
-  font-size: var(--ui-font-sm);
-}
-.c3-lead-card strong {
-  color: var(--ui-text);
-  font-size: var(--ui-font-body);
-  font-weight: var(--ui-weight-heading);
-}
-.c3-lead-card:hover {
-  border-color: var(--ui-input-border);
-  box-shadow: var(--ui-shadow-hover);
-  transform: translateY(-1px);
-}
 
 /* ---------- 机构设置左侧目录 ---------- */
 .c3-settings > nav {
@@ -393,20 +222,6 @@
   .c2-metric {
     padding: var(--ui-space-3) var(--ui-space-4);
   }
-  .c2-home-grid > .ui-card,
-  .c2-week {
-    padding: var(--ui-space-3) var(--ui-space-4);
-  }
-  .c2-today > .c2-course-line > .ui-button-face {
-    grid-template-columns: 1fr auto;
-    row-gap: 2px;
-  }
-  .c2-week-bars {
-    gap: var(--ui-space-1);
-  }
-  .c2-week-bars .c2-bar {
-    width: 18px;
-  }
   .c3-settings > nav {
     flex-direction: row;
     flex-wrap: wrap;
@@ -457,21 +272,6 @@
 }
 
 /* 今日课程行高收紧到约 48px */
-.c2-today > .c2-course-line,
-.c2-today > .c2-course-line > .ui-button-face {
-  min-height: 0;
-  padding-block: 0;
-}
-.c2-today > .c2-course-line > .ui-button-face {
-  padding: var(--ui-space-3) var(--ui-space-2);
-}
-.c2-pending > .c2-pending-item,
-.c2-pending > .c2-pending-item > .ui-button-face {
-  min-height: 0;
-}
-.c2-pending > .c2-pending-item {
-  padding: 0;
-}
 .c2-grid .b-course > strong {
   flex-shrink: 0;
 }
@@ -561,74 +361,11 @@
   font-size: var(--ui-font-xs);
   color: var(--ui-muted);
 }
-.c3-board .c3-lead-card.ui-button {
-  background: var(--ui-panel);
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-control);
-  padding: var(--ui-space-3);
-  box-shadow: 0 1px 0 rgb(30 26 38 / 3%);
-  transition:
-    transform var(--ui-duration-micro) var(--ui-ease-enter),
-    box-shadow var(--ui-duration-micro) var(--ui-ease-enter),
-    border-color var(--ui-duration-micro) var(--ui-ease-enter);
-}
-.c3-board .c3-lead-card.ui-button:hover {
-  border-color: var(--ui-input-border);
-  box-shadow: var(--ui-shadow-hover);
-  transform: translateY(-1px);
-}
-.c3-board .c3-lead-card.ui-button.is-lost {
-  background: var(--ui-header);
-}
 .ui-tab-count {
   background: var(--ui-divider);
 }
-@media (prefers-reduced-motion: reduce) {
-  .c3-board .c3-lead-card.ui-button {
-    transition-property: opacity;
-  }
-  .c3-board .c3-lead-card.ui-button:hover {
-    transform: none;
-  }
-}
-.c3-lead-column {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ui-space-2);
-}
-.c3-lead-column h2 {
-  margin-bottom: var(--ui-space-1);
-}
-.c3-board .c3-lead-card.ui-button {
-  margin: 0;
-}
 
 /* ---------- 手机端员工顶栏：两行，搜索框独占第二行 ---------- */
-@media (max-width: 760px) {
-  .main > .staff-header {
-    height: auto;
-    flex-wrap: wrap;
-    row-gap: var(--ui-space-2);
-    padding-bottom: var(--ui-space-3);
-  }
-  .main > .staff-header > .header-title {
-    flex: 1 1 auto;
-    min-width: 0;
-    max-width: none;
-  }
-  .main > .staff-header > .header-tools {
-    display: contents;
-  }
-  .main > .staff-header .header-search {
-    order: 10;
-    flex: 1 1 100%;
-    max-width: none;
-  }
-  .main > .staff-header .header-search input {
-    width: 100%;
-    max-width: none;
-  }
-}
 
 /* ---------- 教师/学员手机端课程卡：三行紧凑排列 ---------- */
 .c3-personal .c3-personal-course {

@@ -296,9 +296,15 @@ export async function rebuildApi(
     requireCan(user, policy, "packages", "read");
     const lesson = await r.businessGet("lessons", preview[1]);
     if (!lesson) fail(404, "不存在");
-    const type = await r.businessGet("course_types", lesson.course_type_id);
+    // 查到课程后，下面几项彼此不依赖：一起取（原来逐个串行）；课时预览要用课程大类，等它就位后再算。
+    const payRead = can(user, policy, "teacher_pay", "read");
+    const [type, d, locks, ctx] = await Promise.all([
+      r.businessGet("course_types", lesson.course_type_id),
+      readBody(req),
+      r.rateLocks(lesson.start_at, lesson.start_at),
+      payRead ? r.financeContext(lesson.start_at.slice(0, 7)) : null,
+    ]);
     lesson.category_id = type.category_id;
-    const d = await readBody(req);
     const result = await creditPreview(
       r,
       lesson,
@@ -306,10 +312,8 @@ export async function rebuildApi(
       effectivePolicies(policy.settings),
       maxDebtUnits(policy.settings),
     );
-    result.locked =
-      (await r.rateLocks(lesson.start_at, lesson.start_at)).length > 0;
-    if (can(user, policy, "teacher_pay", "read")) {
-      const ctx = await r.financeContext(lesson.start_at.slice(0, 7));
+    result.locked = locks.length > 0;
+    if (payRead) {
       result.locked = !!ctx.settlements[0]?.locked;
       if (!result.locked) {
         const before = calculatePayroll(

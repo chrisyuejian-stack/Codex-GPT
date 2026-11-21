@@ -1,5 +1,5 @@
 // 枫琴教务中心 · 今天与待办（设计稿 02、03）。
-// 加载在 v2today.js、yx-home.js 之后：通过重新赋值 `home` 接管今天页；通过 globalThis.fqNavHooks 把待办换成一个收件箱。
+// 加载在 v2.js、yx-home.js 之后：通过重新赋值 `home` 接管今天页；通过 globalThis.fqNavHooks 把待办换成一个收件箱。
 // 今天 = 今天在发生什么：四张统计卡、今日课程时间线、右栏（今天要处理摘要、本周小结、通知）。
 // 待办 = 收件箱：条目、各类型计数、范围（我负责的 / 全部）都来自后端汇总接口 /api/todo/inbox，“稍后”写 /api/todo/snooze
 // （见 docs/fengqin/接口变更.md「任务 3 · 待办收件箱」）。按已逾期 / 今天 / 本周晚些时候 / 更晚分组（北京时间）。
@@ -170,6 +170,35 @@
   };
 
   // ---------- 读数据（今天页） ----------
+  // 启动预取（见 app.js apiPrefetch）：员工打开系统时与 /api/me 同时请求今天页数据；路径须与 load() 完全一致。
+  (globalThis.fqPrefetch ||= {}).staff = {
+    flags: () => {
+      const roles = me.user.roles || [];
+      const financeOnly = roles.includes("finance") && !roles.some((r) => ["supervisor", "academic"].includes(r));
+      return {
+        today: enabled("home") && !financeOnly,
+        schedule: enabled("schedule"),
+        unchecked: enabled("schedule") && enabled("attendance", "update"),
+        confirm: enabled("attendance", "confirm"),
+        makeups: enabled("attendance", "create"),
+        leads: enabled("leads"),
+      };
+    },
+    paths: (f) => {
+      if (!f.today) return [];
+      const day = todayBJ();
+      return [
+        "c2/home",
+        ...(f.schedule ? ["schedule?from=" + day + "&to=" + dateShift(day, 1)] : []),
+        ...(f.unchecked ? ["c2/unchecked?offset=0"] : []),
+        ...(f.confirm ? ["submissions?status=pending&from=" + dateShift(day, -60) + "&to=" + dateShift(day, 1) + "&offset=0"] : []),
+        ...(f.makeups ? ["c2/makeups?offset=0"] : []),
+        ...(f.leads ? ["tools/leads?offset=0"] : []),
+        inboxUrl({ scope: "mine", limit: 1 }),
+        inboxUrl({ scope: "all", type: "attendance", limit: 100 }),
+      ];
+    },
+  };
   async function load() {
     const day = todayBJ();
     const may = (ok, run) => (ok ? run().catch(() => null) : Promise.resolve(null));

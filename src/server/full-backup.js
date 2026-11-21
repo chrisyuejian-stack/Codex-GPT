@@ -2,6 +2,7 @@ import { repo } from "./repo.js";
 import { seal, open, backupManifest } from "./backup.js";
 import { body, json, fail, now, randomId, sha, textBytes } from "./core.js";
 import { clearCookie } from "./auth.js";
+import { clearTenantCache } from "./tenant.js";
 import {
   FULL_BACKUP_VERSION,
   MAX_FULL_BACKUP_BYTES,
@@ -424,6 +425,8 @@ export async function fullBackupApi(req, env, resolved, user) {
           if (image.r2_key === file.key) image.r2_key = key;
       }
       await r.commitFullRestore(job, payload, snapshot.id, user);
+      // 整体恢复覆盖了机构记录：清掉机构缓存（tenant.js），下一个请求重新读取。
+      clearTenantCache(env);
       try {
         await env.CHANNEL_BACKUPS.delete(job.object_key);
       } catch {}

@@ -105,6 +105,58 @@ function recordId(x) {
   return x;
 }
 
+// 老师「今天」一次取齐（原来前端要先取两段课表，再逐节取待点名课的点名详情，三层串行）。
+// 只读；复用 GET /api/schedule 与 GET /api/lessons/:id/review 的实现，格式与单独请求一致。
+// today = schedule?from=当天&to=次日 的全部行；recent = schedule?from=前两天&to=当天；
+// reviews 只含当天、本人主讲、已下课、仍是计划状态且未提交的课（与前端 fq-teacher.js stateOf 的 todo 一致），
+// 最多 8 节，超出的由前端单独取。
+const TEACHER_TODAY_REVIEWS = 8;
+async function teacherToday(req, env, t, user, policy, url) {
+  if (!user.roles.includes("teacher") || !user.teacher_id)
+    fail(403, "仅老师可用", "forbidden");
+  const at = now(),
+    date = url.searchParams.get("date") ? day(url.searchParams.get("date")) : beijingTime(at).slice(0, 10),
+    shift = (d, n) => new Date(Date.parse(d + "T12:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+  const rows = async (from, to) => {
+    const items = [];
+    for (let offset = 0, guard = 0; offset !== null && guard < 25; guard++) {
+      const q = new URL(url);
+      q.search = new URLSearchParams({ from, to, offset: String(offset) }).toString();
+      const page = await scheduleView(env, t, user, policy, q);
+      items.push(...page.items);
+      offset = page.next_offset ?? null;
+    }
+    return items;
+  };
+  const [today, recent] = await Promise.all([rows(date, shift(date, 1)), rows(shift(date, -2), date)]);
+  const todo = today
+    .filter(
+      (r) =>
+        String(r.start_at).slice(0, 10) === date &&
+        !r.source_course_id &&
+        r.teacher_id === user.teacher_id &&
+        r.status === "planned" &&
+        r.review_status !== "pending" &&
+        Date.parse(r.start_at) + Number(r.duration || 0) * 60000 <= at,
+    )
+    .slice(0, TEACHER_TODAY_REVIEWS);
+  const reviews = {};
+  await Promise.all(
+    todo.map(async (r) => {
+      const path = "/api/lessons/" + r.id + "/review",
+        childUrl = new URL(path, url);
+      try {
+        reviews[r.id] = await reviewApi(
+          new Request(childUrl, { method: "GET", headers: req.headers }),
+          env, t, user, policy, path, childUrl, body,
+        );
+      } catch (e) {
+        if (!(e instanceof HttpError)) throw e;
+      }
+    }),
+  );
+  return { date, today, recent, reviews };
+}
 async function serve(env, req, path, replacements = {}) {
   const response = await env.ASSETS.fetch(
     new Request(new URL(path, req.url), { method: "GET" }),
@@ -170,7 +222,7 @@ const tenantAuthenticatedApi = (path) =>
   ].includes(path) ||
   /^\/api\/lessons\/[^/]+\/(review|comments)$/.test(path) ||
   /^\/api\/submissions\/[^/]+\/(confirm|return)$/.test(path) ||
-  ["/api/submissions", "/api/brand-timetable", "/api/schedule-next"].includes(
+  ["/api/submissions", "/api/brand-timetable", "/api/schedule-next", "/api/teacher/today"].includes(
     path,
   ) ||
   /^\/api\/finance\/(rates|payments|adjustments|costs|tuition)(?:\/[^/]+)?$/.test(
@@ -442,6 +494,8 @@ async function tenantApi(req, env, resolved, url, context) {
     return json(await reorderBusiness(env, t, user, policy, await body(req)));
   if (path === "/api/schedule" && req.method === "GET")
     return json(await scheduleView(env, t, user, policy, url));
+  if (path === "/api/teacher/today" && req.method === "GET")
+    return json(await teacherToday(req, env, t, user, policy, url));
   const fixedRules = /^\/api\/students\/([^/]+)\/fixed-rules$/.exec(path);
   if (fixedRules && req.method === "GET")
     return json(await fixedRulesView(env, t, user, policy, fixedRules[1]));
@@ -999,6 +1053,8 @@ const worker = {
     }
     env = {
       ...env,
+      // 原始绑定：给机构缓存（tenant.js）做键，包装后的对象每个请求都不同。
+      __rawDb: env.CHANNEL_DB,
       CHANNEL_DB: measureDatabase(env.CHANNEL_DB, timing),
       __requestScope: true,
       __identityContract: new URL(req.url).pathname.startsWith("/api/"),

@@ -67,8 +67,9 @@ async function navigate(event) {
   try {
     return await Promise.race([network, slow]);
   } catch {
-    // 网络完全不通：页面外壳离线也打不开数据，直接给离线提示。
-    return offlinePage();
+    // 网络完全不通：给缓存的页面外壳。老师、学员可以看本机保存的最近数据（离线模式），
+    // 其他账号由页面自己显示“网络不可用”。
+    return cached;
   } finally {
     clearTimeout(timer);
   }

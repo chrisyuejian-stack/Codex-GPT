@@ -209,6 +209,23 @@
       const today = todayBJ();
       return [schedulePath(today, dateShift(today, 1)), schedulePath(dateShift(today, -2), today)];
     },
+    // 一次 GET /api/teacher/today 拿齐：今天与前两天的课表、今天待点名课的点名详情（后端最多 8 节，其余页面照常单独取）。
+    split: (f) => {
+      if (!f.schedule) return null;
+      const today = todayBJ();
+      const rows = (key) => (v) => {
+        if (v.date !== today) throw Error("日期不一致，改为单独请求");
+        return { items: v[key] || [], next_offset: null };
+      };
+      return {
+        path: "teacher/today",
+        parts: [
+          [schedulePath(today, dateShift(today, 1)), rows("today")],
+          [schedulePath(dateShift(today, -2), today), rows("recent")],
+        ],
+        extra: (v) => (v.date === today ? Object.entries(v.reviews || {}).map(([id, r]) => ["lessons/" + id + "/review", r]) : []),
+      };
+    },
   };
 
   personalShell = () => {

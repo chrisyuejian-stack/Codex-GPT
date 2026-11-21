@@ -391,6 +391,8 @@
     body.append(head);
     if (typeof yxSettingsSection === "function" && (await yxSettingsSection(body, head, iState.section, () => institution(c, iState.section)))) return;
     if (iState.section === "brand") {
+      // 下方品牌编辑器要用的 settings/brand 与续费卡片设置同时取。
+      if (typeof yxsBrandEditor === "function") apiPrefetch(["settings/brand"]);
       const b = await api("renewal-brand");
       const card = n("div", null, { class: "v-panel v-brand-card" });
       const top = n("div", null, { class: "v-brand-top" });
@@ -450,6 +452,8 @@
     const q = new URLSearchParams({ kind: lState.kind, offset: String(offset) });
     for (const k of ["actor", "from", "to"]) if (lState[k]) q.set(k, lState[k]);
     if (lState.kind === "audit") for (const k of ["module", "action"]) if (lState[k]) q.set(k, lState[k]);
+    // 操作人下拉要用的账号名单，和记录同时取（下面 logActors 读取时直接用上）。
+    if (!logActors && enabled("accounts")) apiPrefetch(["accounts?offset=0"]);
     const data = await api("logs?" + q);
     vHead?.actions();
     c.replaceChildren();

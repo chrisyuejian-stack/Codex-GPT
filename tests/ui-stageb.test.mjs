@@ -104,7 +104,8 @@ test("阶段B：北京时间日期、跨周跨年与15分钟目标不经浏览�
 test("阶段B：全部19处原生确认已替换为共享弹窗，无新增内联HTML/样式/事件或外部字体", async () => {
   const app = await readFile("src/tenant/app.js", "utf8"),
     calendar = await readFile("src/tenant/calendar.js", "utf8");
-  assert.equal((app.match(/await ask\(/g) || []).length, 19);
+  // 原 19 处；2026-11-21 删除推广中心、合作升学界面（3 处）和被覆盖的旧续费/线索页（2 处）时随之去掉。
+  assert.equal((app.match(/await ask\(/g) || []).length, 14);
   assert.doesNotMatch(app, /\bconfirm\(/);
   assert.match(app, /UI\.confirmDialog/);
   for (const file of [app, calendar]) {

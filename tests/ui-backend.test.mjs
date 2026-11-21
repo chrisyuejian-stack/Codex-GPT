@@ -52,6 +52,11 @@ test("UI B1：确认收入按消耗及回补，分位精确，锁月冻结，报
     assert.equal(report.tuition_amount, 0);
     assert.equal(report.profit_earned, report.profit_cash + 100);
     assert.equal(report.trend.at(-1).earned_amount, 100);
+    // 6 个月并行取数后顺序不变：从早到晚，最后一个是所选月份。
+    assert.deepEqual(
+      report.trend.map((x) => x.month),
+      ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11"],
+    );
     const academic = await accountToken(s, ["academic"]);
     const projected = ok(
       await request(s, path, "GET", undefined, academic.token),

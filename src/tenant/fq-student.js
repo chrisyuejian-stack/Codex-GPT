@@ -107,7 +107,8 @@
   async function lessonMap(items, seed = []) {
     const map = new Map();
     for (const r of seed) map.set(r.id, r);
-    const missing = items.filter((x) => x.lesson_id && !map.has(x.lesson_id));
+    // 后端已在每条点评带上课程名、老师、出勤和上课时间（2026-11-20 起）；只有旧数据缺字段时才补查课表。
+    const missing = items.filter((x) => x.lesson_id && !map.has(x.lesson_id) && !x.course_name);
     if (missing.length && canSchedule()) {
       const months = [...new Set(missing.map((x) => day(x.at).slice(0, 7)))].slice(0, 6);
       // 点评确认时间可能晚于上课，所以连同上一个月一起查。
@@ -118,7 +119,10 @@
     return map;
   }
   function noteOf(x, map) {
-    const l = map.get(x.lesson_id) || {};
+    const own = Object.fromEntries(
+      [["start_at", x.start_at], ["course_name", x.course_name], ["teacher_name", x.teacher_name], ["own_attendance", x.own_attendance]].filter(([, v]) => v !== undefined && v !== null),
+    );
+    const l = { ...(map.get(x.lesson_id) || {}), ...own };
     const m = x.message || {};
     const main = x.public_comment || m.learned || "";
     return {
