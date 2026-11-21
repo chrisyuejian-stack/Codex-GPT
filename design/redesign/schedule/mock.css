@@ -401,3 +401,4 @@ html .fq-sc-badd { height: 32px; border: 1px dashed #cfc3b2; border-radius: 9px;
 /* 设计稿截图修正：整页截图时侧栏铺满；课程块行高 */
 html .v-frame:has(.fq-sc) .v-side { height: auto; min-height: 100vh; }
 html .fq-sc { --fq-sc-hr: 60px; }
+html .fq-sc-menu { display: none; }
