@@ -5,20 +5,6 @@
 function yxNavGroups() {
   return [];
 }
-// 设计稿 v3 的导航：
-// 招生：线索 · 推广中心 · 招生内容 · 课程方案 · 成长报告（老师另有课后反馈）
-// 课程与教室：排课课程与教室 · 报价课程与价目表 · 阶段与节点
-// 机构设置：机构档案 · 品牌与图库 · 成长报告维度 · AI 用量 · 学科模板 · 修改卡片 · 基本设置
-const YX_SETTING_ROUTE = {
-  yx_courses: "courses-quote",
-  yx_stages: "courses-stages",
-  yx_calendar: "courses-stages",
-  yx_profile: "inst-profile",
-  yx_gallery: "inst-brand",
-  yx_reports: "inst-dims",
-  yx_subjects: "inst-subjects",
-  yx_changes: "inst-changes",
-};
 // 枫琴教务中心导航（2026-11 设计稿 v2，用户确认）：
 //   Workspace：今天 · 待办 · 课表 · 学员 · 线索
 //   Management：财务 · 老师（含课程与教室）· 设置（基本设置、账号、导入导出、AI 用量、操作记录）
@@ -66,46 +52,6 @@ function yxNavRework(daily, manage, register) {
   // 各页面改版文件（fq-*.js）在这里调整自己的导航：hook(daily, manage, register)。
   for (const hook of globalThis.fqNavHooks || []) hook(daily, manage, register);
 }
-// 一个导航页里放一个或几个设置区块。
-async function yxSettingsPage(c, keys) {
-  c.replaceChildren(UI.tableSkeleton());
-  const again = () => yxSettingsPage(c, keys);
-  const frag = [],
-    side = [];
-  for (const k of keys) {
-    const box = el("section", null, { class: "yxs-page-sec" });
-    if (k === "yx_subjects_bar") {
-      await yxsSubjectBar(box, again);
-      frag.push(box);
-      continue;
-    }
-    // 右栏：用一句话改设置（设计稿 v3）、计价方式说明
-    if (k === "yx_assist") {
-      if (enabled("ai", "use") && enabled("settings", "propose")) side.push(yxsAssist(again));
-      continue;
-    }
-    if (k === "yx_price_legend") {
-      side.push(yxsPriceLegend());
-      continue;
-    }
-    const head = el("div", null, { class: "v-set-head" });
-    head.append(el("h2", (YXS_SECTIONS.find((x) => x[0] === k) || [, ""])[1]));
-    box.append(head);
-    frag.push(box);
-    await yxSettingsSection(box, head, k, again);
-  }
-  if (side.length) {
-    const grid = el("div", null, { class: "yxs-split" });
-    const main = el("div", null, { class: "yxs-split-main" }),
-      aside = el("div", null, { class: "yxs-split-side" });
-    const bar = frag[0]?.querySelector?.(".yxs-subjectbar") ? frag.shift() : null;
-    main.append(...frag);
-    aside.append(...side);
-    grid.append(main, aside);
-    c.replaceChildren(...(bar ? [bar] : []), grid);
-  } else c.replaceChildren(...frag);
-  c.classList.add("yx-page");
-}
 // AI 用量（机构设置 · 设计稿 v3）
 async function yxAiUsagePage(c) {
   const V = globalThis.ChannelV2;
@@ -143,9 +89,6 @@ async function yxAiUsagePage(c) {
     p.append(yxsTable(["账号", "快速", "深度"], u.by_user.map((x) => [x.name || x.user_id, String(x.fast), String(x.deep)])));
     c.append(p);
   }
-}
-function yxGoSettings(section) {
-  location.hash = YX_SETTING_ROUTE[section] || "settings-institution";
 }
 
 // ---------- 日期输入（v0.4.1）----------

@@ -29,7 +29,6 @@ const YXS_STATS = [
   ["days_to_exam", "距统考天数（需在节点日历填统考精确日期）"],
 ];
 const YXS_SECTIONS = [
-  ["yx_subjects", "学科模板"],
   ["yx_courses", "课程与价目"],
   ["yx_stages", "阶段与规则"],
   ["yx_calendar", "节点日历"],
@@ -39,7 +38,6 @@ const YXS_SECTIONS = [
   ["yx_changes", "修改卡片"],
 ];
 const YXS_HINT = {
-  yx_subjects: "导入学科模板会把课程、阶段、节点、报告维度和内容结构放进本机构。不带价格；已有同名项目不会被覆盖，可以放心重复导入。",
   yx_courses: "这里是给家长报价、写课程方案用的课程库，和排课用的课程分开保存。价格留空表示还没定价。",
   yx_stages: "课程方案会按这些阶段和规则自动排出学习路径。",
   yx_calendar: "考级季、集训、统考这些节点决定冲刺和集训阶段落在哪几个月。",
@@ -50,23 +48,10 @@ const YXS_HINT = {
 };
 
 // 机构设置顶部页签原有 4 个，再加 8 个放不下；艺界星途的设置合成一个“招生工具”页签，里面再分小页签。
-var yxsSub = "yx_subjects";
+var yxsSub = "yx_courses";
 function yxSettingsSections() {
   // 设计稿 v3：这些设置已拆到“课程与教室”“机构设置”的分页里（见 yx-home.js 的 yxNavRework）。
   return [];
-}
-// 报价课程页顶部的学科包（设计稿 v3）
-async function yxsSubjectBar(box, again) {
-  const list = await api("settings/subjects").catch(() => []);
-  const row = el("div", null, { class: "yxs-subjectbar" });
-  row.append(el("span", "学科包", { class: "v-muted" }));
-  for (const x of list) {
-    const t = el("span", YXS_SUBJECT[x.key] || x.key, { class: "yxs-subject is-on" });
-    t.title = "模板版本 " + x.pack_version;
-    row.append(t);
-  }
-  row.append(globalThis.ChannelV2.link("＋ 添加学科包", () => (location.hash = "inst-subjects")));
-  box.append(row);
 }
 // 旧的跳转键（yx_profile 等）转成“招生工具”页签下对应的小页签。
 function yxSettingsRoute(section) {
@@ -167,7 +152,6 @@ async function yxsUpload(path, data) {
 // 机构设置页的入口：返回 true 表示已由本文件渲染。
 async function yxSettingsSection(body, head, section, again) {
   const draw = {
-    yx_subjects: yxsSubjects,
     yx_courses: yxsCourses,
     yx_stages: yxsStages,
     yx_calendar: yxsCalendar,
@@ -199,27 +183,6 @@ async function yxSettingsSection(body, head, section, again) {
   return true;
 }
 
-// ---------- 学科模板 ----------
-async function yxsSubjects(body, again) {
-  const list = await api("settings/subjects");
-  const done = new Map(list.map((x) => [x.key, x]));
-  const grid = el("div", null, { class: "yxs-cards" });
-  for (const [key, name] of Object.entries(YXS_SUBJECT)) {
-    const card = el("div", null, { class: "v-panel yxs-card" + (done.has(key) ? " is-on" : "") });
-    card.append(el("strong", name));
-    if (done.has(key)) card.append(el("p", "已导入 · 模板版本 " + done.get(key).pack_version, { class: "v-muted" }));
-    else card.append(el("p", "未导入", { class: "v-muted" }));
-    card.append(
-      button(done.has(key) ? "重新导入（补齐缺少的项目）" : "导入模板", async () => {
-        await api("settings/subjects", "POST", { key });
-        notice("已导入 " + name, "success");
-        await again();
-      }, done.has(key) ? "" : "primary"),
-    );
-    grid.append(card);
-  }
-  body.append(grid, el("p", "只能导入平台为本机构开通的学科；需要开通其他学科请联系平台。", { class: "v-muted" }));
-}
 
 // ---------- 课程与价目 ----------
 const yxsCourseState = { subject: "", q: "", inactive: false, limit: 50 };
@@ -1108,104 +1071,3 @@ async function yxsChanges(body, again) {
   }
 }
 
-// ---------- 用一句话改设置（设计稿 v3，接口 ai/settings/propose → settings/changes） ----------
-// AI 只给“修改卡片”；主管点“确认写入”才生效，其他人提交后等主管在“修改记录”里确认。
-const yxsAssistState = { res: null, ask: "" };
-function yxsAssist(again) {
-  const st = yxsAssistState;
-  const box = el("section", null, { class: "yxs-assist" });
-  const head = el("div", null, { class: "yxv-ai-head" });
-  const t = el("div");
-  t.append(el("strong", "用一句话改设置"), el("small", "艺界星途 AI · 主管确认后才生效", { class: "v-muted" }));
-  head.append(el("span", "✦", { class: "yxv-ai-logo yxs-assist-logo", "aria-hidden": "true" }), t);
-  box.append(head);
-  const isBoss = me.user.roles.includes("supervisor");
-  const body = el("div", null, { class: "yxs-assist-body" });
-  box.append(body);
-  const draw = () => {
-    body.replaceChildren();
-    if (st.ask && st.res) body.append(el("p", "“" + st.ask + "”", { class: "yxs-assist-quote" }));
-    if (st.res) {
-      const w = yxAiWarnings(st.res.warnings);
-      if (w) body.append(w);
-      if (!st.res.suggestions.length) body.append(el("p", "这次没有能直接写入的修改。换个说法，写清楚改哪一项、改成多少。", { class: "v-muted" }));
-      for (const sg of st.res.suggestions) {
-        const card = el("div", null, { class: "yxs-change" });
-        const h = el("div", null, { class: "yxs-change-h" });
-        h.append(el("strong", "修改卡片"), el("span", isBoss ? "确认后写入" : "提交后等待主管确认", { class: "yx-dot is-warn" }));
-        card.append(h);
-        for (const op of sg.payload.ops || []) {
-          const r = el("div", null, { class: "yxs-change-row" });
-          const v = el("span");
-          v.append(el("del", yxsShow(op.from)), " 改为 ", el("b", yxsShow(op.to)));
-          r.append(el("span", (YXS_ENTITY[op.entity] || op.entity) + (op.key ? " · " + op.key : "") + " · " + op.field, { class: "v-muted" }), v);
-          card.append(r);
-        }
-        for (const s of sg.payload.side_effects || []) {
-          const r = el("div", null, { class: "yxs-change-row" });
-          r.append(el("span", "影响", { class: "v-muted" }), el("span", s.message || s.text || yxsShow(s)));
-          card.append(r);
-        }
-        const basis = (sg.basis || []).filter((b) => b.quote || b.text).slice(0, 2);
-        if (basis.length) {
-          const r = el("div", null, { class: "yxs-change-row" });
-          r.append(el("span", "依据", { class: "v-muted" }), el("span", basis.map((b) => b.quote || b.text).join("；")));
-          card.append(r);
-        }
-        const acts = el("div", null, { class: "yxv-row" });
-        acts.append(
-          button(isBoss ? "确认写入" : "提交给主管", async () => {
-            const ch = await api("settings/changes", "POST", { suggestion_id: sg.id, payload: sg.payload });
-            if (isBoss) {
-              try {
-                await api("settings/changes/" + encodeURIComponent(ch.id) + "/approve", "POST", {});
-              } catch (e) {
-                if (e.code === "change_stale") throw Error("相关设置刚被修改过，请重新说一次");
-                throw e;
-              }
-            }
-            st.res = null;
-            st.ask = "";
-            notice(isBoss ? "已写入，可在“机构设置 · 修改记录”里撤回" : "已提交，主管确认后生效", "success");
-            await again();
-          }, "primary"),
-          button("改一下再写", () => {
-            input.value = st.ask;
-            input.focus();
-          }),
-          button("不要", () => ((st.res = null), draw())),
-        );
-        card.append(acts);
-        body.append(card);
-      }
-    }
-  };
-  const row = el("div", null, { class: "yxv-row yxs-assist-ask" });
-  const input = el("input", null, { type: "text", placeholder: "比如：寒假集训营改成 12 天", "aria-label": "用一句话改设置", maxlength: "500" });
-  row.append(
-    input,
-    yxAiButton("发送", async () => {
-      const v = input.value.trim();
-      if (!v) return notice("先写一句要改什么");
-      st.ask = v;
-      st.res = await yxAi("settings/propose", { instruction: v });
-      input.value = "";
-      draw();
-    }),
-  );
-  draw();
-  const note = el("p", "顾问和教务可以提出修改。每次修改都记在修改记录里，可以撤回。", { class: "v-muted yxs-assist-note" });
-  note.append(" ", yxsV().link("查看修改记录", () => (location.hash = "inst-changes")));
-  box.append(row, note);
-  return box;
-}
-function yxsPriceLegend() {
-  const box = el("section", null, { class: "yxs-assist yxs-legend" });
-  box.append(el("h3", "五种计价方式"));
-  for (const [k, t] of [["按课时", "单价 × 课时数"], ["按期", "每期价 × 期数，如集训营"], ["按学期", "每学期价 × 学期数"], ["按月", "每月价 × 月数，如艺考集训"], ["课包", "每包价 × 包数，包内课时固定"]]) {
-    const r = el("div", null, { class: "yxs-change-row" });
-    r.append(el("b", k), el("span", t, { class: "v-muted" }));
-    box.append(r);
-  }
-  return box;
-}

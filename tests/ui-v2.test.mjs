@@ -173,7 +173,8 @@ test("UI重构v2 第5组：财务五个分页只读既有接口，写入沿用�
   for (const m of js.matchAll(/(?:api|take)\(\s*"([a-z0-9/_-]+)/g))
     assert.ok(["credits/payments", "credits/packages", "credits/transactions", "c3/receipts", "finance/payroll", "finance/settlement", "finance/settlements/", "finance/costs", "finance/tuition/", "c3/costs-summary", "c3/report"].some((p) => m[1].startsWith(p)), m[1]);
   const writes = [...js.matchAll(/api\(\s*"([^"]+)"[^)]*?"(PATCH|DELETE|POST|PUT)"/g)].map((m) => m[1] + " " + m[2]);
-  assert.deepEqual(writes.sort(), ["finance/costs/ DELETE", "finance/settlements/ POST", "finance/tuition/ PATCH"].sort());
+  // finance/tuition/ PATCH 原在 v2f.js 未被调用的 editTuition 里（2026-11-21 删除）；改学费仍走 c3.js 的 editTuition。
+  assert.deepEqual(writes.sort(), ["finance/costs/ DELETE", "finance/settlements/ POST"].sort());
   for (const form of ["creditForm(", "adjustForm(", "transferForm(", "financeRecordForm(", "settlementForm(", "payrollDetail(", "exportLink("])
     assert.ok(js.includes(form), form);
   // 只接管页面主体；抽屉、学员详情里的同名调用走原实现。

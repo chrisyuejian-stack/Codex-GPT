@@ -77,20 +77,6 @@ async function yxAi(route, body, fresh) {
     throw e;
   }
 }
-async function yxAiUsage() {
-  if (!yxAiUsageCache) yxAiUsageCache = apiRequest("ai/usage").catch(() => null);
-  return yxAiUsageCache;
-}
-// “今日 AI 3 / 80”，深度模式用过才显示。
-function yxAiUsageChip() {
-  const chip = el("span", "今日 AI …", { class: "yxai-usage" });
-  yxAiUsage().then((u) => {
-    if (!u) return chip.remove();
-    chip.textContent = "今日 AI " + u.fast.used + " / " + u.fast.limit + (u.deep.used ? " · 深度 " + u.deep.used + " / " + u.deep.limit : "");
-    if (u.fast.used >= u.fast.limit) chip.classList.add("is-full");
-  });
-  return chip;
-}
 // 按钮：点了显示“AI 生成中…”，结束恢复。
 function yxAiButton(text, run, kind = "") {
   // UI.button 本身会在执行期间禁用按钮、防止连点，这里只换文字和显示错误。

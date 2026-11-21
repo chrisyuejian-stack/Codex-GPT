@@ -323,12 +323,6 @@ export function card(
   if (onClick) element.addEventListener("click", onClick);
   return element;
 }
-export function updateNumber(element, text) {
-  if (element.textContent === String(text)) return;
-  element.textContent = String(text);
-  element.classList.remove("ui-metric-flash");
-  requestAnimationFrame(() => element.classList.add("ui-metric-flash"));
-}
 export function formatMoney(value) {
   return typeof value === "number" && Number.isFinite(value)
     ? viewFormat.money(value)

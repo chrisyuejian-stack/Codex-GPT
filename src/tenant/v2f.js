@@ -258,22 +258,6 @@
       ),
     );
   }
-  // 与原“修改缴费记录”相同的写入（finance/tuition PATCH）。
-  function editTuition(c, row) {
-    const d = UI.drawer({ title: "修改缴费记录", subtitle: row.student_name }),
-      f = n("form");
-    field(f, "金额（元）", "amount", "number", row.amount).step = ".01";
-    field(f, "收款日期", "paid_at", "date", row.paid_at);
-    field(f, "方式", "method", "text", row.method, false);
-    field(f, "备注", "note", "text", row.note, false);
-    const op = operation();
-    submit(f, "保存", async (data) => {
-      await api("finance/tuition/" + row.id, "PATCH", { ...data, amount: Number(data.amount), version: row.version, operation_id: op });
-      await d.close();
-      await payments(c);
-    });
-    d.body.append(f);
-  }
 
   // ---------- 课时包 ----------
   const PK = [
