@@ -11,13 +11,11 @@
     followupPage,
     recordsPage,
     creditPage,
-    financeRecords,
     classesPage,
     importWizard,
     personalRecords,
     personalPay,
     leadForm,
-    staffTimetable,
     reviewScreen,
   };
   const tabs = (items) => {
@@ -133,142 +131,6 @@
     c.append(host);
     draw();
     return { draw };
-  };
-  // Admissions: summary is a tenant-wide aggregate, not the loaded board page.
-  leadsPage = async (c) => {
-    const [data, summary] = await Promise.all([
-      take("tools/leads"),
-      api("c3/leads-summary"),
-    ]);
-    clear(c);
-    metrics(c, [
-      ["本月新增", summary.added],
-      ["已约试听", summary.trial],
-      ["本月转正", summary.converted],
-      ["转化率", summary.conversion_rate + "%"],
-    ]);
-    const bar = n("div", null, { class: "ui-filter-bar" });
-    if (enabled("leads", "create"))
-      bar.append(b("＋新增线索", () => leadForm(c), "primary"));
-    bar.append(
-      U.selectControl({
-        label: "显示方式",
-        value: state.leadView,
-        options: [
-          { value: "board", label: "看板" },
-          { value: "table", label: "表格" },
-        ],
-        onChange: (v) => {
-          state.leadView = v;
-          void leadsPage(c);
-        },
-      }).element,
-    );
-    c.append(bar);
-    if (state.leadView === "table") {
-      filter(
-        c,
-        data,
-        [
-          { key: "name", label: "姓名" },
-          {
-            key: "stage",
-            label: "阶段",
-            render: (r) => me.labels.lead_stages[r.stage],
-          },
-          { key: "source", label: "来源" },
-          {
-            key: "direction",
-            label: "意向方向",
-            render: (r) => r.direction || "意向待补充",
-          },
-          { key: "next_followup", label: "回访日期" },
-        ],
-        {
-          qKeys: ["name", "source", "direction"],
-          rowAction: (r) => leadDetail(c, r),
-        },
-      );
-      return;
-    }
-    const stages = [
-        ["new", "新咨询"],
-        ["contacted", "跟进中"],
-        ["trial", "已约试听"],
-        ["lost", "已流失"],
-      ],
-      board = n("div", null, { class: "c3-board" });
-    for (const [stage, label] of stages) {
-      const column = n("section", null, { class: "c3-lead-column" }),
-        rows = data.filter((r) => r.stage === stage);
-      column.append(n("h2", label + " · " + rows.length));
-      column.addEventListener("dragover", (e) => e.preventDefault());
-      column.addEventListener("drop", async (e) => {
-        e.preventDefault();
-        const id = e.dataTransfer.getData("text/plain"),
-          row = data.find((r) => r.id === id),
-          from = stages.findIndex((x) => x[0] === row?.stage),
-          to = stages.findIndex((x) => x[0] === stage);
-        if (
-          !row ||
-          !U.leadMoveAllowed(row.stage, stage) ||
-          !enabled("leads", "update")
-        )
-          return;
-        try {
-          await api("tools/leads/" + id, "PATCH", {
-            stage,
-            version: row.version,
-          });
-          await leadsPage(c);
-        } catch (err) {
-          notice(err.message);
-        }
-      });
-      for (const row of rows) {
-        const card = b(
-          "",
-          () => leadDetail(c, row),
-          "c3-lead-card" + (stage === "lost" ? " is-lost" : ""),
-        );
-        card
-          .querySelector(".ui-button-face")
-          .replaceChildren(n("strong", row.name));
-        if (row.next_followup && row.next_followup <= todayBJ())
-          card.append(
-            U.status(
-              row.next_followup < todayBJ() ? "danger" : "warning",
-              row.next_followup < todayBJ() ? "回访逾期" : "今天回访",
-            ),
-          );
-        card.append(
-          n(
-            "span",
-            (row.source || "未填来源") +
-              " · 意向方向：" +
-              (row.direction || "意向待补充"),
-          ),
-        );
-        if (stage === "trial")
-          card.append(
-            n(
-              "time",
-              row.trial_at
-                ? F.day(row.trial_at) + " " + F.time(row.trial_at)
-                : "试听时间待补充",
-            ),
-          );
-        if (enabled("leads", "update") && stage !== "lost") {
-          card.draggable = true;
-          card.addEventListener("dragstart", (e) =>
-            e.dataTransfer.setData("text/plain", row.id),
-          );
-        }
-        column.append(card);
-      }
-      board.append(column);
-    }
-    c.append(board);
   };
   function leadDetail(c, row) {
     const d = U.drawer({
@@ -2212,75 +2074,6 @@
   const logOut = async () => {
     await api("logout", "POST", {});
     location.assign(base + "login");
-  };
-  personalShell = () => {
-    root.replaceChildren();
-    const frame = n("div", null, { class: "personal-frame c3-personal" }),
-      head = n("header", null, { class: "personal-header" }),
-      identity = n("div");
-    identity.append(n("strong", brand.display_name), n("small", me.user.name));
-    head.append(mark(), identity);
-    const content = n("section", null, { class: "personal-content" }),
-      nav = n("nav", null, { class: "personal-nav", "aria-label": "个人导航" }),
-      teacher = mainTeacher(),
-      views = teacher
-        ? [
-            ["today", "home", "今天", () => teacherToday(content)],
-            ["schedule", "calendar", "课表", () => personalSchedule(content)],
-            ["students", "users", "学生", () => teacherStudents(content)],
-            ["my", "user", "我的", () => personalProfile(content)],
-          ]
-        : [
-            ["home", "home", "首页", () => studentHome(content)],
-            ["schedule", "calendar", "课表", () => personalSchedule(content)],
-            ["records", "book", "记录", () => personalRecords(content)],
-            ["my", "user", "我的", () => personalProfile(content)],
-          ];
-    let run = 0;
-    const select = async (key, fn) => {
-      personalTab = key;
-      for (const x of nav.children)
-        x.setAttribute(
-          "aria-current",
-          x.dataset.key === key ? "page" : "false",
-        );
-      content.dataset.personalTab = key;
-      content.setAttribute("aria-busy", "true");
-      content.replaceChildren(U.tableSkeleton());
-      const generation = ++run;
-      try {
-        await fn();
-      } catch (e) {
-        if (generation === run)
-          content.replaceChildren(
-            U.empty({
-              text: e.message,
-              action: { label: "重试", onSelect: () => select(key, fn) },
-            }),
-          );
-        notice(e.message);
-      } finally {
-        if (generation === run) content.setAttribute("aria-busy", "false");
-      }
-    };
-    for (const [key, icon, label, fn] of views) {
-      if (["schedule", "records"].includes(key) && !enabled("schedule"))
-        continue;
-      if (key === "students" && !enabled("students")) continue;
-      const button = b("", () => select(key, fn));
-      button.dataset.key = key;
-      button.append(U.icon(icon), n("span", label));
-      nav.append(button);
-    }
-    frame.append(head, content, nav);
-    root.append(frame);
-    if (me.user.must_change) {
-      changePassword(content, true);
-      nav.hidden = true;
-      return;
-    }
-    const initial = views.find((x) => x[0] === personalTab) || views[0];
-    void select(initial[0], initial[3]);
   };
   personalCourse = (c, row, back, record = false) => {
     const p = b(

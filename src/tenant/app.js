@@ -4,6 +4,22 @@ const fmt = UI.fmt;
 const root = document.querySelector("#root"),
   base = document.querySelector("meta[name=tenant-base]").content;
 let me, brand;
+// 这些页面的实现都在后加载的文件里（c2、c3、v2*、fq-*），会在加载时重新赋值；这里只保留全局名字。
+// 原来 app.js 里的旧实现已被完全覆盖、无人回调，2026-11-21 删除。
+var home,
+  logs,
+  templatesPage,
+  settingsPage,
+  financePage,
+  financeRecords,
+  reportsPage,
+  personalShell,
+  personalSchedule,
+  personalProfile,
+  submissionQueue,
+  staffTimetable,
+  leadsPage,
+  renewalsPage;
 function el(tag, text, attrs = {}) {
   const node = document.createElement(tag);
   if (text !== null && text !== undefined) node.textContent = text;
@@ -1464,150 +1480,6 @@ function pageIdentity(title) {
     else item.removeAttribute("aria-current");
   }
 }
-async function home(c) {
-  pageIdentity("今天");
-  c.dataset.page = "home";
-  c.replaceChildren(UI.tableSkeleton());
-  const data = await api("workbench");
-  if (
-    me.user.roles.includes("finance") &&
-    !me.user.roles.some((r) => ["supervisor", "academic"].includes(r))
-  )
-    return financialToday(c, data);
-  c.replaceChildren();
-  c.append(el("p", fmt.day(todayBJ()) + " · 北京时间", { class: "muted" }));
-  const metrics = el("div", null, { class: "metrics-grid" });
-  for (const [label, value, action] of [
-    [
-      "今日课程",
-      data.lessons?.length,
-      enabled("schedule") ? () => schedulePage(c) : null,
-    ],
-    [
-      "待确认提交",
-      data.pending,
-      enabled("attendance", "confirm") ? () => submissionQueue(c) : null,
-    ],
-    [
-      "课时不足 / 续费预警",
-      data.renewals?.length,
-      enabled("packages") ? () => renewalsPage(c) : null,
-    ],
-    [
-      "本月实收学费",
-      !enabled("tuition") || data.tuition_amount === undefined
-        ? undefined
-        : UI.formatMoney(data.tuition_amount),
-      null,
-    ],
-  ]) {
-    if (value === undefined) continue;
-    const metric = card(label);
-    metric.append(el("strong", String(value), { class: "metric-value" }));
-    if (action) metric.append(button("查看详情", action, "link"));
-    metrics.append(metric);
-  }
-  const month = el("p", "本月课次：" + (data.lesson_count ?? "暂无统计"), {
-    class: "muted home-month-count",
-  });
-  metrics.firstElementChild?.append(month);
-  c.append(metrics);
-  const grid = el("div", null, { class: "workbench-grid" }),
-    today = card("今日课程"),
-    side = el("div", null, { class: "home-side" });
-  if (enabled("schedule"))
-    today.append(
-      button("打开周课表", () => schedulePage(c), "link panel-link"),
-    );
-  for (const row of data.lessons || []) {
-    const line = el("div", null, { class: "home-lesson" }),
-      copy = el("div");
-    copy.append(
-      el("strong", row.course_name),
-      el("small", row.teacher_name + " · " + (row.location_name || "线上课"), {
-        class: "muted",
-      }),
-    );
-    line.append(
-      el("time", row.start_at.slice(11, 16)),
-      copy,
-      UI.badge(
-        cnLesson(row.status),
-        row.status === "completed"
-          ? "success"
-          : row.status === "planned"
-            ? "info"
-            : "neutral",
-      ),
-    );
-    line.append(button("查看", () => lessonDetail(c, row), "link"));
-    today.append(line);
-  }
-  if (!data.lessons?.length)
-    today.append(
-      UI.emptyState("今天暂无课程", "可从周课表查看其他日期的安排。", {
-        action: enabled("schedule")
-          ? button("打开课表", () => schedulePage(c))
-          : undefined,
-      }),
-    );
-  if (data.renewals) {
-    const p = card("续费预警");
-    for (const row of data.renewals.slice(0, 5)) {
-      const line = el("div", null, { class: "home-renewal" });
-      line.append(
-        el("strong", row.student_name),
-        el("small", row.course_name, { class: "muted" }),
-        UI.badge("剩 " + row.balance + " 课时", "warning"),
-      );
-      p.append(line);
-    }
-    if (!data.renewals.length)
-      p.append(el("p", "暂无续费预警", { class: "muted" }));
-    if (enabled("packages"))
-      p.append(button("查看全部预警", () => renewalsPage(c), "link"));
-    side.append(p);
-  }
-  const tasks = card("待处理事项");
-  if (data.pending !== undefined && enabled("attendance", "confirm"))
-    tasks.append(
-      button("教师提交待确认", () => submissionQueue(c), "task-line"),
-    );
-  if (data.overdue !== undefined && enabled("attendance", "confirm"))
-    tasks.append(
-      button(
-        "已过窗口仍未提交",
-        () => submissionQueue(c, "overdue"),
-        "task-line",
-      ),
-    );
-  const taskButtons = tasks.querySelectorAll("button");
-  for (const control of taskButtons) {
-    const value = control.textContent.includes("已过窗口")
-      ? data.overdue
-      : data.pending;
-    control
-      .querySelector(".ui-button-face")
-      .append(el("strong", String(value), { class: "task-count" }));
-  }
-  for (const task of data.tasks || [])
-    tasks.append(
-      el(
-        "p",
-        task.due_date +
-          " · " +
-          (task.student_name || "未关联学员") +
-          " · " +
-          task.title +
-          " · " +
-          (task.assignee_name || "待指派"),
-        { class: "task-line" },
-      ),
-    );
-  side.append(tasks);
-  grid.append(today, side);
-  c.append(grid);
-}
 function drawer(title) {
   let dirty = false;
   const view = UI.drawer({ title, isDirty: () => dirty });
@@ -1894,61 +1766,12 @@ async function devices(user) {
     notice(e.message);
   }
 }
-async function logs(c) {
-  c.replaceChildren(el("h1", "操作与登录记录"));
-  c.append(
-    button("操作记录", () => load("audit")),
-    button("登录记录", () => load("login")),
-  );
-  const list = el("section", null, { class: "panel" });
-  c.append(list);
-  async function load(kind, offset = 0) {
-    try {
-      const { items } = await api("logs?kind=" + kind + "&offset=" + offset);
-      list.replaceChildren();
-      for (const item of items)
-        list.append(
-          el(
-            "p",
-            new Date(item.at).toLocaleString("zh-CN", {
-              timeZone: "Asia/Shanghai",
-              hour12: false,
-            }) +
-              " · " +
-              (item.actor_label || item.phone_last4 || "") +
-              " · " +
-              (item.summary || me.labels.events[item.event] || "账号操作"),
-          ),
-        );
-      if (!items.length) list.append(el("p", "暂无记录"));
-      if (offset)
-        list.append(
-          button("上一页", () => load(kind, Math.max(0, offset - 200))),
-        );
-      if (items.length === 200)
-        list.append(button("下一页", () => load(kind, offset + 200)));
-    } catch (e) {
-      notice(e.message);
-    }
-  }
-  await load("audit");
-}
 function profile(c) {
   c.replaceChildren(el("h1", "个人中心"));
   changePassword(c);
   c.append(
     button("我的登录设备", () => devices()),
   );
-}
-// 主题色不单独请求一份样式表（它会挡住页面脚本启动）；品牌数据到手后直接设置。
-let themeSheet = null;
-function applyTheme(color) {
-  if (!/^#[0-9a-f]{6}$/i.test(color || "") || !globalThis.CSSStyleSheet?.prototype?.replaceSync) return;
-  if (!themeSheet) {
-    themeSheet = new CSSStyleSheet();
-    document.adoptedStyleSheets = [...document.adoptedStyleSheets, themeSheet];
-  }
-  themeSheet.replaceSync(":root{--theme:" + color + "}");
 }
 // 品牌字体与登录页大图在单独的样式文件里，脚本一开始就挂上，不挡首屏渲染（字体到了再换上）。
 // 手机（窄屏）或开了省流量时不加载：英文小标题改用系统衬线斜体，登录页顶部只显示深紫底色、不显示照片。
@@ -3425,80 +3248,6 @@ function studentPicker(form, { students, selected = [], locked = false, legend =
   sync();
   return { element: box, chosen };
 }
-async function templatesPage(c) {
-  await recordsPage(c, "schedule_templates");
-  const tools = el("section", null, { class: "panel" });
-  tools.append(
-    button("管理模板报名", () => recordsPage(c, "schedule_enrollments")),
-  );
-  const form = el("form");
-  field(form, "生成开始日", "from", "date", scheduleWeek);
-  field(form, "生成结束日", "to", "date", moveDate(scheduleWeek, 30));
-  submit(form, "批量生成并校验", async (d) => {
-    const result = await api("templates/generate", "POST", d);
-    if (!result.committed)
-      notice("整批未写入：发现 " + result.conflicts.length + " 项冲突");
-    else
-      notice(
-        "已生成 " +
-          result.generated +
-          " 节，跳过重复 " +
-          result.skipped +
-          " 节",
-      );
-  });
-  tools.append(form);
-  c.prepend(tools);
-}
-async function settingsPage(c) {
-  c.replaceChildren(el("h1", "基础设置"));
-  for (const resource of ["course_categories", "course_types", "locations"])
-    c.append(button(businessLabels[resource], () => recordsPage(c, resource)));
-  c.append(
-    button("缺勤规则", async () => {
-      const { panel } = drawer("缺勤规则"),
-        current = await api("absence-policies"),
-        form = el("form");
-      for (const [key, label] of [
-        ["student_leave", "学员请假"],
-        ["student_no_show", "学员旷课"],
-        ["teacher_leave", "教师请假"],
-        ["cancelled", "机构取消"],
-      ])
-        for (const [flag, text] of [
-          ["deduct", "扣课时"],
-          ["teacherPaid", "计课酬"],
-        ]) {
-          const input = field(
-            form,
-            label + " · " + text,
-            key + "_" + flag,
-            "checkbox",
-            "1",
-            false,
-          );
-          input.checked = !!current.policies[key]?.[flag];
-        }
-      if (me.user.roles.includes("supervisor"))
-        submit(form, "保存规则", async () => {
-          const policies = {};
-          for (const key of [
-            "student_leave",
-            "student_no_show",
-            "teacher_leave",
-            "cancelled",
-          ])
-            policies[key] = {
-              deduct: form.elements[key + "_deduct"].checked,
-              teacherPaid: form.elements[key + "_teacherPaid"].checked,
-            };
-          await api("absence-policies", "PUT", { policies });
-          notice("规则已保存，后续出勤操作按该规则计算", "success");
-        });
-      panel.append(form);
-    }),
-  );
-}
 let studentListState = {};
 async function studentsPage(c, offset = 0, query = "", selectedId = null) {
   pageIdentity("学员档案");
@@ -4563,105 +4312,12 @@ async function makeupForm(c, data, part) {
 let financeMonth = new Date()
   .toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" })
   .slice(0, 7);
-function monthTools(c, reload) {
-  const form = el("form", null, { class: "row" });
-  field(form, "月份", "month", "month", financeMonth);
-  submit(form, "查看", async (d) => {
-    financeMonth = d.month;
-    await reload();
-  });
-  c.append(form);
-}
 function exportLink(kind, text = "导出 Excel") {
   return el("a", text, {
     class: "button",
     href: base + "api/export?kind=" + kind + "&month=" + financeMonth,
     download: "",
   });
-}
-async function financePage(c) {
-  const data = await api("finance/payroll?month=" + financeMonth);
-  c.replaceChildren(
-    el(
-      "h1",
-      me.user.roles.includes("teacher") ? "我的课酬" : "教师课酬与月度结算",
-    ),
-  );
-  monthTools(c, () => financePage(c));
-  const tools = el("div", null, { class: "row" });
-  tools.append(exportLink("finance"));
-  if (enabled("teacher_pay", "create"))
-    tools.append(
-      button("课酬标准", () => financeRecords(c, "rates")),
-      button("课酬调整", () => financeRecords(c, "adjustments")),
-      button("付款记录", () => financeRecords(c, "payments")),
-    );
-  if (enabled("settlements"))
-    tools.append(button("月度结算", () => settlementForm(c)));
-  c.append(
-    tools,
-    el(
-      "p",
-      data.locked
-        ? "本月已确认；应计已锁定，付款记录可继续登记。"
-        : "本月未确认；由财务提交、主管批准后锁定。",
-      { class: "impact-note" },
-    ),
-  );
-  const panel = el("section", null, { class: "panel credit-table" }),
-    table = el("table"),
-    head = el("tr");
-  for (const title of [
-    "教师",
-    "课次",
-    "课时",
-    "应计",
-    "调整",
-    "合计",
-    "已付",
-    "未付",
-    "状态",
-    "操作",
-  ])
-    head.append(el("th", title));
-  table.append(head);
-  for (const row of data.items) {
-    const tr = el("tr");
-    for (const value of [
-      row.teacher_name,
-      row.lesson_count,
-      row.units,
-      fmt.moneyCell(row.accrued_amount),
-      fmt.moneyCell(row.adjustment_amount),
-      fmt.moneyCell(row.total_amount),
-      fmt.moneyCell(row.paid_amount),
-      fmt.moneyCell(row.unpaid_amount),
-      row.confirmation_status === "confirmed" ? "已确认" : "未确认",
-    ])
-      tr.append(el("td", String(value)));
-    const ops = el("td");
-    ops.append(
-      button("课次明细", () =>
-        payrollDetail(
-          row,
-          data.lessons.filter((l) => l.teacher_id === row.teacher_id),
-        ),
-      ),
-    );
-    if (enabled("teacher_pay", "create"))
-      ops.append(
-        button("登记付款", () =>
-          financeRecordForm(c, "payments", {
-            teacher_id: row.teacher_id,
-            month: financeMonth,
-          }),
-        ),
-      );
-    tr.append(ops);
-    table.append(tr);
-  }
-  panel.append(table);
-  c.append(panel);
 }
 function payrollDetail(row, lessons) {
   const { panel } = drawer(row.teacher_name + " · 月度课酬");
@@ -4784,85 +4440,6 @@ async function settlementForm(c) {
     ),
   );
 }
-async function financeRecords(c, kind, offset = 0) {
-  const labels = {
-      rates: "课酬标准",
-      payments: "课酬付款",
-      adjustments: "课酬调整",
-      costs: "其他成本",
-    },
-    module = kind === "costs" ? "settlements" : "teacher_pay",
-    page = await api("finance/" + kind + "?offset=" + offset);
-  c.replaceChildren(el("h1", labels[kind]));
-  const tools = el("div", null, { class: "row" });
-  if (enabled(module, "create"))
-    tools.append(
-      button("＋ 新增", () => financeRecordForm(c, kind), "primary"),
-    );
-  tools.append(button("月度课酬", () => financePage(c)));
-  c.append(tools);
-  const section = el("section", null, { class: "panel credit-table" }),
-    table = el("table");
-  const head = el("tr");
-  for (const label of [
-    "教师 / 类别",
-    "课程 / 月份 / 日期",
-    "金额（元）",
-    "计费方式 / 原因 / 备注",
-    "生效期间 / 付款日期",
-    "操作",
-  ])
-    head.append(el("th", label));
-  table.append(head);
-  for (const row of page.items) {
-    const tr = el("tr");
-    for (const value of [
-      row.teacher_name || row.teacher_id || row.category,
-      row.course_name || row.month || row.date,
-      fmt.moneyCell(row.rate ?? row.amount),
-      row.rate_basis
-        ? {
-            legacy: "旧版按课时",
-            unit: "按课时",
-            lesson: "按课次",
-            person: "按人次",
-          }[row.rate_basis]
-        : row.reason || row.note,
-      row.effective_from
-        ? row.effective_from + " — " + row.effective_to
-        : row.paid_at || "",
-    ])
-      tr.append(el("td", String(value ?? "")));
-    const ops = el("td");
-    if (enabled(module, "update"))
-      ops.append(button("编辑", () => financeRecordForm(c, kind, row)));
-    if (enabled(module, "delete"))
-      ops.append(
-        button("删除", async () => {
-          if (!(await ask("删除该记录？已锁定月份需要主管先解锁。"))) return;
-          await api("finance/" + kind + "/" + row.id, "DELETE", {
-            version: row.version,
-            operation_id: operation(),
-          });
-          await financeRecords(c, kind, offset);
-        }),
-      );
-    tr.append(ops);
-    table.append(tr);
-  }
-  section.append(table);
-  if (!page.items.length)
-    section.append(el("p", "暂无记录", { class: "muted" }));
-  c.append(section);
-  if (offset)
-    c.append(
-      button("上一页", () =>
-        financeRecords(c, kind, Math.max(0, offset - 200)),
-      ),
-    );
-  if (page.next_offset !== null)
-    c.append(button("下一页", () => financeRecords(c, kind, page.next_offset)));
-}
 async function financeRecordForm(c, kind, row = {}) {
   const { panel, close } = drawer(
       {
@@ -4965,71 +4542,6 @@ async function financeRecordForm(c, kind, row = {}) {
   });
   panel.append(form);
 }
-async function reportsPage(c) {
-  const data = await api("finance/report?month=" + financeMonth);
-  c.replaceChildren(el("h1", "统计报表"));
-  monthTools(c, () => reportsPage(c));
-  const tools = el("div", null, { class: "row" });
-  if (enabled("exports", "export"))
-    tools.append(exportLink("report"), exportLink("lessons", "导出课程记录"));
-  c.append(tools);
-  const cards = el("div", null, { class: "row" });
-  for (const [key, label] of [
-    ["lesson_count", "本月课次"],
-    ["participant_count", "参与人次"],
-    ["tuition_amount", "学费实收"],
-    ["teacher_pay_amount", "教师课酬"],
-    ["cost_amount", "其他成本"],
-    ["profit_amount", "利润估算"],
-  ])
-    if (key in data) {
-      const card = el("section", null, { class: "panel" });
-      card.append(
-        el("small", label),
-        el(
-          "h2",
-          key.endsWith("_amount") ? fmt.money(data[key]) : String(data[key]),
-        ),
-      );
-      cards.append(card);
-    }
-  c.append(cards);
-  for (const [k, label] of [
-    ["teachers", "教师统计"],
-    ["courses", "课程统计"],
-    ["students", "学员统计"],
-  ]) {
-    const panel = el("section", null, { class: "panel credit-table" }),
-      table = el("table");
-    panel.append(el("h2", label));
-    const head = el("tr");
-    for (const name of [
-      "名称",
-      "课次",
-      "课时",
-      ...(data[k].some((r) => "teacher_pay_amount" in r)
-        ? ["课酬分摊（元）"]
-        : []),
-    ])
-      head.append(el("th", name));
-    table.append(head);
-    for (const row of data[k]) {
-      const tr = el("tr");
-      for (const val of [
-        row.name,
-        row.lesson_count,
-        row.units,
-        ...("teacher_pay_amount" in row
-          ? [fmt.moneyCell(row.teacher_pay_amount)]
-          : []),
-      ])
-        tr.append(el("td", String(val)));
-      table.append(tr);
-    }
-    panel.append(table);
-    c.append(panel);
-  }
-}
 
 // 第五阶段：个人端只收集输入与展示；仍使用同一机构 API、can 和 repo。
 const cnLesson = (status) => me.labels.lessons[status] || "未知状态";
@@ -5064,58 +4576,6 @@ function card(title, sub = "") {
 let personalDate = todayBJ(),
   personalMonth = todayBJ().slice(0, 7),
   personalTab = "课表";
-function personalShell() {
-  root.replaceChildren();
-  const frame = el("div", null, { class: "personal-frame" }),
-    head = el("header", null, { class: "personal-header" }),
-    identity = el("div");
-  identity.append(el("strong", me.user.name), el("small", brand.display_name));
-  head.append(mark(), identity);
-  const content = el("section", null, { class: "personal-content" }),
-    nav = el("nav", null, { class: "personal-nav", "aria-label": "个人导航" }),
-    teacher = me.user.roles.includes("teacher");
-  const views = teacher
-    ? [
-        ["课表", () => personalSchedule(content)],
-        ["我的课程", () => personalRecords(content)],
-        ["课酬", () => personalPay(content)],
-        ["我的", () => personalProfile(content)],
-      ]
-    : [
-        ["课表", () => personalSchedule(content)],
-        ["上课记录", () => personalRecords(content)],
-        ["课时缴费", () => personalCredits(content)],
-        ["我的", () => personalProfile(content)],
-      ];
-  const availableViews = views.filter(
-    ([label]) =>
-      (label !== "课酬" || enabled("teacher_pay")) &&
-      (!["课表", "我的课程", "上课记录"].includes(label) ||
-        enabled("schedule")),
-  );
-  const select = async (label, fn) => {
-    personalTab = label;
-    for (const b of nav.querySelectorAll("button"))
-      b.setAttribute(
-        "aria-current",
-        b.textContent === label ? "page" : "false",
-      );
-    content.replaceChildren(el("p", "正在载入…"));
-    await fn();
-  };
-  for (const [label, fn] of availableViews)
-    nav.append(button(label, () => select(label, fn)));
-  frame.append(head, content, nav);
-  root.append(frame);
-  if (me.user.must_change) {
-    changePassword(content, true);
-    nav.hidden = true;
-    return;
-  }
-  const initial =
-    availableViews.find((v) => v[0] === personalTab) || availableViews[0];
-  select(...initial).catch((e) => notice(e.message));
-}
 async function scheduleRows(from, to) {
   const items = [];
   for (let offset = 0; offset < 5000; offset += 200) {
@@ -5126,106 +4586,6 @@ async function scheduleRows(from, to) {
     if (page.next_offset === null) return items;
   }
   throw Error("课程过多，请缩小查询范围");
-}
-function personalCourse(c, row, back, record = false) {
-  const node = button(
-    "",
-    () =>
-      row.source_course_id
-        ? personalPartner(c, row, back)
-        : reviewScreen(c, row.id, back),
-    "personal-course",
-  );
-  node.append(
-    el("small", row.start_at.slice(0, 10) + " " + row.start_at.slice(11, 16)),
-    el("strong", row.course_name),
-    el(
-      "span",
-      (row.teacher_name || "") +
-        " · " +
-        (row.mode === "online" ? "线上课" : row.location_name || "待定地点"),
-    ),
-    el(
-      "span",
-      row.source_course_id
-        ? partnerLabel(row)
-        : record &&
-            (row.own_attendance === "planned" ||
-              (!row.own_attendance && row.status === "planned"))
-          ? "待销课"
-          : row.own_attendance === "planned"
-            ? cnLesson(row.status)
-            : row.own_attendance
-              ? cnAttendance(row.own_attendance) +
-                " · 扣" +
-                row.own_deducted +
-                "课时"
-              : cnLesson(row.status),
-      { class: "status-tag" },
-    ),
-  );
-  if (row.review_status) node.append(el("small", cnReview(row.review_status)));
-  return node;
-}
-async function personalSchedule(c) {
-  const from = weekStart(personalDate),
-    to = dateShift(from, 6),
-    items = await scheduleRows(from, to);
-  c.replaceChildren(el("h1", "我的课表"));
-  const tools = el("div", null, { class: "row mobile-tools" });
-  tools.append(
-    button("上周", () => {
-      personalDate = dateShift(personalDate, -7);
-      return personalSchedule(c);
-    }),
-    el("span", from + " — " + to),
-    button("下周", () => {
-      personalDate = dateShift(personalDate, 7);
-      return personalSchedule(c);
-    }),
-  );
-  c.append(tools);
-  const weeks = el("div", null, { class: "week-strip" });
-  for (let i = 0; i < 7; i++) {
-    const date = dateShift(from, i),
-      b = button(
-        ["一", "二", "三", "四", "五", "六", "日"][i] + "\n" + date.slice(8),
-        () => {
-          personalDate = date;
-          return personalSchedule(c);
-        },
-      );
-    b.setAttribute("aria-current", date === personalDate ? "date" : "false");
-    weeks.append(b);
-  }
-  c.append(weeks);
-  const upcoming = (await api("schedule-next")).record;
-  if (upcoming) {
-    const next = card(
-      "下一节课",
-      upcoming.start_at.slice(0, 16).replace("T", " "),
-    );
-    next.append(personalCourse(c, upcoming, () => personalSchedule(c)));
-    c.append(next);
-  }
-  const dayItems = items.filter(
-    (l) => l.start_at.slice(0, 10) === personalDate,
-  );
-  c.append(el("h2", personalDate + " · " + dayItems.length + "节课"));
-  for (const row of dayItems)
-    c.append(personalCourse(c, row, () => personalSchedule(c)));
-  if (!dayItems.length) c.append(el("p", "当天暂无课程", { class: "empty" }));
-  c.append(
-    button("本周全部课程", () => {
-      const p = card("本周课程");
-      for (const row of items)
-        p.append(personalCourse(c, row, () => personalSchedule(c)));
-      c.append(p);
-    }),
-    ...(enabled("exports", "export")
-      ? [button("保存机构品牌课表图", () => timetableImage(c, from))]
-      : []),
-  );
 }
 function monthPicker(c, load) {
   const controls = el("nav", null, {
@@ -5265,6 +4625,47 @@ function monthPicker(c, load) {
     button("下月", () => shift(1)),
   );
   c.append(controls);
+}
+// 个人页课程行：生产中由 c3.js 覆盖；personalRecords 仍调用它，单独加载 app.js 的测试也依赖它，暂留。
+function personalCourse(c, row, back, record = false) {
+  const node = button(
+    "",
+    () =>
+      row.source_course_id
+        ? personalPartner(c, row, back)
+        : reviewScreen(c, row.id, back),
+    "personal-course",
+  );
+  node.append(
+    el("small", row.start_at.slice(0, 10) + " " + row.start_at.slice(11, 16)),
+    el("strong", row.course_name),
+    el(
+      "span",
+      (row.teacher_name || "") +
+        " · " +
+        (row.mode === "online" ? "线上课" : row.location_name || "待定地点"),
+    ),
+    el(
+      "span",
+      row.source_course_id
+        ? partnerLabel(row)
+        : record &&
+            (row.own_attendance === "planned" ||
+              (!row.own_attendance && row.status === "planned"))
+          ? "待销课"
+          : row.own_attendance === "planned"
+            ? cnLesson(row.status)
+            : row.own_attendance
+              ? cnAttendance(row.own_attendance) +
+                " · 扣" +
+                row.own_deducted +
+                "课时"
+              : cnLesson(row.status),
+      { class: "status-tag" },
+    ),
+  );
+  if (row.review_status) node.append(el("small", cnReview(row.review_status)));
+  return node;
 }
 async function personalRecords(c) {
   c.replaceChildren(
@@ -5649,176 +5050,6 @@ async function personalPay(c) {
       );
     c.append(adjustments);
   }
-}
-async function personalCredits(c) {
-  c.replaceChildren(el("h1", "课时与缴费"));
-  if (enabled("packages")) {
-    for (const kind of ["packages", "transactions"]) {
-      const page = await api("credits/" + kind),
-        p = card(kind === "packages" ? "课时包余额" : "课时变动");
-      for (const row of page.items) {
-        if (kind === "packages") {
-          p.append(
-            el("h3", row.course_name || "课时包"),
-            el("p", row.balance + " / " + row.units_total + "课时"),
-            el("small", "有效期至 " + (row.valid_to || "不限")),
-          );
-        } else
-          p.append(
-            el(
-              "p",
-              row.date +
-                " · " +
-                {
-                  purchase: "购买",
-                  consume: "销课",
-                  reversal: "回补",
-                  adjustment: "调整",
-                  transfer_in: "转入",
-                  transfer_out: "转出",
-                }[row.type] +
-                " · " +
-                (row.delta > 0 ? "+" : "") +
-                row.delta +
-                "课时",
-            ),
-          );
-      }
-      if (!page.items.length) p.append(el("p", "暂无记录"));
-      if (page.next_offset !== null)
-        p.append(button("查看全部记录", () => creditPage(c, kind)));
-      c.append(p);
-    }
-  }
-  if (enabled("tuition")) {
-    const page = await api("credits/payments"),
-      p = card("缴费记录");
-    for (const row of page.items)
-      p.append(
-        el(
-          "p",
-          row.paid_at +
-            " · ¥" +
-            moneyText(row.amount) +
-            " · " +
-            (row.method || "已登记"),
-        ),
-      );
-    if (!page.items.length) p.append(el("p", "暂无记录"));
-    if (page.next_offset !== null)
-      p.append(button("查看全部缴费", () => creditPage(c, "payments")));
-    c.append(p);
-  }
-  if (!enabled("packages") && !enabled("tuition"))
-    c.append(el("p", "机构暂未开放此页内容，请联系教务。"));
-}
-function personalProfile(c) {
-  c.replaceChildren(
-    el("h1", "我的"),
-    el("p", me.user.name + " · " + brand.display_name),
-  );
-  profile(c);
-  c.prepend(el("p", me.user.name + " · " + brand.display_name));
-  c.append(
-    button("退出登录", async () => {
-      await api("logout", "POST", {});
-      location.assign(base + "login");
-    }),
-  );
-}
-async function submissionQueue(c, filter = "pending", offset = 0) {
-  const month = todayBJ().slice(0, 7),
-    from = month + "-01",
-    to = new Date(
-      Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0),
-    )
-      .toISOString()
-      .slice(0, 10);
-  c.replaceChildren(el("h1", "教师提交审核"));
-  const tools = el("div", null, { class: "row" });
-  for (const [value, label] of [
-    ["pending", "待确认"],
-    ["returned", "已退回"],
-    ["overdue", "已过窗口仍未提交"],
-  ])
-    tools.append(button(label, () => submissionQueue(c, value)));
-  c.append(tools);
-  const form = el("form");
-  field(form, "起始日期", "from", "date", from);
-  field(form, "截止日期", "to", "date", to);
-  const load = async (a, b, page = 0) => {
-    const result = await api(
-      "submissions?status=" +
-        filter +
-        "&from=" +
-        a +
-        "&to=" +
-        b +
-        "&offset=" +
-        page,
-    );
-    list.replaceChildren();
-    for (const row of result.items) {
-      const p = card(
-        row.course_name,
-        row.start_at.slice(0, 16).replace("T", " ") + " · " + row.teacher_name,
-      );
-      p.append(
-        el(
-          "p",
-          filter === "overdue" ? "已过窗口仍未提交" : cnReview(row.status),
-        ),
-        button("查看与处理", () =>
-          reviewScreen(c, row.lesson_id, () => submissionQueue(c, filter)),
-        ),
-      );
-      if (filter === "overdue")
-        p.append(
-          button("员工直接销课", () => lessonDetail(c, { id: row.lesson_id })),
-        );
-      list.append(p);
-    }
-    if (!result.items.length) list.append(el("p", "没有符合条件的课程"));
-    if (result.next_offset !== null)
-      list.append(button("下一页", () => load(a, b, result.next_offset)));
-  };
-  submit(form, "查询", (d) => load(d.from, d.to));
-  const list = el("section");
-  c.append(form, list);
-  await load(from, to, offset);
-}
-async function staffTimetable(c) {
-  c.replaceChildren(el("h1", "机构品牌课表图"));
-  const form = el("form"),
-    kind = selectField(
-      form,
-      "类型",
-      "kind",
-      [
-        { id: "teacher", name: "教师" },
-        { id: "student", name: "学员" },
-      ],
-      "teacher",
-    ),
-    person = selectField(form, "姓名", "person", await choices("teachers"));
-  kind.addEventListener("change", async () => {
-    const people = await choices(
-      kind.value === "teacher" ? "teachers" : "students",
-    );
-    person.replaceChildren();
-    for (const p of people)
-      person.append(el("option", p.name, { value: p.id }));
-  });
-  field(form, "周起始日期", "from", "date", weekStart(todayBJ()));
-  submit(form, "生成课表图", (d) =>
-    timetableImage(
-      c,
-      d.from,
-      (d.kind === "teacher" ? "teacher_id=" : "student_id=") +
-        encodeURIComponent(d.person),
-    ),
-  );
-  c.append(form);
 }
 async function timetableImage(c, from, query = "") {
   const data = await api(
@@ -6397,72 +5628,6 @@ async function followupForm(c, kind, studentId, row = {}) {
   });
   panel.append(f);
 }
-async function leadsPage(c, offset = 0) {
-  const data = await toolPage("leads", null, offset);
-  c.replaceChildren(el("h1", "试听与招生线索"));
-  if (enabled("leads", "create"))
-    c.append(button("＋ 新增线索", () => leadForm(c), "primary"));
-  const metrics = el("div", null, { class: "metrics-grid" }),
-    enrolled = data.items.filter((x) => x.stage === "enrolled").length;
-  for (const [label, n] of [
-    ["本页线索", data.items.length],
-    ["已试听", data.items.filter((x) => x.stage === "trial").length],
-    ["已转正", enrolled],
-    [
-      "本页转化率",
-      data.items.length
-        ? Math.round((enrolled / data.items.length) * 100) + "%"
-        : "—",
-    ],
-  ]) {
-    const p = card(label);
-    p.append(el("strong", String(n), { class: "metric-value" }));
-    metrics.append(p);
-  }
-  c.append(metrics);
-  const board = el("div", null, { class: "leads-board" });
-  for (const [stage, name] of Object.entries(me.labels.lead_stages)) {
-    const column = el("section", null, { class: "lead-column" });
-    column.append(el("h2", name));
-    for (const row of data.items.filter((x) => x.stage === stage)) {
-      const p = card(row.name, row.source || "未填来源");
-      p.append(
-        el("p", row.phone || "未填手机"),
-        el("p", "下次跟进：" + (row.next_followup || "未安排")),
-        el("p", row.note, { class: "preserve-text" }),
-      );
-      if (row.trial_at)
-        p.append(
-          el("p", "试听：" + row.trial_at.slice(0, 16).replace("T", " ")),
-        );
-      if (!row.student_id && enabled("leads", "update"))
-        p.append(button("跟进 / 编辑", () => leadForm(c, row)));
-      if (
-        !row.student_id &&
-        enabled("students", "create") &&
-        enabled("leads", "create")
-      )
-        p.append(
-          button("转为正式学员", async () => {
-            if (
-              !(await ask(
-                "将按线索资料新建独立学员档案，保留线索历史，继续吗？",
-              ))
-            )
-              return;
-            await api("tools/leads/" + row.id + "/convert", "POST", {
-              version: row.version,
-            });
-            await leadsPage(c, offset);
-          }),
-        );
-      column.append(p);
-    }
-    board.append(column);
-  }
-  c.append(board);
-  pager(c, data.next_offset, offset, (n) => leadsPage(c, n));
-}
 async function leadForm(c, row = {}) {
   const { panel, close } = drawer(row.id ? "跟进线索" : "新增招生线索"),
     f = el("form");
@@ -6550,89 +5715,6 @@ async function leadForm(c, row = {}) {
     close,
   );
   panel.append(f);
-}
-async function renewalsPage(c, offset = 0) {
-  const data = await api("renewals?offset=" + offset);
-  c.replaceChildren(
-    el("h1", "续费预警"),
-    el(
-      "p",
-      "余额 ≤ " +
-        data.settings.low_balance_threshold +
-        "课时，或未来 " +
-        data.settings.expiry_warning_days +
-        "天内到期。预计用完日按近30天扣课速度估算，仅供跟进参考。",
-    ),
-  );
-  if (me.user.roles.includes("supervisor"))
-    c.append(
-      button("预警规则", () => {
-        const { panel, close } = drawer("续费预警规则"),
-          f = el("form");
-        field(
-          f,
-          "低余额课时（整数）",
-          "low_balance_threshold",
-          "number",
-          data.settings.low_balance_threshold,
-        );
-        field(
-          f,
-          "提前提醒天数",
-          "expiry_warning_days",
-          "number",
-          data.settings.expiry_warning_days,
-        );
-        submit(f, "保存规则", async (d) => {
-          await api("renewal-settings", "PUT", {
-            low_balance_threshold: Number(d.low_balance_threshold),
-            expiry_warning_days: Number(d.expiry_warning_days),
-          });
-          close();
-          await renewalsPage(c);
-        });
-        panel.append(f);
-      }),
-    );
-  const selected = new Set(),
-    list = card("低余额 / 即将到期");
-  for (const row of data.items) {
-    const line = el("label", null, { class: "renewal-line" }),
-      check = el("input", null, { type: "checkbox" });
-    check.addEventListener("change", () => {
-      check.checked
-        ? selected.add(row.id)
-        : selected.delete(row.id);
-    });
-    line.append(
-      check,
-      el(
-        "span",
-        row.student_name +
-          " · " +
-          row.course_name +
-          " · 剩余 " +
-          row.balance +
-          "课时 · " +
-          (row.valid_to ? "有效期至 " + row.valid_to : "不限有效期") +
-          (row.estimated_end ? " · 预计 " + row.estimated_end + "用完" : ""),
-      ),
-    );
-    list.append(line);
-  }
-  if (enabled("exports", "export"))
-    list.append(
-      button("生成已选续费通知", async () => {
-        if (!selected.size) throw Error("请先选择需要跟进的课时包");
-        const b = await api("renewal-brand");
-        for (const row of data.items.filter((x) => selected.has(x.id)))
-          await renewalNotice(c, b, row);
-      }),
-    );
-  c.append(list);
-  pager(c, data.items.length === 200 ? offset + 200 : null, offset, (n) =>
-    renewalsPage(c, n),
-  );
 }
 function wrapCanvasText(ctx, text, width) {
   const closing = /^[，。！？、；：）》」』】〕〉”’…,.!?;:%％℃°]/u;

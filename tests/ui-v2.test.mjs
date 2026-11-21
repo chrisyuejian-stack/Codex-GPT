@@ -59,9 +59,11 @@ test("UI重构v2：今天页与点名面板只调用既有接口，销课/撤销
 
 test("UI重构v2：续费按“学员+课程”分组选择，复制文字/下载图片后登记提醒（B2/B3 对接）", async () => {
   const app = await readFile("src/tenant/app.js", "utf8"),
-    v2 = await readFile("src/tenant/v2.js", "utf8");
-  assert.doesNotMatch(app, /selected\.(?:add|delete|has)\((?:row|x)\.package_id\)/);
-  assert.match(app, /selected\.add\(row\.id\)/);
+    v2 = await readFile("src/tenant/v2.js", "utf8"),
+    v2t = await readFile("src/tenant/v2t.js", "utf8");
+  // 续费列表现由 v2t.js 实现（app.js 旧 renewalsPage 已被覆盖、2026-11-21 删除）：按“学员+课程”行选择，不按课时包。
+  for (const file of [app, v2t]) assert.doesNotMatch(file, /selected\.(?:add|delete|has)\((?:row|x|r)\.package_id\)/);
+  assert.match(v2t, /rState\.selected\.add\(r\.id\)/);
   const remind = app.slice(app.indexOf("async function renewalRemind"), app.indexOf("async function renewalNotice"));
   assert.match(remind, /api\("renewals\/remind", "POST"/);
   assert.match(remind, /package_ids: row\.package_ids/);
@@ -531,17 +533,18 @@ test("D1 前端与界面修复：删除按钮、机构停用/彻底删除、公�
   assert.match(cal, /pageHead\.bar\(toolbar\)/);
 });
 
-test("今天页（设计稿 10）：接下来要做分三组、类型筛选、我的/全部、记录回访就地填写、明天再说", async () => {
-  const td = await readFile("src/tenant/v2today.js", "utf8"),
+// 原「今天页（设计稿 10）」测试验证 v2today.js；该文件已被 fq-today.js 完全取代，2026-11-21 删除。
+// 仍需保留的行为：仅财务角色的今天页回到上一个实现（v2.js today → financeToday）。
+test("今天页：仅财务角色回到 v2.js 的财务今天页；v2today.js 已不在打包列表", async () => {
+  const fq = await readFile("src/tenant/fq-today.js", "utf8"),
+    v2 = await readFile("src/tenant/v2.js", "utf8"),
     bundle = await readFile("scripts/frontend-bundle.mjs", "utf8");
-  assert.match(bundle, /src\/tenant\/v2today\.js/);
-  assert.match(td, /\["now", "现在就做 · 已经过时间"\]/);
-  assert.match(td, /\["later", "可以晚点"\]/);
-  assert.match(td, /\["mine", "我的"\]/);
-  assert.match(td, /"保存，下一条"/);
-  assert.match(td, /api\("tools\/followup_notes", "POST"/);
-  assert.match(td, /"明天再说"/);
-  assert.match(td, /if \(finance\) return oldHome\(c\);/);
+  assert.doesNotMatch(bundle, /v2today/);
+  assert.match(fq, /const prevHome = home;/);
+  assert.match(fq, /if \(finance\) return prevHome\(c\);/);
+  assert.match(v2, /if \(finance\) return financeToday\(c, data, day\);/);
+  assert.match(v2, /home = today;/);
+  assert.ok(bundle.indexOf("src/tenant/v2.js") < bundle.indexOf("src/tenant/fq-today.js"));
 });
 
 test("选项缓存：同一份名单的不同写法算一份；写操作只作废相关名单", async () => {
