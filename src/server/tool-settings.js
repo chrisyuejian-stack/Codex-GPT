@@ -10,7 +10,7 @@ import { manualSubjects, stageRuleKeys } from "./subject-keys.js";
 
 import { readWorkbook } from "./xlsx.js";
 
-export const toolSettingsPath = p => /^\/api\/(?:settings\/(?:courses(?:\/[^/]+)?|stage-types|stage-rules|calendar|course-rules|report-classes|profile|brand|changes(?:\/[^/]+\/(?:approve|reject|revert))?)|gallery(?:\/[^/]+(?:\/file)?)?)$/.test(p);
+export const toolSettingsPath = p => /^\/api\/(?:settings\/(?:courses(?:\/[^/]+)?|stage-types|stage-rules|calendar|course-rules|report-classes|profile|brand|institution|changes(?:\/[^/]+\/(?:approve|reject|revert))?)|gallery(?:\/[^/]+(?:\/file)?)?)$/.test(p);
 
 const reply = (value, status = 200, headers = {}) => json(newDto(value), status, headers);
 
@@ -339,6 +339,33 @@ function galleryDto(row, apiBase) {
     parent_consent_media: !!row.consent,
     hidden: !!row.hidden
   };
+}
+
+function institutionDto(row, user) {
+  return {
+    version: row.version,
+    name: row.display_name,
+    logo: row.logo ?? null,
+    contact_text: row.contact_text || null,
+    primary_color: row.theme_color,
+    editable: user.roles.includes("supervisor")
+  };
+}
+
+// 品牌图片规则沿用原平台机构配置：压缩后的 PNG/JPEG/WebP data URL，不超过 180000 字符，并校验文件头。
+function brandImage(v) {
+  if (v == null || v === "") return null;
+  if (typeof v !== "string" || v.length > 180000 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v)) error("品牌图片须为压缩后的PNG/JPEG/WebP", "logo");
+  let bytes;
+  try {
+    bytes = Uint8Array.from(atob(v.split(",")[1]), c => c.charCodeAt(0));
+  } catch {
+    error("图片编码不正确", "logo");
+  }
+  const type = /^data:image\/(png|jpeg|webp);/.exec(v)[1];
+  const valid = type === "png" ? [ 137, 80, 78, 71, 13, 10, 26, 10 ].every((x, i) => bytes[i] === x) && String.fromCharCode(...bytes.slice(12, 16)) === "IHDR" : type === "jpeg" ? bytes[0] === 255 && bytes[1] === 216 && bytes.at(-2) === 255 && bytes.at(-1) === 217 : String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
+  if (!valid) error("图片真实格式不正确", "logo");
+  return v;
 }
 
 function brandDto(row, apiBase) {
@@ -754,6 +781,28 @@ export async function toolSettingsApi(req, env, resolved, user, policy, url) {
     profile: "profile"
   }[resource.split("/")[0]];
 
+  // 第三期 · 设置（DECISIONS 14）：机构名称、Logo、联系说明，主管可直接修改。
+  if (resource === "institution") {
+    allowed(user, policy, "read");
+    if (req.method === "PATCH") {
+      if (!user.roles.includes("supervisor")) fail(403, "只有机构主管可以修改机构信息", "forbidden");
+      const d = await body(req), row = await r.brand();
+      if (Object.keys(d).some(k => ![ "version", "name", "logo", "contact_text" ].includes(k))) error("只能修改机构名称、Logo 和联系说明", "body");
+      if (version(d.version) !== row.version) conflict(institutionDto(row, user));
+      const next = {
+        display_name: d.name === undefined ? row.display_name : str(d.name, "name", 100),
+        logo: d.logo === undefined ? row.logo ?? null : brandImage(d.logo),
+        contact_text: d.contact_text === undefined ? row.contact_text ?? "" : d.contact_text === null ? "" : str(d.contact_text, "contact_text", 300, true)
+      };
+      try {
+        await r.settingsInstitutionWrite(next, row, user);
+      } catch (e) {
+        if (raced(e)) conflict(institutionDto(await r.brand(), user));
+        throw e;
+      }
+    } else if (req.method !== "GET") fail(404, "不存在", "not_found");
+    return reply(institutionDto(await r.brand(), user));
+  }
   if (resource === "brand") {
     allowed(user, policy, req.method === "GET" ? "read" : "write");
     const row = await r.settingsBrand();
