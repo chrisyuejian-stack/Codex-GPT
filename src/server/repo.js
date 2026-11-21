@@ -2603,7 +2603,7 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
     },
     async c2StudentPage(v) {
       scoped();
-      const base = `WITH a AS(SELECT ? tenant_id,? at),b AS(SELECT x.package_id,SUM(x.delta) balance FROM package_transactions x,a WHERE x.tenant_id=a.tenant_id GROUP BY x.package_id),p AS(SELECT p.*,COALESCE(b.balance,0) balance,c.name course_name FROM packages p JOIN a ON p.tenant_id=a.tenant_id LEFT JOIN b ON b.package_id=p.id JOIN course_types c ON c.tenant_id=p.tenant_id AND c.id=p.course_type_id WHERE p.deleted_at IS NULL),s AS(SELECT s.id,s.name,s.grade,s.parent_name,s.status,s.version,s.sort_order,COUNT(*) OVER(PARTITION BY s.name) same_name_count,COUNT(*) OVER(PARTITION BY s.name,s.grade) same_grade_count,COALESCE((SELECT ROUND(SUM(balance),2) FROM p WHERE p.student_id=s.id),0) balance,(SELECT COUNT(*) FROM p WHERE p.student_id=s.id) package_count,(SELECT group_concat(DISTINCT course_name) FROM p WHERE p.student_id=s.id) course_names,(SELECT MIN(l.start_at) FROM lessons l JOIN lesson_participants x ON x.tenant_id=l.tenant_id AND x.lesson_id=l.id WHERE l.tenant_id=s.tenant_id AND x.student_id=s.id AND l.deleted_at IS NULL AND x.deleted_at IS NULL AND l.status='planned' AND strftime('%s',l.start_at)*1000>=a.at) next_start,(SELECT group_concat(DISTINCT t.name) FROM lessons l JOIN lesson_participants x ON x.tenant_id=l.tenant_id AND x.lesson_id=l.id JOIN teachers t ON t.tenant_id=l.tenant_id AND t.id=l.teacher_id WHERE l.tenant_id=s.tenant_id AND x.student_id=s.id AND l.deleted_at IS NULL AND x.deleted_at IS NULL AND l.status='planned' AND strftime('%s',l.start_at)*1000>=a.at) teacher_names FROM students s JOIN a ON s.tenant_id=a.tenant_id WHERE s.deleted_at IS NULL AND instr(lower(s.name),lower(?))>0 AND (?='' OR s.status=?) AND (?='' OR EXISTS(SELECT 1 FROM p WHERE p.student_id=s.id AND p.course_type_id=?)))`;
+      const base = `WITH a AS(SELECT ? tenant_id,? at),b AS(SELECT x.package_id,SUM(x.delta) balance FROM package_transactions x,a WHERE x.tenant_id=a.tenant_id GROUP BY x.package_id),p AS(SELECT p.*,COALESCE(b.balance,0) balance,c.name course_name FROM packages p JOIN a ON p.tenant_id=a.tenant_id LEFT JOIN b ON b.package_id=p.id JOIN course_types c ON c.tenant_id=p.tenant_id AND c.id=p.course_type_id WHERE p.deleted_at IS NULL),s AS(SELECT s.id,s.name,s.grade,s.parent_name,s.status,s.version,s.sort_order,COUNT(*) OVER(PARTITION BY s.name) same_name_count,COUNT(*) OVER(PARTITION BY s.name,s.grade) same_grade_count,COALESCE((SELECT ROUND(SUM(balance),2) FROM p WHERE p.student_id=s.id),0) balance,(SELECT COUNT(*) FROM p WHERE p.student_id=s.id) package_count,(SELECT group_concat(DISTINCT course_name) FROM p WHERE p.student_id=s.id) course_names,(SELECT MIN(l.start_at) FROM lessons l JOIN lesson_participants x ON x.tenant_id=l.tenant_id AND x.lesson_id=l.id WHERE l.tenant_id=s.tenant_id AND x.student_id=s.id AND l.deleted_at IS NULL AND x.deleted_at IS NULL AND l.status='planned' AND strftime('%s',l.start_at)*1000>=a.at) next_start,(SELECT group_concat(DISTINCT t.name) FROM lessons l JOIN lesson_participants x ON x.tenant_id=l.tenant_id AND x.lesson_id=l.id JOIN teachers t ON t.tenant_id=l.tenant_id AND t.id=l.teacher_id WHERE l.tenant_id=s.tenant_id AND x.student_id=s.id AND l.deleted_at IS NULL AND x.deleted_at IS NULL AND l.status='planned' AND strftime('%s',l.start_at)*1000>=a.at) teacher_names FROM students s JOIN a ON s.tenant_id=a.tenant_id WHERE s.deleted_at IS NULL AND (instr(lower(s.name),lower(?))>0 OR instr(lower(s.parent_name),lower(?))>0 OR s.id IN (SELECT value FROM json_each(?))) AND (?='' OR s.status=?) AND (?='' OR EXISTS(SELECT 1 FROM p WHERE p.student_id=s.id AND p.course_type_id=?)))`;
       const balanceFilter = v.balance === "zero" || v.balance === "low";
       const groupedFilter = balanceFilter
         ? ",args AS(SELECT tenant_id,? today,? low,? days FROM a)" +
@@ -2618,6 +2618,9 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
         tenantId,
         v.at,
         v.q,
+        v.q,
+        // 手机尾号搜索命中的学员 id（加密字段在 Worker 里解密比对，见 rebuild.js phoneTailIds）。
+        JSON.stringify(v.ids || []),
         v.status,
         v.status,
         v.course,
@@ -2643,6 +2646,16 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
         items: rows.filter((row) => row.id != null).map(({ __total, ...row }) => row),
         total: rows[0]?.__total || 0,
       };
+    },
+    // 手机尾号搜索用：只取 id 与两段加密号码，比对在 Worker 内解密完成，不落明文。
+    async c2StudentPhoneCiphers(status) {
+      scoped();
+      return all(
+        "SELECT id,phone_enc,parent_phone_enc FROM students WHERE tenant_id=? AND deleted_at IS NULL AND (phone_enc IS NOT NULL OR parent_phone_enc IS NOT NULL) AND (?='' OR status=?) ORDER BY id LIMIT 5000",
+        tenantId,
+        status,
+        status,
+      );
     },
     async c2StudentCounts(today, settings) {
       scoped();

@@ -573,3 +573,33 @@ test("选项缓存：同一份名单的不同写法算一份；写操作只作�
   assert.equal(apiAffects("reorder"), null);
   assert.equal(apiAffects("settings"), null);
 });
+
+test("第三期学员页（fq-students.js）：替换员工端学员入口；名单/取数沿用 v2p 的 studentData；写入只走原表单与原接口；无内联样式/原生弹窗", async () => {
+  const js = await readFile("src/tenant/fq-students.js", "utf8"),
+    v2p = await readFile("src/tenant/v2p.js", "utf8"),
+    assets = await tenantAssets();
+  // 加载在 v2p.js（以及其它 fq-*.js）之后，覆盖 studentsPage 与 ChannelRebuild.studentDetail；样式在 fq.css 之前、选择器用 fq-st- 前缀。
+  assert.ok(assets.js.indexOf("globalThis.FQStudents") > assets.js.indexOf("globalThis.ChannelV2People = "));
+  assert.ok(assets.css.indexOf(".fq-st-split") > 0 && assets.css.indexOf(".fq-st-split") < assets.css.lastIndexOf("/* ---------- 按钮 ---------- */"));
+  assert.match(v2p, /studentData: \{ state: sState, loadStudents, loadCounts, base: studentBase, cache: dCache, unmask \}/);
+  assert.match(js, /const previous = studentsPage;\s*studentsPage = async \(c, \.\.\.args\) => \{\s*if \(!c\.isConnected \|\| c\.closest\("\.ui-sheet"\)\) return previous\(c, \.\.\.args\);/);
+  assert.match(js, /globalThis\.ChannelRebuild\.studentDetail = \(c\) => render\(c\)/);
+  assert.doesNotMatch(js, /\.innerHTML\s*=|\.style\.|setAttribute\(["']style["']/);
+  assert.ok(!/(?<![.\w])(?:alert|prompt|confirm)\(/.test(js));
+  for (const m of js.matchAll(/api\(\s*"([a-z0-9/_-]+)/g))
+    assert.ok(["c2/students", "credits/packages", "data/students/", "renewal-brand", "tools/followup_tasks/", "accounts/"].some((p) => m[1].startsWith(p)), m[1]);
+  for (const m of js.matchAll(/api\(\s*"([^"]+)"[^)]*?"(PATCH|DELETE|POST|PUT)"/g))
+    assert.ok(/^(data\/students\/|tools\/followup_tasks\/|accounts\/)/.test(m[1]), m[1]);
+  for (const form of ["recordForm(", "creditForm(", "followupForm(", "followupPage(", "creditPage(", "renewalNotice(", "timetableImage(", "personalAccount(", "lessonDetail(", "studentFunds(", "studentBlocks(", "yxRepertoireTab(", 'exportLink("students")'])
+    assert.ok(js.includes(form), form);
+  // 编辑时不回填打码号码；换学员/分页只换右侧；先显示名单，详情随后补上。
+  assert.match(js, /recordForm\(sink\(done\), "students", row \? D\.unmask\(row\) : undefined\)/);
+  assert.match(js, /swapDetail\(c, r\[0\], r\[1\]\);\s*return true;/);
+  assert.match(js, /if \(pick\) await swapDetail\(c, pick, tab\);/);
+  // 决定 1：「更多」页签改名「不可排时段」；决定 2：搜索提示手机尾号；决定 4：手机端不出导出。
+  assert.match(js, /\["more", "不可排时段"/);
+  assert.match(js, /placeholder: "搜索姓名、家长、手机尾号"/);
+  assert.match(js, /enabled\("exports", "export"\) && !phone\(\)\) \{\s*const b = btn\("导出 Excel"/);
+  // 决定 3/7：展示同意字段保留，分组改称「学员端与 AI」。
+  assert.match(js, /\["学员端与 AI", \["nickname", "parent_consent_media"\]\]/);
+});
