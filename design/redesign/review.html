@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>枫琴教务中心 · 第三期界面设计稿</title>
+<style>
+:root{--ink:#2a1f3e;--violet:#6a35b8;--soft:#eee6f7;--paper:#f4efe8;--card:#fffdf9;--sub:#655c72;--line:#e4dccf;--red:#b4301f;--amber:#b06a12}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 "PingFang SC","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif}
+header{background:var(--ink);color:#f7f1e8;padding:28px 24px 22px;border-top:4px solid #e8352e}
+header h1{margin:0 0 6px;font-size:24px}
+header p{margin:0;color:#d8cfe6;max-width:880px}
+nav{position:sticky;top:0;z-index:5;background:rgba(244,239,232,.95);border-bottom:1px solid var(--line);padding:10px 24px;display:flex;gap:8px;flex-wrap:wrap}
+nav a{color:var(--ink);text-decoration:none;padding:6px 14px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:14px}
+nav a:hover{background:var(--soft)}
+main{max-width:1200px;margin:0 auto;padding:24px}
+section{margin:0 0 44px}
+h2{font-size:21px;margin:0 0 4px}
+h2 small{color:var(--violet);font-style:italic;font-weight:400;font-family:Georgia,serif;margin-left:6px}
+.lead{color:var(--sub);margin:0 0 16px}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin:0 0 16px}
+figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+figure.wide{grid-column:span 2}
+@media (max-width:700px){figure.wide{grid-column:auto}}
+figure a{display:block;max-height:520px;overflow:hidden;border-bottom:1px solid var(--line)}
+figure img{display:block;width:100%;height:auto}
+figcaption{padding:8px 12px;font-size:13px;color:var(--sub)}
+.box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:0 0 12px}
+.box h3{margin:0 0 6px;font-size:15px}
+.box ul,.box ol{margin:0;padding-left:20px}
+.box li{margin:2px 0}
+.ask{border-left:4px solid var(--violet)}
+.ask h3{color:var(--violet)}
+.q{font-weight:600}
+.rec{color:var(--sub)}
+.summary ol li{margin:6px 0}
+</style>
+</head>
+<body>
+<header>
+<h1>枫琴教务中心 · 第三期界面设计稿</h1>
+<p>学员、课表、线索、老师、设置五个页面，按「今天 / 待办 / 财务」新界面统一重做。每页现有功能都已逐项保留，位置变化写在各页说明里。点截图可看原图。请重点看每页底部紫色框里「需要你决定」的问题；确认后开始实现。</p>
+</header>
+<nav><a href="#all">需要决定的问题汇总</a><a href="#students">学员</a><a href="#schedule">课表</a><a href="#leads">线索</a><a href="#teachers">老师</a><a href="#settings">设置</a></nav>
+<main>
+
+<section id="all" class="summary">
+<div class="box ask">
+<h3>需要你决定的问题（共 17 个，括号里是我的建议）</h3>
+<ol>
+<li><span class="q">学员</span> · 「更多」页签现在只剩「不可排时段」，直接改名为「不可排时段」？<span class="rec">（建议：同意）</span></li>
+<li><span class="q">学员</span> · 搜索框提示写了「手机尾号」，后端目前不支持按手机尾号搜。<span class="rec">（建议：后端加上，前台老师常用）</span></li>
+<li><span class="q">学员</span> · 「家长同意展示照片和全名」字段还留吗？<span class="rec">（建议：保留，点评图片会用到）</span></li>
+<li><span class="q">学员</span> · 手机端加「导出」？<span class="rec">（建议：不加，导出在电脑上做）</span></li>
+<li><span class="q">课表</span> · 原「按教师 / 按教室」表格视图，改为周视图着色 + 日视图占用条，还是保留为第 4 种视图？<span class="rec">（建议：改，不保留）</span></li>
+<li><span class="q">课表</span> · 手机端去掉「按老师分列」，改用老师筛选？<span class="rec">（建议：同意）</span></li>
+<li><span class="q">课表</span> · 新建课程遇到冲突时给「建议空档」按钮（新功能）？<span class="rec">（建议：先不做，放下一期）</span></li>
+<li><span class="q">线索</span> · 线索来源改成固定选项（小红书、老学员介绍、大众点评、抖音、地推、其他）？<span class="rec">（建议：改固定选项＋「其他」可填）</span></li>
+<li><span class="q">线索</span> · 回访记录现在是从备注里按行拆出来的；要可靠记下谁、何时回访，需要后端加回访记录表。<span class="rec">（建议：加）</span></li>
+<li><span class="q">线索</span> · 手机端也要看板，还是只要列表？<span class="rec">（建议：只要列表）</span></li>
+<li><span class="q">老师</span> · 手机端允许新建老师？<span class="rec">（建议：不允许，电脑上建）</span></li>
+<li><span class="q">老师</span> · 课酬卡上「待付 = 本月课酬 − 已付」，是否和财务口径一致？<span class="rec">（需要你确认）</span></li>
+<li><span class="q">设置</span> · 「课程与教室」现在在「老师」分组下，移回设置？老师分组里留跳转入口吗？<span class="rec">（建议：移回设置，不留入口）</span></li>
+<li><span class="q">设置</span> · 机构名称、Logo、联系说明让主管直接编辑（需要后端写接口）？<span class="rec">（建议：可以）</span></li>
+<li><span class="q">设置</span> · 教室表加只读的「本周使用节数」（需要后端统计）？<span class="rec">（建议：先不加）</span></li>
+<li><span class="q">设置</span> · 手机端「数据与备份」只读，导入、恢复只在电脑上做？<span class="rec">（建议：同意）</span></li>
+<li><span class="q">设置</span> · 两处挪位置：「老师端与学员端能看到什么」开关从机构设置挪到「账号与权限」；续费提醒规则放进「教务规则」（待办里的入口保留）。<span class="rec">（建议：同意）</span></li>
+</ol>
+<p class="rec" style="margin:10px 0 0">可以直接回复「按建议」，或者只写不同意的编号。</p>
+</div>
+</section>
+
+<section id="students">
+<h2>学员<small>Students</small></h2>
+<p class="lead">电脑：左边名单（筛选药丸：在读 / 已用完 / 快用完 / 全部）+ 右边详情（头部资料与动作、四张数字卡、页签）。手机：名单页 → 整页详情，右上「⋯」放开通账号、改状态、删除。</p>
+<div class="shots">
+<figure class="wide"><a href="students/main-desk.png"><img src="students/main-desk.png" alt="学员 电脑主视图"></a><figcaption>电脑 · 名单 + 详情（概况）</figcaption></figure>
+<figure><a href="students/main-phone.png"><img src="students/main-phone.png" alt="学员 手机名单"></a><figcaption>手机 · 名单</figcaption></figure>
+<figure><a href="students/detail-phone.png"><img src="students/detail-phone.png" alt="学员 手机详情"></a><figcaption>手机 · 详情（课表页签）</figcaption></figure>
+<figure class="wide"><a href="students/packages-desk.png"><img src="students/packages-desk.png" alt="课时与缴费"></a><figcaption>电脑 · 课时与缴费（含「更多」菜单）</figcaption></figure>
+<figure><a href="students/packages-phone.png"><img src="students/packages-phone.png" alt="课时与缴费 手机"></a><figcaption>手机 · 课时与缴费</figcaption></figure>
+<figure class="wide"><a href="students/new-desk.png"><img src="students/new-desk.png" alt="新建学员"></a><figcaption>电脑 · 新建学员抽屉</figcaption></figure>
+<figure><a href="students/new-phone.png"><img src="students/new-phone.png" alt="新建学员 手机"></a><figcaption>手机 · 新建学员</figcaption></figure>
+</div>
+<div class="box"><h3>主要变化</h3><ul><li>手机详情补回「⋯」动作组（开通账号、改状态、删除），四个数字全部显示。</li><li>上课记录、跟进、学习阶段、曲目 / 作品四个页签沿用现有内容，只换卡片外观。</li></ul></div>
+</section>
+
+<section id="schedule">
+<h2>课表<small>Schedule</small></h2>
+<p class="lead">顶部页签：周课表 / 按学员 / 固定排课 / 班级。周视图按老师（或教室、课程）着色，顶部四张数字卡，冲突单独红条提示并可定位；日视图沿用今天页时间线，右侧是老师和琴房占用条。点空白格子直接新建课程，实时检查冲突。</p>
+<div class="shots">
+<figure class="wide"><a href="schedule/week-desk.png"><img src="schedule/week-desk.png" alt="周课表"></a><figcaption>电脑 · 周课表</figcaption></figure>
+<figure><a href="schedule/week-phone.png"><img src="schedule/week-phone.png" alt="周课表 手机"></a><figcaption>手机 · 按天分组的周列表</figcaption></figure>
+<figure class="wide"><a href="schedule/day-desk.png"><img src="schedule/day-desk.png" alt="日视图"></a><figcaption>电脑 · 日视图</figcaption></figure>
+<figure><a href="schedule/day-phone.png"><img src="schedule/day-phone.png" alt="日视图 手机"></a><figcaption>手机 · 日视图</figcaption></figure>
+<figure class="wide"><a href="schedule/lesson-desk.png"><img src="schedule/lesson-desk.png" alt="课程详情"></a><figcaption>电脑 · 课程详情 / 点名抽屉</figcaption></figure>
+<figure><a href="schedule/lesson-phone.png"><img src="schedule/lesson-phone.png" alt="课程详情 手机"></a><figcaption>手机 · 课程详情</figcaption></figure>
+<figure class="wide"><a href="schedule/new-desk.png"><img src="schedule/new-desk.png" alt="新建课程"></a><figcaption>电脑 · 新建课程（冲突提示）</figcaption></figure>
+<figure><a href="schedule/new-phone.png"><img src="schedule/new-phone.png" alt="新建课程 手机"></a><figcaption>手机 · 新建课程</figcaption></figure>
+<figure class="wide"><a href="schedule/fixed-desk.png"><img src="schedule/fixed-desk.png" alt="固定排课"></a><figcaption>电脑 · 固定排课看板</figcaption></figure>
+<figure><a href="schedule/fixed-phone.png"><img src="schedule/fixed-phone.png" alt="固定排课 手机"></a><figcaption>手机 · 固定排课</figcaption></figure>
+</div>
+<div class="box"><h3>主要变化</h3><ul><li>「按学员」「班级」两个页签沿用原结构，换新卡片样式。</li><li>示例数据里周六 9 节只是为了展示效果。</li></ul></div>
+</section>
+
+<section id="leads">
+<h2>线索<small>Leads</small></h2>
+<p class="lead">电脑：统计卡 + 三列看板（新咨询 / 跟进中 / 已试听），已转正和已流失合成右侧一条窄列，可在看板和列表之间切换。点卡片打开详情抽屉，直接在里面记录回访。手机：按「今天要回访 / 之后」分组的列表，每行带拨打和记录回访按钮。</p>
+<div class="shots">
+<figure class="wide"><a href="leads/main-desk.png"><img src="leads/main-desk.png" alt="线索看板"></a><figcaption>电脑 · 线索看板</figcaption></figure>
+<figure><a href="leads/main-phone.png"><img src="leads/main-phone.png" alt="线索 手机"></a><figcaption>手机 · 线索列表</figcaption></figure>
+<figure class="wide"><a href="leads/detail-desk.png"><img src="leads/detail-desk.png" alt="线索详情"></a><figcaption>电脑 · 线索详情（记录回访）</figcaption></figure>
+<figure><a href="leads/detail-phone.png"><img src="leads/detail-phone.png" alt="线索详情 手机"></a><figcaption>手机 · 线索详情</figcaption></figure>
+<figure><a href="leads/followup-phone.png"><img src="leads/followup-phone.png" alt="记录回访 手机"></a><figcaption>手机 · 记录回访弹层</figcaption></figure>
+</div>
+<div class="box"><h3>主要变化</h3><ul><li>待办里的「记录回访」表单搬进线索详情，待办入口仍可直接打开它。</li><li>新增按来源筛选。</li></ul></div>
+</section>
+
+<section id="teachers">
+<h2>老师<small>Teachers</small></h2>
+<p class="lead">电脑：左边名单 + 右边所选老师详情。待点名单独一张红色卡，本月课酬放进深紫卡，课表按天分组。编辑抽屉里设置在职 / 离职，课酬标准单独一个页签。</p>
+<div class="shots">
+<figure class="wide"><a href="teachers/main-desk.png"><img src="teachers/main-desk.png" alt="老师 电脑"></a><figcaption>电脑 · 名单 + 详情</figcaption></figure>
+<figure><a href="teachers/main-phone.png"><img src="teachers/main-phone.png" alt="老师 手机"></a><figcaption>手机 · 名单</figcaption></figure>
+<figure><a href="teachers/detail-phone.png"><img src="teachers/detail-phone.png" alt="老师详情 手机"></a><figcaption>手机 · 老师详情</figcaption></figure>
+<figure class="wide"><a href="teachers/edit-desk.png"><img src="teachers/edit-desk.png" alt="编辑老师"></a><figcaption>电脑 · 编辑老师（在职 / 离职）</figcaption></figure>
+<figure class="wide"><a href="teachers/rates-desk.png"><img src="teachers/rates-desk.png" alt="课酬标准"></a><figcaption>电脑 · 课酬标准</figcaption></figure>
+</div>
+<div class="box"><h3>主要变化</h3><ul><li>本月课酬从统计卡挪进深紫卡，统计卡改为显示待点名。</li></ul></div>
+</section>
+
+<section id="settings">
+<h2>设置<small>Settings</small></h2>
+<p class="lead">电脑：左侧分区导航，分为总览、账号与权限、机构与品牌、课程与教室、教务规则、AI 设置、数据与备份、操作记录。总览页有统计卡、6 张分组卡和最近改动。手机：分组列表 → 整页二级页。</p>
+<div class="shots">
+<figure class="wide"><a href="settings/overview-desk.png"><img src="settings/overview-desk.png" alt="设置总览"></a><figcaption>电脑 · 设置总览</figcaption></figure>
+<figure><a href="settings/overview-phone.png"><img src="settings/overview-phone.png" alt="设置 手机"></a><figcaption>手机 · 分组列表</figcaption></figure>
+<figure class="wide"><a href="settings/accounts-desk.png"><img src="settings/accounts-desk.png" alt="账号与权限"></a><figcaption>电脑 · 账号与权限</figcaption></figure>
+<figure><a href="settings/accounts-phone.png"><img src="settings/accounts-phone.png" alt="账号与权限 手机"></a><figcaption>手机 · 账号与权限</figcaption></figure>
+<figure class="wide"><a href="settings/institution-desk.png"><img src="settings/institution-desk.png" alt="机构与品牌"></a><figcaption>电脑 · 机构与品牌</figcaption></figure>
+<figure class="wide"><a href="settings/courses-desk.png"><img src="settings/courses-desk.png" alt="课程与教室"></a><figcaption>电脑 · 课程与教室</figcaption></figure>
+</div>
+<div class="box"><h3>主要变化</h3><ul><li>教务规则、AI 设置、数据与备份、操作记录四个分区没有单独出稿，布局写在说明里；数据与备份沿用已上线的新页面。</li></ul></div>
+</section>
+
+</main>
+</body>
+</html>
