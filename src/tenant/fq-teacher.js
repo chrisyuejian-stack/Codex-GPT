@@ -182,19 +182,9 @@
     frame.querySelector(".fq-tc-head-slot").replaceChildren(isPhone() ? phoneHeader(key) : deskHeader(key));
     // 课后反馈页会给内容区加自己的类名，切页时还原。
     content.className = "personal-content fq-tc-body";
-    content.dataset.personalTab = key;
-    content.setAttribute("aria-busy", "true");
-    content.replaceChildren(UI.tableSkeleton());
     const g = ++run;
-    try {
-      await v.fn(content, g);
-      if (g === run) globalThis.scrollTo?.(0, 0);
-    } catch (e) {
-      if (g === run) content.replaceChildren(UI.empty({ text: e.message, action: { label: "重试", onSelect: () => go(key) } }));
-      notice(e.message);
-    } finally {
-      if (g === run) content.setAttribute("aria-busy", "false");
-    }
+    // 先显示上次的画面、后台更新（app.js personalSwap）；页面区域元素随时通过回调更新。
+    await personalSwap(content, "teacher:" + key, (c) => v.fn(c, g), () => g === run, () => go(key), (el) => (content = el));
   }
   phone?.addEventListener?.("change", () => {
     if (isTeacher() && frame && root.contains(frame)) render();
