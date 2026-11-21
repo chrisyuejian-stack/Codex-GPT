@@ -167,8 +167,9 @@ const toolListSql = {
     "SELECT * FROM followup_tasks WHERE tenant_id=? AND deleted_at IS NULL AND (? IS NULL OR student_id=?) ORDER BY created_at DESC,id LIMIT 200 OFFSET ?",
   student_routines:
     "SELECT * FROM student_routines WHERE tenant_id=? AND deleted_at IS NULL AND (? IS NULL OR student_id=?) ORDER BY created_at DESC,id LIMIT 200 OFFSET ?",
+  // 0033：列表带最近一次回访（时间与内容），线索卡片显示摘要，不必逐条再取。
   leads:
-    "SELECT * FROM leads WHERE tenant_id=? AND deleted_at IS NULL AND (? IS NULL OR id=?) ORDER BY created_at DESC,id LIMIT 200 OFFSET ?",
+    "SELECT l.*,(SELECT f.at FROM lead_followups f WHERE f.tenant_id=l.tenant_id AND f.lead_id=l.id ORDER BY f.at DESC,f.created_at DESC,f.id LIMIT 1) last_followup_at,(SELECT f.content FROM lead_followups f WHERE f.tenant_id=l.tenant_id AND f.lead_id=l.id ORDER BY f.at DESC,f.created_at DESC,f.id LIMIT 1) last_followup_content FROM leads l WHERE l.tenant_id=? AND l.deleted_at IS NULL AND (? IS NULL OR l.id=?) ORDER BY l.created_at DESC,l.id LIMIT 200 OFFSET ?",
 
 };
 
@@ -1186,6 +1187,18 @@ const homeActionCountsSql = `WITH args AS(SELECT ? tenant_id,? today,? at)
 const reportDebtSql = `SELECT ROUND(COALESCE(SUM(remaining_units),0),2) debt_units,
   COUNT(DISTINCT student_id) debt_student_count FROM credit_debts INDEXED BY p1_credit_debt_active
   WHERE tenant_id=? AND deleted_at IS NULL AND remaining_units>0`;
+// 0033：线索回访记录，只追加；与线索更新同一批次提交（commitBusiness），guard/update 仅为接口完整。
+businessSql.lead_followups = {
+  columns: ["lead_id", "actor_id", "at", "channel", "content", "next_followup", "created_at"],
+  insert:
+    "INSERT INTO lead_followups(tenant_id,id,lead_id,actor_id,at,channel,content,next_followup,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+  update:
+    "UPDATE lead_followups SET lead_id=?,actor_id=?,at=?,channel=?,content=?,next_followup=?,created_at=? WHERE tenant_id=? AND id=?",
+  get: "SELECT * FROM lead_followups WHERE tenant_id=? AND id=?",
+  list: "SELECT * FROM lead_followups WHERE tenant_id=? ORDER BY at DESC,created_at DESC,id LIMIT 200 OFFSET ?",
+  guard:
+    "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?,?,?,COALESCE((SELECT 1 FROM lead_followups WHERE tenant_id=? AND id=?),-1)",
+};
 // Growth feedback joins the original atomic review transaction.
 Object.assign(businessSql,{
   "growth_repertoire": {
@@ -3425,6 +3438,19 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
         return row ? [row] : [];
       }
       return [];
+    },
+    // 线索回访记录：最新在前，带记录人姓名（账号被停用仍显示原名）。
+    async leadFollowups(leadId) {
+      scoped();
+      return all(
+        "SELECT f.id,f.lead_id,f.actor_id,f.at,f.channel,f.content,f.next_followup,f.created_at,COALESCE(u.name,'') actor_name FROM lead_followups f LEFT JOIN users u ON u.tenant_id=f.tenant_id AND u.id=f.actor_id WHERE f.tenant_id=? AND f.lead_id=? ORDER BY f.at DESC,f.created_at DESC,f.id LIMIT 500",
+        tenantId,
+        leadId,
+      );
+    },
+    async leadFollowup(id) {
+      scoped();
+      return first("SELECT * FROM lead_followups WHERE tenant_id=? AND id=?", tenantId, id);
     },
     async businessGet(resource, id) {
       scoped();

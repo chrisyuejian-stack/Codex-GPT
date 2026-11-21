@@ -104,7 +104,7 @@ test("全量备份：密码派生AES-GCM、随机盐/IV、完整表/哈希/设�
       Object.keys(fullBackupTables).sort(),
     );
     assert.ok(!("sessions" in payload.tables));
-    assert.equal(payload.migration_version, 32);
+    assert.equal(payload.migration_version, 33);
     assert.equal(file.version, 1);
     for (const [name, rows] of Object.entries(payload.tables))
       assert.equal(payload.counts[name], rows.length);
@@ -662,12 +662,12 @@ test("历史停用个人账号及已归档档案可完整往返，仍拒绝有�
     );
   }));
 
-test("恢复预览逐表对比当前行数和差值，文件内行数不匹配与0031旧迁移版本拒绝", () =>
+test("恢复预览逐表对比当前行数和差值，文件内行数不匹配与0032旧迁移版本拒绝", () =>
   school(async (s) => {
     const file = await exportFile(s);
     ok(await request(s, "data/students", "POST", { name: "预览前新增" }));
     const result = ok(await preview(s, file), 201);
-    assert.equal(result.migration_version, 32);
+    assert.equal(result.migration_version, 33);
     assert.equal(result.current_counts.students, 3);
     assert.deepEqual(result.comparison.students, {
       backup: 2,
@@ -678,11 +678,11 @@ test("恢复预览逐表对比当前行数和差值，文件内行数不匹配�
     payload.counts.students = 999;
     ok(await preview(s, await passwordSeal(payload, PASSWORD)), 422);
     payload = await passwordOpen(file, PASSWORD);
-    payload.schema_version = 31;
-    payload.migration_version = 31;
+    payload.schema_version = 32;
+    payload.migration_version = 32;
     const denied = await preview(s, await passwordSeal(payload, PASSWORD));
     ok(denied, 422);
-    assert.match(denied.body.message, /0032/);
+    assert.match(denied.body.message, /0033/);
   }));
 
 test("不补课决定进入全量备份并整体恢复，恢复不会残留更新后的决定", () =>

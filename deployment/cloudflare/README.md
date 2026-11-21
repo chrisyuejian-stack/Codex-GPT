@@ -57,6 +57,8 @@ npx wrangler deploy --config deployment/cloudflare/backup-wrangler.toml
 | 2026-11-20 11:02 | d82b8b0 | 合入 main（PR #7：备份行数/大小、单条待办操作）；线上执行迁移 0032；同时重新部署备份 Worker。执行 0032 前的 D1 书签：`0000002a-00000000-00005129-b75c43ccc381025bb320986e102e9f3e` |
 
 D1 没有 `d1_migrations` 表，迁移是逐个文件手动执行的；新增迁移后在上表登记。
+
+**待执行**：`0033_lead_followups.sql`（第三期线索回访记录表，分支 `claude/` 第三期提交带入）。上线时由主会话在生产 D1 执行，执行前记下 D1 书签；全量备份迁移版本随之升到 33，需同时重新部署 Pages 与备份 Worker，执行后在上表登记。
 | 2026-11-20 11:46 | e9dd0bc | 手机端提速（字体/登录图延迟加载、老师学员首屏预取） |
 | 2026-11-20 11:50 | e9dd0bc | 自定义域名切到 `edu.fantasmearts.com`，APP_HOST 同步修改并重新部署 |
 | 2026-11-20 13:47 | 新提交 | 新增自定义域 `origin.fantasmearts.com`（DNSPod CNAME → pages.dev，供 EdgeOne 回源，始终不改）；设置 `ORIGIN_HOST=origin.fantasmearts.com`；Smart Placement 已开启 |

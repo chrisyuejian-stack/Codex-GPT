@@ -1908,3 +1908,6 @@ backupTables.ai_settings.columns.push('configured');
 backupTables.todo_snoozes={tenant:true,pk:['tenant_id','user_id','item_key'],columns:['tenant_id','user_id','item_key','source_version','until_at','version','created_at','updated_at']};
 
 backupTables.makeup_decisions={tenant:true,pk:['tenant_id','id'],columns:['tenant_id','id','skipped','reason','version','created_at','created_by','updated_at','updated_by']};
+
+// 0033：线索回访记录（只追加，无 version/deleted_at）。
+backupTables.lead_followups={tenant:true,pk:['tenant_id','id'],columns:['tenant_id','id','lead_id','actor_id','at','channel','content','next_followup','created_at']};
