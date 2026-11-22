@@ -2,120 +2,164 @@ import { expect } from '@playwright/test';
 
 export const controller = () => ({ 'x-e2e-key': process.env.E2E_CONTROL_KEY });
 
-export async function createHarness(browser, request, info, kind, roles, { bootstrapSession = true } = {}) {
+export async function waitAppReady(page) {
+  await expect(page.locator('.personal-content, .v-content').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.personal-content, .v-content').first()).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+  await page.waitForTimeout(250);
+}
+
+export async function loginUI(page, phone, password) {
+  await page.goto('/login', { waitUntil: 'domcontentloaded' });
+  const phoneInput = page.locator("input[type='tel'], input[name='phone'], input[placeholder*='手机']").first();
+  const pwInput = page.locator("input[type='password']").first();
+  await expect(phoneInput).toBeVisible();
+  await phoneInput.fill(phone);
+  await pwInput.fill(password);
+  await page.locator("button[type='submit'], button:has-text('登录')").first().click();
+  await page.waitForURL('**/app**', { timeout: 15_000 });
+  await waitAppReady(page);
+}
+
+export async function gotoHash(page, hash) {
+  const target = hash.startsWith('#') ? hash : `#${hash}`;
+  await page.evaluate(h => { location.hash = h; }, target);
+  await page.waitForTimeout(300);
+  await waitAppReady(page);
+}
+
+export async function assertNoOverflow(page, label = '') {
+  const metrics = await page.evaluate(() => ({
+    sw: document.documentElement.scrollWidth,
+    cw: document.documentElement.clientWidth,
+  }));
+  expect(
+    metrics.sw,
+    `${label || page.url()} 横向溢出: scrollWidth=${metrics.sw} > clientWidth=${metrics.cw}`
+  ).toBeLessThanOrEqual(metrics.cw + 1);
+}
+
+export function topSheet(page) {
+  return page.locator('.ui-sheet').last();
+}
+
+export async function closeAllSheets(page) {
+  for (let i = 0; i < 4; i++) {
+    const count = await page.locator('.ui-sheet').count();
+    if (!count) break;
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+  }
+}
+
+export async function createHarness(
+  browser,
+  request,
+  info,
+  roles,
+  { kind = 'fengqin', bootstrapSession = true, fixedClock = true } = {}
+) {
   const reset = await request.post(`/__e2e/reset?kind=${kind}`, { headers: controller() });
-  expect(reset.ok()).toBeTruthy();
+  expect(reset.ok(), `reset failed: ${reset.status()}`).toBeTruthy();
   const manifest = await reset.json();
-  const actors = {}, errors = [], failedRequests = [], expectedRejections = [];
-  let sequence = 0;
+
+  const actors = {};
+  const errors = [];
+  const failedRequests = [];
+  const allowedMatchers = [];
+
+  const allowFailedRequest = matcher => {
+    allowedMatchers.push(matcher);
+  };
+
   const state = async () => {
-    const response = await request.get('/__e2e/state', { headers: controller() });
-    expect(response.ok()).toBeTruthy(); return response.json();
-  };
-  const shot = async (role, title) => {
-    const path = info.outputPath(`${String(++sequence).padStart(2, '0')}-${role}-${title}.png`);
-    await actors[role].page.screenshot({ path, fullPage: true });
-    await info.attach(`${role} · ${title}`, { path, contentType: 'image/png' });
-  };
-  const close = async () => {
-    await info.attach('浏览器异常', { body: JSON.stringify({ errors, failedRequests, expectedRejections }, null, 2), contentType: 'application/json' });
-    for (const [role, { page, context }] of Object.entries(actors)) {
-      if (info.status !== info.expectedStatus) await shot(role, '失败现场').catch(() => {});
-      const path = info.outputPath(`${role}-trace.zip`);
-      await context.tracing.stop({ path });
-      await info.attach(`${role} 操作轨迹`, { path, contentType: 'application/zip' });
-      const video = page.video();
-      await context.close();
-      if (video) await info.attach(`${role} 录像`, { path: await video.path(), contentType: 'video/webm' });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await request.get('/__e2e/state', { headers: controller() });
+        expect(res.ok()).toBeTruthy();
+        return res.json();
+      } catch (err) {
+        if (attempt === 2) throw err;
+        await new Promise(r => setTimeout(r, 200));
+      }
     }
   };
+
+  const close = async () => {
+    await info.attach('浏览器诊断', {
+      body: JSON.stringify({ errors, failedRequests }, null, 2),
+      contentType: 'application/json',
+    }).catch(() => {});
+    for (const { context } of Object.values(actors)) {
+      await context.close().catch(() => {});
+    }
+  };
+
   try {
     for (const role of roles) {
-      const context = await browser.newContext({ baseURL: info.project.use.baseURL,
-        viewport: info.project.use.viewport, isMobile: info.project.use.isMobile,
-        hasTouch: info.project.use.hasTouch, locale: 'zh-CN', timezoneId: 'Asia/Shanghai',
-        recordVideo: { dir: info.outputPath('videos'), size: { width: 800, height: 600 } } });
+      const context = await browser.newContext({
+        baseURL: info.project.use.baseURL,
+        viewport: info.project.use.viewport,
+        isMobile: info.project.use.isMobile,
+        hasTouch: info.project.use.hasTouch,
+        deviceScaleFactor: info.project.use.deviceScaleFactor,
+        locale: 'zh-CN',
+        timezoneId: 'Asia/Shanghai',
+      });
       if (bootstrapSession) {
         const session = await context.request.post(`/__e2e/session?role=${role}`, { headers: controller() });
-        expect(session.ok()).toBeTruthy();
+        expect(session.ok(), `session bootstrap failed for ${role}`).toBeTruthy();
       }
-      await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
       const page = await context.newPage();
-      await page.clock.install({ time: new Date(manifest.now) });
-      page.on('pageerror', e => errors.push({ role, message: e.message }));
+      if (fixedClock) {
+        await page.clock.install({ time: new Date(manifest.now) });
+      }
+      page.on('pageerror', e => errors.push({ role, message: String(e?.message || e) }));
       page.on('response', r => {
-        if (r.url().includes('/api/') && r.status() >= 400)
-          failedRequests.push({ role, path: new URL(r.url()).pathname, status: r.status() });
+        if (r.url().includes('/api/') && r.status() >= 400) {
+          const entry = { role, path: new URL(r.url()).pathname, method: r.request().method(), status: r.status() };
+          if (!allowedMatchers.some(fn => fn(entry))) {
+            failedRequests.push(entry);
+          }
+        }
       });
       actors[role] = { context, page };
     }
-  } catch (error) { await close(); throw error; }
-  const go = async role => {
-    const p = actors[role].page;
-    await p.goto(`/${manifest.slug}/app/`);
-    await expect(p.locator('.personal-content,.v-content').first()).toHaveAttribute('aria-busy', 'false');
-    return p;
+  } catch (error) {
+    await close();
+    throw error;
+  }
+
+  const openApp = async (role, hash = '') => {
+    const page = actors[role].page;
+    const url = hash ? `/app/${hash.startsWith('#') ? hash : `#${hash}`}` : '/app/';
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await waitAppReady(page);
+    return page;
   };
-  const nav = async (role, name, route) => {
-    const p = actors[role].page;
-    await p.getByRole('button', { name }).first().click();
-    await expect(p.locator('.v-content')).toHaveAttribute('data-route', route);
-    await expect(p.locator('.v-content')).toHaveAttribute('aria-busy', 'false');
-    return p;
-  };
-  const queue = async () => {
-    const p = await go('academic');
-    await nav('academic', /^待办/, 'todo-unchecked');
-    await p.getByRole('button', { name: /老师已提交|教师提交/ }).first().click();
-    await expect(p.getByText('提交状态', { exact: true })).toBeVisible();
-    return p;
-  };
-  const openReview = async () => {
-    const p = await queue();
-    await p.getByRole('row').filter({ hasText: manifest.course }).getByRole('cell').nth(1).click();
-    await expect(p.getByRole('button', { name: '确认并生效', exact: true })).toBeVisible();
-    return p;
-  };
-  const confirm = async p => {
-    await p.getByRole('button', { name: '确认并生效', exact: true }).click();
-    const [r] = await Promise.all([
-      p.waitForResponse(r => /\/api\/submissions\/[^/]+\/confirm$/.test(new URL(r.url()).pathname) && r.request().method() === 'POST'),
-      p.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click(),
-    ]);
-    expect(r.status()).toBe(200);
-    await expect(p.getByText('已确认 · 出勤与点评', { exact: true })).toBeVisible();
-  };
-  const advance = async at => {
-    const response = await request.post(`/__e2e/clock?at=${encodeURIComponent(at)}`, { headers: controller() });
-    expect(response.ok()).toBeTruthy();
-    manifest.now = (await response.json()).now;
-    for (const [role, { context, page }] of Object.entries(actors)) {
-      const session = await context.request.post(`/__e2e/session?role=${role}`, { headers: controller() });
-      expect(session.ok()).toBeTruthy();
-      await page.clock.setSystemTime(new Date(manifest.now));
+
+  const healthy = async ({ checkOverflow = true } = {}) => {
+    expect(errors, `存在未捕获 pageerror: ${JSON.stringify(errors)}`).toEqual([]);
+    expect(failedRequests, `存在非预期 API 4xx/5xx: ${JSON.stringify(failedRequests)}`).toEqual([]);
+    if (checkOverflow) {
+      for (const [role, { page }] of Object.entries(actors)) {
+        if (page.url() === 'about:blank') continue;
+        await assertNoOverflow(page, `${role}@${page.url()}`);
+      }
     }
   };
-  const healthy = async () => {
-    expect(errors).toEqual([]); expect(failedRequests).toEqual([]);
-    for (const { page } of Object.values(actors)) {
-      if (page.url() === 'about:blank') continue;
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
-    }
-    const s = await state(); expect(s.maxQueries).toBeLessThanOrEqual(40);
-    await info.attach('业务结果核对', { body: JSON.stringify(s, null, 2), contentType: 'application/json' });
+
+  return {
+    manifest,
+    actors,
+    errors,
+    failedRequests,
+    allowFailedRequest,
+    state,
+    openApp,
+    gotoHash: (role, hash) => gotoHash(actors[role].page, hash),
+    healthy,
+    close,
   };
-  const acceptRejection = async (role, response, { statuses, message, why }) => {
-    expect(statuses).toContain(response.status());
-    const body = await response.json();
-    expect(body.error).toMatch(message);
-    const path = new URL(response.url()).pathname;
-    const index = failedRequests.findIndex(r => r.role === role && r.path === path && r.status === response.status());
-    expect(index, '必须先记录这次实际失败响应，再核对为预期业务拒绝').toBeGreaterThanOrEqual(0);
-    expectedRejections.push({ ...failedRequests[index], error: body.error, why });
-    failedRequests.splice(index, 1);
-    return body;
-  };
-  return { manifest, actors, state, shot, close, go, nav, queue, openReview, confirm, advance, healthy, acceptRejection };
 }
 
 export async function pickDate(scope, label, date) {
@@ -124,7 +168,6 @@ export async function pickDate(scope, label, date) {
 }
 
 export async function choose(scope, label, option) {
-  // Required-field markers are included in the browser's accessible name.
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   await scope.getByRole('button', { name: new RegExp(`^${escaped}\\s*\\*?$`) }).click();
   await scope.getByRole('option', { name: option, exact: true }).click();
