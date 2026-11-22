@@ -147,6 +147,13 @@
     onExport,
     onError,
     labels,
+    // 枫琴课表（fq-schedule.js）挂钩：embedded 时不画自己的工具条与图例，只留网格/列表；
+    // views 改视图清单；decorate/dayHead 给卡片和日期列头加样式；onRender 每次重画后回报数据。
+    embedded = false,
+    views: viewList,
+    decorate,
+    dayHead,
+    onRender,
   }) {
     UIHost.__calendarDestroy?.();
     const n = UI.node,
@@ -203,7 +210,7 @@
       more.push({ label: "导出课表图", onSelect: onExport });
     // 第十阶段重构：本页动作放到页头（从固定排课生成、导出课表图、排课）；没有页头时退回原位置。
     const pageHead = typeof vHead !== "undefined" ? vHead : null;
-    if (pageHead)
+    if (pageHead && !embedded)
       pageHead.actions(
         ...more.map((m) => b(m.label, m.onSelect)),
         enabled("lessons", "create")
@@ -228,12 +235,13 @@
       class: "calendar-view-tabs",
       "aria-label": "课表视图",
     });
-    for (const [key, label] of [
+    const viewKeys = viewList || [
       ["calendar", "按时间"],
       ["teacher", "按教师"],
       ["room", "按教室"],
       ["list", "列表"],
-    ])
+    ];
+    for (const [key, label] of viewKeys)
       tabs.append(
         b(label, () => {
           if (drag) cancel();
@@ -310,7 +318,7 @@
       );
     // 电脑上：周切换、视图、筛选直接放进顶栏下那一行（和“导出课表图 / 排课”同一行），
     // 本周统计放到标题旁边，页面里不再多一条空白。
-    const inBar = pageHead && !mobile.matches;
+    const inBar = pageHead && !mobile.matches && !embedded;
     if (inBar) {
       toolbar.classList.add("is-in-bar");
       pageHead.bar(toolbar);
@@ -318,6 +326,10 @@
       toolbar.insertBefore(range, nav.nextSibling);
       if (sub) sub.replaceChildren(stats);
     }
+    if (embedded) {
+      instructions.classList.add("ui-sr-only");
+      host.append(viewport, instructions, status);
+    } else
     host.append(
       heading,
       ...(inBar ? [] : [toolbar]),
@@ -529,6 +541,7 @@
       }
       if (knownConflicts(row, row.start_at, rows, details, blocks).length)
         button.classList.add("has-conflict");
+      decorate?.(button, row);
       if (canMove && row.status === "planned" && !row.source_course_id) {
         button.setAttribute(
           "aria-description",
@@ -676,7 +689,7 @@
         .forEach((x, i) =>
           x.setAttribute(
             "aria-pressed",
-            String(["calendar", "teacher", "room", "list"][i] === view),
+            String(viewKeys[i]?.[0] === view),
           ),
         );
       filterTags.replaceChildren();
@@ -758,6 +771,7 @@
       if (view !== "calendar") {
         grid = null;
         renderAlternative();
+        onRender?.(snapshot());
         return;
       }
       const rangeBounds = visibleRange(rows);
@@ -797,6 +811,7 @@
               " 节",
           ),
         );
+        dayHead?.(h, d, shown().filter((x) => x.start_at.slice(0, 10) === d));
         grid.append(h);
       }
       for (let min = rangeStart; min < rangeEnd; min += 60)
@@ -972,6 +987,7 @@
       );
       paintTime();
       drawTarget();
+      onRender?.(snapshot());
       if (drag?.keyboard) {
         const active = host.querySelector(
           '[data-lesson="' + drag.row.id + '"]',
@@ -1504,7 +1520,31 @@
       () => tp.destroy(),
       () => cp.destroy(),
     );
-    return { host, destroy: stop };
+    function snapshot() {
+      return { rows, shown: shown(), details, blocks, weekDate, date, view, canMove };
+    }
+    return {
+      host,
+      destroy: stop,
+      // 给 fq-schedule.js 用：换日期、换视图、改筛选、改时间（原 moveDialog）都走本引擎原有逻辑。
+      go: (value) => navigateTo(value),
+      setView(key) {
+        if (drag) cancel();
+        view = key;
+        onNavigate(weekDate, view);
+        render();
+      },
+      setFilter({ teacher, room, category, text } = {}) {
+        if (teacher !== undefined) filterTeacher = teacher;
+        if (room !== undefined) filterRoom = room;
+        if (category !== undefined) filterCategory = category;
+        if (text !== undefined) filterText = text;
+        render();
+      },
+      move: (row) => moveDialog(row),
+      reload: () => load(),
+      state: snapshot,
+    };
   }
   globalThis.ChannelCalendar = {
     mount,
