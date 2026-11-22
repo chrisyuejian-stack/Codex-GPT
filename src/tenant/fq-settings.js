@@ -70,6 +70,12 @@
     location.hash = hash;
   };
   const safe = (p) => p.catch(() => null);
+  // 页头副标题：其他页面迟到的异步刷新可能覆盖它，画完后再设一次。
+  let lastSub = "";
+  const setSub = (text) => {
+    lastSub = text || "";
+    vHead?.sub(lastSub);
+  };
 
   // ---------- 分区 ----------
   // avail 在导航钩子里按原有页签（即原有权限）算出：有哪个页签，才有对应分区。
@@ -134,7 +140,7 @@
   }
   function panel(head, sub, acts, cls = "") {
     const p = n("section", null, { class: "fq-se-panel" + (cls ? " " + cls : "") }),
-      ph = n("header", null, { class: "fq-se-ph" }),
+      ph = n("div", null, { class: "fq-se-ph" }),
       left = n("div");
     const h = n("h3");
     h.append(...[].concat(head));
@@ -165,10 +171,15 @@
   async function page(c, key, sub) {
     c.classList.add("fq-se-host");
     const s = sec(key);
+    lastSub = "";
     vHead?.actions();
     vHead?.bar();
     if (isPhone()) {
-      if (key === "overview") return phoneHome(c);
+      if (key === "overview") {
+        await phoneHome(c);
+        if (lastSub) vHead?.sub(lastSub);
+        return;
+      }
       const head = document.querySelector(".v-head h1");
       if (head) {
         head.textContent = s.label;
@@ -179,13 +190,16 @@
       const main = n("div", null, { class: "fq-se-main" });
       m.append(back, main);
       c.replaceChildren(m);
-      return RENDER[key](main, sub);
+      await RENDER[key](main, sub);
+      if (lastSub) vHead?.sub(lastSub);
+      return;
     }
     const wrap = n("div", null, { class: "fq-se" }),
       main = n("div", null, { class: "fq-se-main" });
     wrap.append(navigation(key), main);
     c.replaceChildren(wrap);
     await RENDER[key](main, sub);
+    if (lastSub) vHead?.sub(lastSub);
     // 统计（数字）是总览取回来的；导航先画，数字到了再补上。
     if (key === "overview") wrap.firstChild.replaceWith(navigation(key));
   }
@@ -303,7 +317,7 @@
 
   async function overview(main) {
     const subText = shown().length - 1 + " 个分区" + (sup() ? " · 你是机构主管，全部可见" : " · " + roleName() + "，只显示有权限的分区");
-    vHead?.sub(subText);
+    setSub(subText);
     await loadStats();
     // 统计卡
     const row = n("div", null, { class: "fq-se-stats" });
@@ -383,7 +397,7 @@
 
   // 手机：分组列表
   async function phoneHome(c) {
-    vHead?.sub(shown().length - 1 + " 个分区 · " + roleName());
+    setSub(shown().length - 1 + " 个分区 · " + roleName());
     const m = n("div", null, { class: "fq-se-m" });
     c.replaceChildren(m);
     await loadStats();
@@ -456,6 +470,8 @@
     return inner ? [...inner.childNodes] : [];
   }
   const hasText = (node, text) => (node.textContent || "").includes(text);
+  // 原“教师与学员端”页里的“课时不够时最多可欠”下拉：搬到教务规则。
+  const isDebt = (x) => hasText(x, "最多可欠");
 
   // ---------- 账号与权限 ----------
   const PERSONAL = [
@@ -532,7 +548,7 @@
     const p = panel("教师端与学员端能看到什么", "关掉的项目，服务器不再向教师或学员账号返回这些数据，不只是隐藏。只有主管可以改。", null, "fq-se-personal");
     p.id = "fq-se-personal";
     const nodes = await c3Part("personal");
-    const switches = nodes.filter((x) => x.nodeType === 1 && x.querySelector?.("button") && !x.querySelector("select"));
+    const switches = nodes.filter((x) => x.nodeType === 1 && x.tagName !== "P" && !isDebt(x));
     const list = n("div", null, { class: "fq-se-sws" });
     const used = new Set();
     for (const [group, items] of PERSONAL) {
@@ -542,8 +558,8 @@
         if (!sw) continue;
         used.add(sw);
         const row = n("div", null, { class: "fq-se-swr" });
-        if (hint && !hasText(sw, hint.slice(0, 6))) sw.append(n("small", hint, { class: "fq-se-hint" }));
         row.append(sw);
+        if (hint && !hasText(sw, hint.slice(0, 6))) row.append(n("small", hint, { class: "fq-se-hint" }));
         list.append(row);
       }
     }
@@ -593,7 +609,7 @@
   }
   async function institutionSection(main) {
     const s = sec("institution");
-    vHead?.sub("机构与品牌 · 登录页、课表图、续费提醒图共用");
+    setSub("机构与品牌 · 登录页、课表图、续费提醒图共用");
     main.append(title(s));
     const two = n("div", null, { class: "fq-se-two" });
     const info = await safe(api("settings/institution"));
@@ -700,6 +716,9 @@
         }
         throw e;
       }
+      try {
+        localStorage.removeItem("fq_brand_v1");
+      } catch {}
       notice("机构信息已保存", "success");
       await d.close();
       globalThis.dispatchEvent(new HashChangeEvent("hashchange"));
@@ -716,7 +735,7 @@
   const FORMAT = { individual: "一对一", group: "小班课", class: "集训班" };
   async function coursesSection(main) {
     const s = sec("courses");
-    vHead?.sub("课程与教室 · 排课、课表颜色、扣课时都按这里");
+    setSub("课程与教室 · 排课、课表颜色、扣课时都按这里");
     const [cats, types, rooms] = await Promise.all([R().take("data/course_categories"), R().take("data/course_types"), R().take("data/locations")]);
     stats.courses = { cats, types, rooms };
     const rows = { course_categories: cats, course_types: types, locations: rooms };
@@ -740,6 +759,7 @@
       if (enabled("settings", "delete"))
         w.append(
           UI.actionMenu({
+            label: "⋯",
             items: [
               {
                 label: "删除",
@@ -834,7 +854,7 @@
   // ---------- 教务规则 ----------
   async function rulesSection(main) {
     const s = sec("rules");
-    vHead?.sub("教务规则 · 只有主管可以修改");
+    setSub("教务规则 · 只有主管可以修改");
     main.append(title({ ...s, desc: "缺勤是否扣课时、计课酬；欠课时上限；续费提醒；课表默认视图。修改只影响还没锁定的月份。" }));
     // 缺勤规则（原表单与“保存规则”）
     const ab = panel("缺勤规则", "学员请假、旷课，教师请假，机构取消时，是否扣学员课时、是否给老师计课酬。");
@@ -844,7 +864,7 @@
     main.append(ab);
     // 欠课时上限（原“教师与学员端”页里的下拉）+ 课表默认视图
     const personal = await c3Part("personal");
-    const debt = personal.filter((x) => x.nodeType === 1 && (x.querySelector?.("select") || x.tagName === "P"));
+    const debt = personal.filter((x) => x.nodeType === 1 && (isDebt(x) || (x.tagName === "P" && hasText(x, "欠的课时"))));
     const view = await c3Part("view");
     const other = panel("欠课时与课表", "课时不够时最多可以欠几课时；打开课表时默认用哪种视图。");
     const ob = n("div", null, { class: "fq-se-pb fq-se-legacy fq-se-rows" });
@@ -870,7 +890,7 @@
   // ---------- AI 设置 ----------
   async function aiSection(main) {
     const s = sec("ai");
-    vHead?.sub("AI 设置 · 每天北京时间 0 点重新计数");
+    setSub("AI 设置 · 每天北京时间 0 点重新计数");
     main.append(title(s));
     if (sup()) {
       const cfg = await safe(api("settings/ai"));
@@ -892,13 +912,13 @@
     const s = sec("data");
     const tabs = DATA_TABS.filter(([k]) => avail[k]);
     const cur = tabs.find(([k]) => k === sub) || tabs[0];
-    vHead?.sub("数据与备份" + (isPhone() ? " · 手机上只读，导入和恢复请在电脑上操作" : ""));
+    setSub("数据与备份" + (isPhone() ? " · 手机上只读，导入和恢复请在电脑上操作" : ""));
     main.append(title(s, chipsRow(tabs.map(([k, hash, label]) => [label, null, () => go(hash), k]), cur[0])));
     const box = n("div", null, { class: "fq-se-legacy fq-se-data is-" + cur[0] });
     main.append(box);
     if (cur[0] === "import") {
       if (isPhone()) {
-        const p = panel("Excel 导入", "导入会批量写入学员、教师、剩余课时，请在电脑上操作（DECISIONS 16）。");
+        const p = panel("Excel 导入", "导入会批量写入学员、教师、剩余课时，请在电脑上操作。");
         p.append(n("p", "手机上只能查看。请在电脑上打开「设置 › 数据与备份 › 导入」。", { class: "fq-se-pb fq-se-empty" }));
         return box.append(p);
       }
@@ -986,8 +1006,9 @@
       old["inst-ai"].fn = () => location.replace("#settings-ai");
     }
     if (avail.data) {
-      const first = DATA_TABS.find(([k]) => avail[k]);
-      const t = register("settings-data", "数据与备份", "home", () => location.replace("#" + first[1]));
+      // 手机端只读：默认打开导出或备份，不先进导入。
+      const first = () => (isPhone() && DATA_TABS.find(([k]) => k !== "import" && avail[k])) || DATA_TABS.find(([k]) => avail[k]);
+      const t = register("settings-data", "数据与备份", "home", () => location.replace("#" + first()[1]));
       if (t) tabs.push(t);
     }
     use("settings-import", "data", "import");
