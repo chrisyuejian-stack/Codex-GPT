@@ -2019,6 +2019,17 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
       ops.push(sql(`INSERT INTO tenant_brand(tenant_id,id,qr_image_id) VALUES(?,'brand',?) ON CONFLICT(tenant_id,id) DO UPDATE SET qr_image_id=excluded.qr_image_id`,tenantId,data.qr_image_id));
       ops.push(settingAudit(tenantId,actor,'brand','brand',old,data));await db.batch(ops);
     },
+    // 第三期 · 设置：主管修改机构名称、Logo、联系说明（tenant_branding），版本守卫 + 审计。审计不写 Logo 原图，只记是否更换。
+    async settingsInstitutionWrite(data,old,actor) {
+      scoped();const at=now();
+      const brief=(x,logo)=>({name:x.display_name,contact_text:x.contact_text||null,logo:logo});
+      await db.batch([
+        sql(`INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES(?,?,?,COALESCE((SELECT version FROM tenant_branding WHERE tenant_id=? AND id='brand'),-1))`,tenantId,randomId('guard'),old.version,tenantId),
+        sql(`UPDATE tenant_branding SET display_name=?,logo=?,contact_text=?,version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id='brand'`,data.display_name,data.logo,data.contact_text,at,actor.id,tenantId),
+        sql('INSERT INTO audit_log(tenant_id,id,at,actor_id,actor_label,module,action,entity_id,summary,before_json,after_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)',tenantId,randomId('aud'),at,actor.id,actor.name||actor.username||'系统维护','settings','update','institution','修改机构信息',
+          JSON.stringify({version:old.version,...brief(old,old.logo?'已设置':null)}),JSON.stringify(brief(data,data.logo?(data.logo===old.logo?'未更换':'已更换'):null))),
+      ]);
+    },
     async galleryUnmeasured(limit=20){scoped();return all('SELECT id,r2_key FROM gallery_images WHERE tenant_id=? AND bytes=0 ORDER BY id LIMIT ?',tenantId,limit);},
     async gallerySetSizes(rows){scoped();await db.batch(rows.map(x=>sql('UPDATE gallery_images SET bytes=? WHERE tenant_id=? AND id=? AND bytes=0',x.bytes,tenantId,x.id)));},
     async galleryStorage(){scoped();const row=await first(`SELECT t.gallery_storage_limit AS "limit",COALESCE(SUM(g.bytes),0) used,COALESCE(SUM(CASE WHEN g.bytes=0 THEN 1 ELSE 0 END),0) pending,COALESCE(SUM(CASE WHEN g.id IS NOT NULL AND g.deleted_at IS NULL AND g.bytes IS NULL THEN 1 ELSE 0 END),0) missing,t.version FROM tenants t LEFT JOIN gallery_images g ON g.tenant_id=t.id WHERE t.id=? GROUP BY t.id`,tenantId);if(!row)fail(404,'不存在','not_found');return {...row,complete:row.pending===0};},

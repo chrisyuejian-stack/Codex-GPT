@@ -175,6 +175,78 @@ function apiPrefetchSplit(split) {
   }
   setTimeout(() => apiWarm.clear(), WARM_MS);
 }
+// ---------- 老师端、学员端：切页先显示上次的画面，后台更新 ----------
+// 与员工端一致：30 分钟内、期间没有写操作时，先把上次画好的页面放回去，同时在看不见的位置渲染最新内容，
+// 好了再整块替换（保持滚动位置）；更新失败时保留旧画面并提示时间。没有可用缓存时照旧显示骨架。
+// host 是当前的页面区域元素；每次在页面上换元素时都通过 setHost 告诉调用方（切页很快时也不会拿到旧元素）。被点开详情（例如点名）
+// 改写过的旧画面不再当作缓存使用。
+const personalViews = new Map(),
+  PERSONAL_VIEW_MS = 30 * 60 * 1000;
+async function personalSwap(host, key, render, isCurrent, retry, setHost) {
+  const hit = personalViews.get(key);
+  const usable = hit && Date.now() - hit.at < PERSONAL_VIEW_MS && hit.writes === apiWriteSeq && hit.node.firstElementChild === hit.first;
+  const next = host.cloneNode(false);
+  next.dataset.personalTab = key;
+  next.removeAttribute("aria-busy");
+  const save = (node) => personalViews.set(key, { node, first: node.firstElementChild, at: Date.now(), writes: apiWriteSeq });
+  if (!usable) {
+    // 第一次进入：直接在新区域里显示骨架再渲染（需要量尺寸的页面也能正常排版）。
+    next.setAttribute("aria-busy", "true");
+    next.append(UI.tableSkeleton());
+    host.replaceWith(next);
+    setHost(next);
+    globalThis.scrollTo?.(0, 0);
+    try {
+      await render(next);
+      if (isCurrent()) save(next);
+    } catch (e) {
+      if (isCurrent()) {
+        next.replaceChildren(UI.empty({ text: e.message, action: { label: "重试", onSelect: retry } }));
+        notice(e.message);
+      }
+    } finally {
+      next.setAttribute("aria-busy", "false");
+    }
+    return next;
+  }
+  const shown = hit.node;
+  host.replaceWith(shown);
+  setHost(shown);
+  globalThis.scrollTo?.(0, 0);
+  shown.classList.add("is-refreshing");
+  // 在看不见但有宽度的位置渲染，避免依赖尺寸的页面排版出错。
+  next.classList.add("fq-offscreen");
+  shown.after(next);
+  try {
+    await render(next);
+    if (!isCurrent()) {
+      next.remove();
+      return shown;
+    }
+    const ae = document.activeElement;
+    if (ae && shown.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) {
+      next.remove();
+      return shown;
+    }
+    const scroller = document.scrollingElement,
+      top = scroller ? scroller.scrollTop : 0;
+    next.classList.remove("fq-offscreen");
+    shown.replaceWith(next);
+    setHost(next);
+    if (scroller) scroller.scrollTop = top;
+    save(next);
+    return next;
+  } catch (e) {
+    next.remove();
+    if (isCurrent()) {
+      const at = new Date(hit.at);
+      notice("显示的是 " + String(at.getHours()).padStart(2, "0") + ":" + String(at.getMinutes()).padStart(2, "0") + " 的内容，更新失败：" + e.message);
+    }
+    return shown;
+  } finally {
+    shown.classList.remove("is-refreshing");
+  }
+}
 // ---------- PWA 第二版：老师、学员离线查看 ----------
 // 老师、学员读过的少数只读接口（本人信息、课表、课时与缴费、点评、点名详情）在本机留一份；
 // 断网时用它显示，并在顶部提示“离线模式”。员工账号不保存；登出、换人登录、超过 14 天

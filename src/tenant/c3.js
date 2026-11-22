@@ -2543,6 +2543,7 @@
     }
   };
   globalThis.ChannelC3 = {
+    manualOrder, // 设置 › 课程与教室（fq-settings.js）的“手动排序”
     teacherToday,
     teacherStudents,
     studentHome,
