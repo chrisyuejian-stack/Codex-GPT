@@ -3,9 +3,10 @@
 //   电脑：左侧 7 个分区 + 总览；手机：分组列表 → 整页二级页（顶部「‹ 设置」返回）。
 //   课程与教室从“老师”分组移回设置（老师分组不留入口）；教师与学员端开关移到账号与权限；
 //   续费提醒规则放进教务规则（待办里的入口保留）；手机端数据与备份只读（导入、恢复只在电脑上做）。
-// 只换外框和展示：账号（accountsV）、角色权限（rightsPage）、操作记录（logsV）、主色与二维码（yxsBrandEditor）、
-// AI 用量（yxAiUsagePage）、导入（importWizard）、导出（exportsPage）、备份（FengqinBackup.backupPage）、
-// 缺勤规则 / 教师与学员端 / 课表默认视图（c3 settingsPage 原表单搬进来）、课程表单（recordForm）全部沿用原函数与原接口。
+// 只换外框和展示：账号（accountsV）、角色权限（rightsPage）、主色与二维码（yxsBrandEditor）、
+// 导入（importWizard）、导出（exportsPage）、备份（FengqinBackup.backupPage）、
+// 教师与学员端（c3 settingsPage personal）、课程表单（recordForm）沿用原函数与原接口；
+// 教务规则、AI 设置、操作记录按 .fq-se-* 新视觉体系原生实现并直接对接既有后端接口。
 // 旧地址仍可用：settings-accounts / settings-rights / settings-institution / settings-import / settings-export /
 // settings-backup / settings-logs 保留原 key；admin-courses → settings-courses，inst-ai → settings-ai（替换历史记录）。
 (() => {
@@ -249,7 +250,8 @@
     return v ? v + " 课时" : "不允许欠课时";
   };
   const renewalText = () => (stats.renewal ? "≤ " + stats.renewal.low_balance_threshold + " 课时或 " + stats.renewal.expiry_warning_days + " 天内到期" : "—");
-  const VIEW_NAME = { calendar: "按时间", teacher: "按教师", room: "按教室", list: "列表" };
+  const VIEW_NAME = { time: "按时间", calendar: "按时间", teacher: "按教师", location: "按教室", room: "按教室", list: "列表" };
+  const normScheduleView = (v) => (v === "calendar" ? "time" : v === "room" ? "location" : ["time", "teacher", "location", "list"].includes(v) ? v : "time");
   function cardRows(key) {
     const a = stats.accounts,
       c = stats.courses,
@@ -280,7 +282,7 @@
         return [
           ["学员请假", absenceText(stats.absence?.student_leave)],
           ["欠课时上限", debtText()],
-          stats.renewal ? ["续费提醒", renewalText()] : ["课表默认视图", VIEW_NAME[set.default_schedule_view || "calendar"]],
+          stats.renewal ? ["续费提醒", renewalText()] : ["课表默认视图", VIEW_NAME[set.default_schedule_view || "time"] || "按时间"],
         ];
       case "ai":
         return [
@@ -851,60 +853,630 @@
     return wrap;
   }
 
+  // ---------- 通用新控件（开关 / 下拉 / 提示条） ----------
+  function toggleSwitch({ checked, disabled, label, onToggle }) {
+    const b = n("button", null, {
+      type: "button",
+      role: "switch",
+      "aria-checked": String(!!checked),
+      "aria-label": label,
+      class: "fq-se-sw" + (checked ? " is-on" : ""),
+    });
+    if (disabled) b.disabled = true;
+    const set = (v) => {
+      b.setAttribute("aria-checked", String(!!v));
+      b.classList.toggle("is-on", !!v);
+    };
+    b.addEventListener("click", () => {
+      if (b.disabled) return;
+      const next = b.getAttribute("aria-checked") !== "true";
+      set(next);
+      onToggle?.(next, set);
+    });
+    return { el: b, set };
+  }
+  function switchRow(label, hint, control, extraCls = "") {
+    const r = n("div", null, { class: "fq-se-swr" + (extraCls ? " " + extraCls : "") }),
+      txt = n("div");
+    txt.append(n("strong", label));
+    if (hint) txt.append(n("small", hint));
+    r.append(txt, control);
+    return r;
+  }
+  function selectInput({ value, options, disabled, ariaLabel, onChange }) {
+    const s = n("select", null, { class: "fq-se-sel", "aria-label": ariaLabel });
+    for (const [val, text] of options) {
+      const o = n("option", text, { value: val });
+      if (val === value) o.selected = true;
+      s.append(o);
+    }
+    if (disabled) s.disabled = true;
+    if (onChange) s.addEventListener("change", () => onChange(s.value, s));
+    return s;
+  }
+  const banner = (text, tone = "info") => n("p", text, { class: "fq-se-banner is-" + tone, role: tone === "error" ? "alert" : "status" });
+
   // ---------- 教务规则 ----------
+  const ABSENCE_KINDS = [
+    ["student_leave", "学员请假", "学员提前请假未上课"],
+    ["student_no_show", "学员旷课", "未请假无故缺席"],
+    ["teacher_leave", "教师请假", "老师临时请假调课"],
+    ["cancelled", "机构取消", "因机构安排取消本节课"],
+  ];
+  const DEBT_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 8, 10].map((v) => [String(v), v ? v + " 课时" : "不允许欠课时"]);
+  const VIEW_OPTIONS = [
+    ["time", "按时间"],
+    ["teacher", "按教师"],
+    ["location", "按教室"],
+    ["list", "列表"],
+  ];
   async function rulesSection(main) {
     const s = sec("rules");
-    setSub("教务规则 · 只有主管可以修改");
-    main.append(title({ ...s, desc: "缺勤是否扣课时、计课酬；欠课时上限；续费提醒；课表默认视图。修改只影响还没锁定的月份。" }));
-    // 缺勤规则（原表单与“保存规则”）
-    const ab = panel("缺勤规则", "学员请假、旷课，教师请假，机构取消时，是否扣学员课时、是否给老师计课酬。");
-    const abBody = n("div", null, { class: "fq-se-pb fq-se-legacy fq-se-absence" });
-    abBody.append(...(await c3Part("absence")));
-    ab.append(abBody);
-    main.append(ab);
-    // 欠课时上限（原“教师与学员端”页里的下拉）+ 课表默认视图
-    const personal = await c3Part("personal");
-    const debt = personal.filter((x) => x.nodeType === 1 && (isDebt(x) || (x.tagName === "P" && hasText(x, "欠的课时"))));
-    const view = await c3Part("view");
-    const other = panel("欠课时与课表", "课时不够时最多可以欠几课时；打开课表时默认用哪种视图。");
-    const ob = n("div", null, { class: "fq-se-pb fq-se-legacy fq-se-rows" });
-    ob.append(...debt, ...view);
-    other.append(ob);
-    main.append(other);
-    // 续费提醒（DECISIONS 17：待办里的“提醒规则”入口保留，这里另有固定位置）
+    const editable = sup();
+    setSub("教务规则" + (editable ? " · 只有主管可以修改" : " · 只读（仅主管可修改）"));
+    main.append(
+      title(
+        { ...s, desc: "缺勤是否扣课时、计课酬；欠课时上限；续费提醒；课表默认视图。修改只影响还没锁定的月份。" },
+        editable ? null : pill("只读 · 仅主管可修改", "muted"),
+      ),
+    );
+
+    const [abData, rnData] = await Promise.all([
+      safe(api("absence-policies")),
+      enabled("packages") ? safe(api("renewal-settings")) : Promise.resolve(null),
+    ]);
+    if (abData?.policies) stats.absence = abData.policies;
+    if (rnData?.settings) stats.renewal = rnData.settings;
+
+    // 1. 缺勤规则
+    const initialAb = {};
+    const draftAb = {};
+    for (const [k] of ABSENCE_KINDS) {
+      const src = abData?.policies?.[k] || { deduct: false, teacherPaid: false };
+      initialAb[k] = { deduct: !!src.deduct, teacherPaid: !!src.teacherPaid };
+      draftAb[k] = { deduct: !!src.deduct, teacherPaid: !!src.teacherPaid };
+    }
+    const abDirtyBadge = pill("有未保存修改", "warn");
+    abDirtyBadge.hidden = true;
+    const abErrBox = n("div", null, { class: "fq-se-msg-slot" });
+    let abSaveBtn = null;
+    const isAbDirty = () =>
+      ABSENCE_KINDS.some(([k]) => draftAb[k].deduct !== initialAb[k].deduct || draftAb[k].teacherPaid !== initialAb[k].teacherPaid);
+    const syncAbState = () => {
+      const dirty = isAbDirty();
+      abDirtyBadge.hidden = !dirty;
+      if (abSaveBtn) abSaveBtn.disabled = !dirty;
+    };
+    if (editable) {
+      abSaveBtn = btn("保存规则", async () => {
+        if (!isAbDirty()) return;
+        abErrBox.replaceChildren();
+        abSaveBtn.disabled = true;
+        abSaveBtn.textContent = "保存中…";
+        try {
+          await api("absence-policies", "PUT", { policies: draftAb });
+          for (const [k] of ABSENCE_KINDS) initialAb[k] = { ...draftAb[k] };
+          stats.absence = Object.fromEntries(ABSENCE_KINDS.map(([k]) => [k, { ...draftAb[k] }]));
+          notice("缺勤规则已保存", "success");
+        } catch (e) {
+          const msg = e?.message || "保存缺勤规则失败，请重试。";
+          abErrBox.replaceChildren(banner(msg, "error"));
+          notice(msg, "error");
+        } finally {
+          abSaveBtn.textContent = "保存规则";
+          syncAbState();
+        }
+      }, "is-dark is-sm");
+      abSaveBtn.disabled = true;
+    }
+    const abPanel = panel(
+      "缺勤规则",
+      "学员请假、旷课，教师请假，机构取消时，是否扣学员课时、是否给老师计课酬。",
+      editable ? [abDirtyBadge, abSaveBtn] : null,
+    );
+    if (!abData) {
+      abPanel.append(n("p", "缺勤规则暂时取不到，请刷新重试。", { class: "fq-se-empty" }));
+    } else {
+      abPanel.append(abErrBox);
+      const grid = n("div", null, { class: "fq-se-rule-grid fq-se-pb" });
+      for (const [key, label, desc] of ABSENCE_KINDS) {
+        const card = n("div", null, { class: "fq-se-rule-card" });
+        const head = n("div", null, { class: "fq-se-rule-head" });
+        head.append(n("h4", label), n("small", desc));
+        const list = n("div", null, { class: "fq-se-sws" });
+        for (const [flag, flagLabel] of [["deduct", "扣课时"], ["teacherPaid", "计课酬"]]) {
+          const sw = toggleSwitch({
+            checked: draftAb[key][flag],
+            disabled: !editable,
+            label: label + "：" + flagLabel,
+            onToggle: (v) => {
+              draftAb[key][flag] = v;
+              abErrBox.replaceChildren();
+              syncAbState();
+            },
+          });
+          list.append(switchRow(flagLabel, "", sw.el, "is-compact"));
+        }
+        card.append(head, list);
+        grid.append(card);
+      }
+      abPanel.append(grid);
+      if (!editable) abPanel.append(n("div", "仅机构主管可修改缺勤规则。", { class: "fq-se-pf" }));
+    }
+    main.append(abPanel);
+
+    // 2. 欠课时上限 & 课表默认视图（即点即存）
+    const otherPanel = panel("欠课时与课表", "课时不够时最多可以欠几课时；打开课表时默认用哪种视图。修改后立即生效。");
+    const otherErr = n("div", null, { class: "fq-se-msg-slot" });
+    const otherList = n("div", null, { class: "fq-se-sws" });
+
+    let prevDebt = String(me.policy.settings.max_debt_units ?? 3);
+    const debtSel = selectInput({
+      value: prevDebt,
+      options: DEBT_OPTIONS,
+      disabled: !editable,
+      ariaLabel: "课时不够时最多可欠",
+      onChange: async (v, sel) => {
+        otherErr.replaceChildren();
+        sel.disabled = true;
+        try {
+          const numVal = Number(v);
+          await api("settings", "PUT", { key: "max_debt_units", value: numVal });
+          me.policy.settings.max_debt_units = numVal;
+          prevDebt = v;
+          notice("欠课时上限已保存", "success");
+        } catch (e) {
+          sel.value = prevDebt;
+          const msg = e?.message || "保存欠课时上限失败";
+          otherErr.replaceChildren(banner(msg, "error"));
+          notice(msg, "error");
+        } finally {
+          sel.disabled = !editable;
+        }
+      },
+    });
+    otherList.append(
+      switchRow(
+        "课时不够时最多可欠",
+        "欠的课时在学员下次买课时包或用预收余额兑换时自动补扣；超过上限的学员这节课保持待销课，其他人照常销课。",
+        debtSel,
+      ),
+    );
+
+    let prevView = normScheduleView(me.policy.settings.default_schedule_view);
+    const viewSel = selectInput({
+      value: prevView,
+      options: VIEW_OPTIONS,
+      disabled: !editable,
+      ariaLabel: "打开课表时的默认视图",
+      onChange: async (v, sel) => {
+        otherErr.replaceChildren();
+        sel.disabled = true;
+        try {
+          await api("settings", "PUT", { key: "default_schedule_view", value: v });
+          me.policy.settings.default_schedule_view = v;
+          if (typeof scheduleView !== "undefined") scheduleView = v === "time" ? "calendar" : v === "location" ? "room" : v;
+          prevView = v;
+          notice("课表默认视图已保存", "success");
+        } catch (e) {
+          sel.value = prevView;
+          const msg = e?.message || "保存课表默认视图失败";
+          otherErr.replaceChildren(banner(msg, "error"));
+          notice(msg, "error");
+        } finally {
+          sel.disabled = !editable;
+        }
+      },
+    });
+    otherList.append(switchRow("打开课表时的默认视图", "员工进入课表页时的默认展示方式。", viewSel));
+    otherPanel.append(otherErr, otherList);
+    if (!editable) otherPanel.append(n("div", "仅机构主管可修改欠课时上限与默认视图。", { class: "fq-se-pf" }));
+    main.append(otherPanel);
+
+    // 3. 续费提醒（DECISIONS 17：待办里的“提醒规则”入口保留，这里另有固定位置且可直接编辑保存）
     if (enabled("packages")) {
-      const data = await safe(api("renewal-settings"));
-      stats.renewal = data?.settings || stats.renewal;
-      const rn = panel(
+      const curRn = rnData?.settings || stats.renewal || { low_balance_threshold: 2, expiry_warning_days: 14 };
+      const rnErr = n("div", null, { class: "fq-se-msg-slot" });
+      const rnDirtyBadge = pill("有未保存修改", "warn");
+      rnDirtyBadge.hidden = true;
+      let savedLow = Number(curRn.low_balance_threshold ?? 2);
+      let savedDays = Number(curRn.expiry_warning_days ?? 14);
+      const lowIn = n("input", null, {
+        type: "number",
+        min: "0",
+        max: "10000",
+        step: "1",
+        value: String(savedLow),
+        class: "fq-se-in fq-se-num-in",
+        "aria-label": "低余额课时",
+      });
+      const daysIn = n("input", null, {
+        type: "number",
+        min: "1",
+        max: "365",
+        step: "1",
+        value: String(savedDays),
+        class: "fq-se-in fq-se-num-in",
+        "aria-label": "提前提醒天数",
+      });
+      if (!editable) {
+        lowIn.disabled = true;
+        daysIn.disabled = true;
+      }
+      const isRnDirty = () => String(lowIn.value).trim() !== String(savedLow) || String(daysIn.value).trim() !== String(savedDays);
+      let rnSaveBtn = null;
+      const syncRn = () => {
+        const dirty = isRnDirty();
+        rnDirtyBadge.hidden = !dirty;
+        if (rnSaveBtn) rnSaveBtn.disabled = !dirty;
+      };
+      lowIn.addEventListener("input", () => {
+        rnErr.replaceChildren();
+        syncRn();
+      });
+      daysIn.addEventListener("input", () => {
+        rnErr.replaceChildren();
+        syncRn();
+      });
+      if (editable) {
+        rnSaveBtn = btn("保存提醒规则", async () => {
+          rnErr.replaceChildren();
+          const low = Number(lowIn.value);
+          const days = Number(daysIn.value);
+          if (!Number.isInteger(low) || low < 0 || low > 10000) {
+            rnErr.replaceChildren(banner("低余额课时须为 0 到 10000 的整数。", "error"));
+            return;
+          }
+          if (!Number.isInteger(days) || days < 1 || days > 365) {
+            rnErr.replaceChildren(banner("提前提醒天数须为 1 到 365 的整数。", "error"));
+            return;
+          }
+          rnSaveBtn.disabled = true;
+          rnSaveBtn.textContent = "保存中…";
+          try {
+            await api("renewal-settings", "PUT", { low_balance_threshold: low, expiry_warning_days: days });
+            savedLow = low;
+            savedDays = days;
+            stats.renewal = { low_balance_threshold: low, expiry_warning_days: days };
+            notice("续费提醒规则已保存", "success");
+          } catch (e) {
+            const msg = e?.message || "保存续费提醒规则失败";
+            rnErr.replaceChildren(banner(msg, "error"));
+            notice(msg, "error");
+          } finally {
+            rnSaveBtn.textContent = "保存提醒规则";
+            syncRn();
+          }
+        }, "is-dark is-sm");
+        rnSaveBtn.disabled = true;
+      }
+      const rnPanel = panel(
         "续费提醒",
         "剩余课时不超过“低余额课时”，或课时包在“提前提醒天数”内到期，就会出现在待办的续费提醒里。",
-        sup() && globalThis.FengqinToday?.renewalRules ? [btn("修改规则", () => globalThis.FengqinToday.renewalRules(() => page(main.closest(".fq-se-host"), "rules")), "is-soft is-sm")] : null,
+        editable ? [rnDirtyBadge, rnSaveBtn] : null,
       );
-      const dl = n("dl", null, { class: "fq-se-dl fq-se-pb" });
-      dl.append(n("dt", "低余额课时"), n("dd", stats.renewal ? "≤ " + stats.renewal.low_balance_threshold + " 课时" : "—"), n("dt", "提前提醒天数"), n("dd", stats.renewal ? stats.renewal.expiry_warning_days + " 天" : "—"));
-      rn.append(dl);
-      main.append(rn);
+      const wrapUnit = (input, unit) => {
+        const w = n("span", null, { class: "fq-se-unit-in" });
+        w.append(input, n("span", unit));
+        return w;
+      };
+      const rnList = n("div", null, { class: "fq-se-sws" });
+      rnList.append(
+        switchRow("低余额课时", "学员课时包剩余课时小于或等于该数值时触发续费提醒（0–10000）。", wrapUnit(lowIn, "课时")),
+        switchRow("提前提醒天数", "课时包距到期日不超过该天数时触发续费提醒（1–365）。", wrapUnit(daysIn, "天")),
+      );
+      rnPanel.append(rnErr, rnList);
+      if (!editable) rnPanel.append(n("div", "仅机构主管可修改续费提醒规则。", { class: "fq-se-pf" }));
+      main.append(rnPanel);
     }
   }
 
   // ---------- AI 设置 ----------
+  const AI_TOOL_LABELS = {
+    plans: "课程方案",
+    content: "招生内容",
+    feedback: "课后反馈",
+    growth_reports: "成长报告",
+    settings: "设置",
+    applications: "留学申请",
+  };
+  const AI_MODEL_SUGGESTIONS = ["deepseek-chat", "deepseek-reasoner"];
   async function aiSection(main) {
     const s = sec("ai");
+    const editable = sup();
     setSub("AI 设置 · 每天北京时间 0 点重新计数");
-    main.append(title(s));
-    if (sup()) {
-      const cfg = await safe(api("settings/ai"));
-      if (cfg) {
-        const p = panel(["模型与每日额度 ", lock()], cfg.source === "internal" ? "由机构设置。" : "当前使用服务器环境变量里的配置。");
-        const dl = n("dl", null, { class: "fq-se-dl fq-se-pb" });
-        for (const [k, v] of [["配置来源", cfg.source === "internal" ? "机构设置" : "环境变量"], ["快速模型", cfg.fast_model || "—"], ["深度模型", cfg.deep_model || "—"], ["每日额度", "快速 " + cfg.fast_daily_limit + " · 深度 " + cfg.deep_daily_limit]]) dl.append(n("dt", k), n("dd", v));
-        p.append(dl);
-        main.append(p);
+    main.append(title(s, editable ? null : pill("只读 · 仅主管可修改", "muted")));
+
+    // 关于 DEEPSEEK_API_KEY 的清晰友好说明
+    main.append(
+      banner(
+        "说明：AI 密钥（DEEPSEEK_API_KEY）仅保存在服务器加密环境变量中，不在页面显示或修改。若服务器尚未配置 DEEPSEEK_API_KEY，仍可提前调整下方模型与每日额度，开启 AI 服务后自动生效；调用 AI 功能时如未配置密钥会给出明确提示。",
+        "info",
+      ),
+    );
+
+    const usageSlot = n("div");
+    let usageDate = today();
+
+    async function renderUsage() {
+      usageSlot.replaceChildren(n("p", "正在加载 AI 用量统计…", { class: "fq-se-empty fq-se-panel" }));
+      let u = null;
+      let errMsg = "";
+      try {
+        u = await api("ai/usage?date=" + encodeURIComponent(usageDate));
+      } catch (e) {
+        errMsg = e?.message || "AI 用量加载失败";
       }
+      if (u && usageDate === today()) stats.ai = u;
+
+      const dateInput = n("input", null, {
+        type: "date",
+        value: usageDate,
+        class: "fq-se-in fq-se-date-in",
+        "aria-label": "统计日期",
+      });
+      dateInput.addEventListener("change", () => {
+        if (!dateInput.value) return;
+        usageDate = dateInput.value;
+        void renderUsage();
+      });
+      const up = panel("AI 用量统计", "每天北京时间 0 点重新计数；快速和深度两档分开计算。", [dateInput]);
+      if (errMsg || !u) {
+        const errWrap = n("div", null, { class: "fq-se-pb" });
+        errWrap.append(banner(errMsg || "暂时无法读取 AI 用量数据。", "error"));
+        up.append(errWrap);
+        usageSlot.replaceChildren(up);
+        return;
+      }
+
+      const meters = n("div", null, { class: "fq-se-ai-meters fq-se-pb" });
+      for (const [k, label, desc] of [
+        ["fast", "快速模型额度", "日常辅助与轻量生成"],
+        ["deep", "深度模型额度", "复杂分析与深度整理"],
+      ]) {
+        const used = Number(u[k]?.used || 0);
+        const limit = Number(u[k]?.limit || 0);
+        const remain = Math.max(0, limit - used);
+        const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : used > 0 ? 100 : 0;
+        const tone = limit === 0 ? "is-muted" : used >= limit ? "is-red" : pct >= 85 ? "is-warn" : "";
+        const m = n("div", null, { class: "fq-se-meter" });
+        const top = n("div", null, { class: "fq-se-meter-top" });
+        const left = n("div");
+        left.append(n("strong", label), n("small", desc));
+        top.append(left, pill(limit > 0 ? pct + "%" : "额度为 0", tone.replace("is-", "")));
+        const val = n("div", null, { class: "fq-se-meter-num" });
+        val.append(n("b", String(used)), n("span", " / " + limit + " 次"), n("small", "剩余 " + remain + " 次"));
+        const prog = n("progress", null, {
+          class: "fq-se-prog" + (tone ? " " + tone : ""),
+          value: String(Math.min(used, Math.max(1, limit))),
+          max: String(Math.max(1, limit)),
+        });
+        m.append(top, val, prog);
+        meters.append(m);
+      }
+      up.append(meters);
+
+      if (u.by_tool) {
+        const subHead = n("div", null, { class: "fq-se-subhead" });
+        subHead.append(n("h4", "按工具统计"), n("small", usageDate));
+        up.append(subHead);
+        if (u.by_tool.length) {
+          up.append(
+            table(
+              [
+                ["工具", (r) => n("strong", AI_TOOL_LABELS[r.tool] || r.tool)],
+                ["快速", (r) => String(r.fast || 0), "is-num"],
+                ["深度", (r) => String(r.deep || 0), "is-num"],
+                ["合计", (r) => n("strong", String((r.fast || 0) + (r.deep || 0))), "is-num"],
+              ],
+              u.by_tool,
+            ),
+          );
+        } else {
+          up.append(n("p", "当日还没有按工具的 AI 调用记录。", { class: "fq-se-empty" }));
+        }
+      }
+
+      if (u.by_user) {
+        const subHead = n("div", null, { class: "fq-se-subhead" });
+        subHead.append(n("h4", "按账号统计"), n("small", usageDate));
+        up.append(subHead);
+        if (u.by_user.length) {
+          up.append(
+            table(
+              [
+                [
+                  "账号",
+                  (r) => {
+                    const who = r.name || r.user_id || "未知账号";
+                    const box = n("span", null, { class: "fq-se-who" });
+                    box.append(n("span", Array.from(who)[0], { class: "fq-se-av" }), n("strong", who));
+                    return box;
+                  },
+                ],
+                ["快速", (r) => String(r.fast || 0), "is-num"],
+                ["深度", (r) => String(r.deep || 0), "is-num"],
+                ["合计", (r) => n("strong", String((r.fast || 0) + (r.deep || 0))), "is-num"],
+              ],
+              u.by_user,
+            ),
+          );
+        } else {
+          up.append(n("p", "当日还没有按账号的 AI 调用记录。", { class: "fq-se-empty" }));
+        }
+      }
+      usageSlot.replaceChildren(up);
     }
-    const box = n("div", null, { class: "fq-se-legacy" });
-    main.append(box);
-    await yxAiUsagePage(box);
+
+    // 1. 模型与每日额度配置（仅主管可读写）
+    const cfgSlot = n("div");
+    main.append(cfgSlot, usageSlot);
+
+    async function renderConfig() {
+      if (!editable) {
+        const p = panel(["模型与每日额度 ", lock()], "仅机构主管可查看与修改模型名称和每日调用额度。");
+        p.append(n("p", "当前账号只读查看下方 AI 用量统计。", { class: "fq-se-empty" }));
+        cfgSlot.replaceChildren(p);
+        return;
+      }
+      let cfg = null;
+      let errText = "";
+      try {
+        cfg = await api("settings/ai");
+        stats.aiConfig = cfg;
+      } catch (e) {
+        errText = e?.message || "无法读取 AI 配置。";
+      }
+      if (!cfg) {
+        const p = panel(["模型与每日额度 ", lock()], "快速 / 深度两档模型与每日额度。");
+        const box = n("div", null, { class: "fq-se-pb" });
+        box.append(banner(errText, "error"));
+        p.append(box);
+        cfgSlot.replaceChildren(p);
+        return;
+      }
+
+      let useEnv = cfg.source !== "internal";
+      const errSlot = n("div", null, { class: "fq-se-msg-slot" });
+      const sourcePill = pill(useEnv ? "环境变量" : "机构设置", useEnv ? "muted" : "plum");
+      const datalistId = "fq-se-ai-models";
+      const dl = n("datalist", null, { id: datalistId });
+      for (const m of AI_MODEL_SUGGESTIONS) dl.append(n("option", null, { value: m }));
+
+      const fastModelIn = n("input", null, {
+        type: "text",
+        value: cfg.fast_model || "",
+        maxlength: "200",
+        list: datalistId,
+        placeholder: "如 deepseek-chat",
+        class: "fq-se-in",
+        "aria-label": "快速模型名称",
+      });
+      const deepModelIn = n("input", null, {
+        type: "text",
+        value: cfg.deep_model || "",
+        maxlength: "200",
+        list: datalistId,
+        placeholder: "如 deepseek-reasoner",
+        class: "fq-se-in",
+        "aria-label": "深度模型名称",
+      });
+      const fastLimitIn = n("input", null, {
+        type: "number",
+        min: "0",
+        max: "1000000",
+        step: "1",
+        value: String(cfg.fast_daily_limit ?? 80),
+        class: "fq-se-in",
+        "aria-label": "快速每日额度",
+      });
+      const deepLimitIn = n("input", null, {
+        type: "number",
+        min: "0",
+        max: "1000000",
+        step: "1",
+        value: String(cfg.deep_daily_limit ?? 50),
+        class: "fq-se-in",
+        "aria-label": "深度每日额度",
+      });
+      const inputs = [fastModelIn, deepModelIn, fastLimitIn, deepLimitIn];
+      const syncDisabled = () => {
+        for (const elIn of inputs) elIn.disabled = useEnv;
+      };
+      syncDisabled();
+
+      const saveBtn = btn("保存设置", async () => {
+        errSlot.replaceChildren();
+        const payload = { version: cfg.version, use_environment: useEnv };
+        if (!useEnv) {
+          const fm = fastModelIn.value.trim();
+          const dm = deepModelIn.value.trim();
+          const fl = Number(fastLimitIn.value);
+          const dlVal = Number(deepLimitIn.value);
+          if (!fm || fm.length > 200) {
+            errSlot.replaceChildren(banner("请填写快速模型名称（不超过 200 字符）。", "error"));
+            return;
+          }
+          if (!dm || dm.length > 200) {
+            errSlot.replaceChildren(banner("请填写深度模型名称（不超过 200 字符）。", "error"));
+            return;
+          }
+          if (!Number.isInteger(fl) || fl < 0 || fl > 1000000) {
+            errSlot.replaceChildren(banner("快速每日额度须为 0 到 1000000 的整数。", "error"));
+            return;
+          }
+          if (!Number.isInteger(dlVal) || dlVal < 0 || dlVal > 1000000) {
+            errSlot.replaceChildren(banner("深度每日额度须为 0 到 1000000 的整数。", "error"));
+            return;
+          }
+          payload.fast_model = fm;
+          payload.deep_model = dm;
+          payload.fast_daily_limit = fl;
+          payload.deep_daily_limit = dlVal;
+        }
+        saveBtn.disabled = true;
+        saveBtn.textContent = "保存中…";
+        try {
+          const next = await api("settings/ai", "PUT", payload);
+          stats.aiConfig = next;
+          notice("AI 设置已保存", "success");
+          await Promise.all([renderConfig(), renderUsage()]);
+        } catch (e) {
+          if (e?.status === 409) {
+            notice("AI 设置刚被别人改过，已刷新最新配置。", "error");
+            await renderConfig();
+            return;
+          }
+          const msg = e?.message || "保存 AI 设置失败";
+          errSlot.replaceChildren(banner(msg, "error"));
+          notice(msg, "error");
+          saveBtn.disabled = false;
+          saveBtn.textContent = "保存设置";
+        }
+      }, "is-dark is-sm");
+
+      const envSw = toggleSwitch({
+        checked: useEnv,
+        disabled: false,
+        label: "跟随服务器环境变量",
+        onToggle: (v) => {
+          useEnv = v;
+          errSlot.replaceChildren();
+          syncDisabled();
+        },
+      });
+
+      const p = panel(
+        ["模型与每日额度 ", lock()],
+        "开启“跟随环境变量”时直接使用服务器默认值；关闭后可由机构自定义模型名称与每日额度。",
+        [sourcePill, saveBtn],
+      );
+      const swWrap = n("div", null, { class: "fq-se-sws" });
+      swWrap.append(
+        switchRow(
+          "跟随服务器环境变量",
+          useEnv ? "当前沿用环境变量默认模型与额度，关闭后可自定义。" : "当前使用机构自定义模型与额度。",
+          envSw.el,
+        ),
+      );
+      const grid = n("div", null, { class: "fq-se-ai-grid fq-se-pb" });
+      const mkField = (labelText, inputEl, hintText) => {
+        const f = n("div", null, { class: "fq-se-field" });
+        f.append(n("label", labelText), inputEl);
+        if (hintText) f.append(n("small", hintText));
+        return f;
+      };
+      grid.append(
+        mkField("快速模型", fastModelIn, "日常辅助调用，默认 deepseek-chat"),
+        mkField("深度模型", deepModelIn, "复杂分析调用，默认 deepseek-reasoner"),
+        mkField("快速每日额度（次/天）", fastLimitIn, "0–1000000 整数，全机构共用"),
+        mkField("深度每日额度（次/天）", deepLimitIn, "0–1000000 整数，全机构共用"),
+      );
+      p.append(errSlot, swWrap, grid, dl);
+      cfgSlot.replaceChildren(p);
+    }
+
+    await Promise.all([renderConfig(), renderUsage()]);
   }
 
   // ---------- 数据与备份 ----------
@@ -932,12 +1504,349 @@
   }
 
   // ---------- 操作记录 ----------
+  const logState = { kind: "audit", module: "", action: "", actor: "", from: "", to: "", q: "" };
+  let logActorNames = null;
+  const LOG_QUICK = [
+    ["", "全部"],
+    ["export", "只看导出"],
+    ["delete", "只看删除"],
+    ["reset_password", "只看重置密码"],
+  ];
+  function parseJsonPretty(raw) {
+    try {
+      return JSON.stringify(JSON.parse(raw), null, 2);
+    } catch {
+      return String(raw || "");
+    }
+  }
   async function logsSection(main) {
     const s = sec("logs");
-    main.append(title(s));
-    const box = n("div", null, { class: "fq-se-legacy" });
-    main.append(box);
-    await A().logsV(box, 0);
+    let currentOffset = 0;
+
+    if (!logActorNames && enabled("accounts")) {
+      logActorNames = await safe(api("accounts?offset=0")).then((d) =>
+        d ? [...new Set((d.items || []).map((u) => u.name).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-CN")) : null,
+      );
+    }
+
+    const headSlot = n("div");
+    const filterSlot = n("div");
+    const listSlot = n("div");
+    main.append(headSlot, filterSlot, listSlot);
+
+    const hasFilters = () =>
+      Boolean(
+        (logState.kind === "audit" && (logState.module || logState.action)) ||
+          logState.actor ||
+          logState.from ||
+          logState.to ||
+          logState.q,
+      );
+
+    function renderHead() {
+      setSub("操作记录 · " + (logState.kind === "login" ? "账号登录与会话记录" : "谁在什么时候改了什么"));
+      headSlot.replaceChildren(
+        title(
+          s,
+          chipsRow(
+            [
+              [
+                "操作记录",
+                null,
+                () => {
+                  if (logState.kind === "audit") return;
+                  logState.kind = "audit";
+                  currentOffset = 0;
+                  renderHead();
+                  renderFilters();
+                  void loadList(0);
+                },
+                "audit",
+              ],
+              [
+                "登录记录",
+                null,
+                () => {
+                  if (logState.kind === "login") return;
+                  logState.kind = "login";
+                  currentOffset = 0;
+                  renderHead();
+                  renderFilters();
+                  void loadList(0);
+                },
+                "login",
+              ],
+            ],
+            logState.kind,
+          ),
+        ),
+      );
+    }
+
+    let lastData = null;
+    function renderFilters() {
+      const clearBtn = hasFilters()
+        ? btn(
+            "清除筛选",
+            () => {
+              Object.assign(logState, { module: "", action: "", actor: "", from: "", to: "", q: "" });
+              currentOffset = 0;
+              renderFilters();
+              void loadList(0);
+            },
+            "is-soft is-sm",
+          )
+        : null;
+      const fp = panel("筛选条件", logState.kind === "audit" ? "按动作、模块、操作人、日期或关键字筛选。" : "按操作人、日期或关键字筛选登录记录。", clearBtn ? [clearBtn] : null);
+      const body = n("div", null, { class: "fq-se-pb fq-se-log-filters" });
+
+      if (logState.kind === "audit") {
+        body.append(
+          chipsRow(
+            LOG_QUICK.map(([k, label]) => [
+              label,
+              null,
+              () => {
+                logState.action = k;
+                currentOffset = 0;
+                renderFilters();
+                void loadList(0);
+              },
+              k,
+            ]),
+            logState.action,
+          ),
+        );
+      }
+
+      const grid = n("div", null, { class: "fq-se-filter-grid" });
+      const wrapField = (labelText, ctrl) => {
+        const d = n("div", null, { class: "fq-se-fitem" });
+        d.append(n("label", labelText), ctrl);
+        return d;
+      };
+
+      if (logState.kind === "audit") {
+        const modOpts = [
+          ["", "全部模块"],
+          ...Object.entries(me.labels?.modules || {})
+            .filter(([k]) => !["home", "profile"].includes(k))
+            .map(([k, v]) => [k, v]),
+        ];
+        grid.append(
+          wrapField(
+            "模块",
+            selectInput({
+              value: logState.module,
+              options: modOpts,
+              disabled: false,
+              ariaLabel: "按模块筛选",
+              onChange: (v) => {
+                logState.module = v;
+                currentOffset = 0;
+                renderFilters();
+                void loadList(0);
+              },
+            }),
+          ),
+        );
+      }
+
+      if (logActorNames) {
+        const names = [...logActorNames, "系统", "系统维护"];
+        if (logState.actor && !names.includes(logState.actor)) names.unshift(logState.actor);
+        grid.append(
+          wrapField(
+            "操作人",
+            selectInput({
+              value: logState.actor,
+              options: [["", "全部操作人"], ...names.map((x) => [x, x])],
+              disabled: false,
+              ariaLabel: "按操作人筛选",
+              onChange: (v) => {
+                logState.actor = v;
+                currentOffset = 0;
+                renderFilters();
+                void loadList(0);
+              },
+            }),
+          ),
+        );
+      } else {
+        const actorIn = n("input", null, {
+          type: "search",
+          value: logState.actor,
+          maxlength: "100",
+          placeholder: "输入姓名后回车",
+          class: "fq-se-in",
+          "aria-label": "按操作人筛选",
+        });
+        actorIn.addEventListener("change", () => {
+          logState.actor = actorIn.value.trim();
+          currentOffset = 0;
+          renderFilters();
+          void loadList(0);
+        });
+        grid.append(wrapField("操作人", actorIn));
+      }
+
+      const fromIn = n("input", null, { type: "date", value: logState.from, class: "fq-se-in", "aria-label": "开始日期" });
+      const toIn = n("input", null, { type: "date", value: logState.to, class: "fq-se-in", "aria-label": "结束日期" });
+      fromIn.addEventListener("change", () => {
+        logState.from = fromIn.value || "";
+        currentOffset = 0;
+        renderFilters();
+        void loadList(0);
+      });
+      toIn.addEventListener("change", () => {
+        logState.to = toIn.value || "";
+        currentOffset = 0;
+        renderFilters();
+        void loadList(0);
+      });
+      grid.append(wrapField("开始日期", fromIn), wrapField("结束日期", toIn));
+
+      const qIn = n("input", null, {
+        type: "search",
+        value: logState.q,
+        maxlength: "100",
+        placeholder: "搜索摘要 / 对象（当前页）",
+        class: "fq-se-in",
+        "aria-label": "关键字筛选当前页",
+      });
+      qIn.addEventListener("input", () => {
+        logState.q = qIn.value.trim();
+        if (lastData) drawTable(lastData, currentOffset);
+      });
+      grid.append(wrapField("关键字", qIn));
+
+      body.append(grid);
+      fp.append(body);
+      filterSlot.replaceChildren(fp);
+    }
+
+    function openDetail(r, whatText) {
+      const d = UI.drawer({ title: whatText, subtitle: (r.actor_label || "本人登录账号") + " · " + F.date(r.at) + " " + F.time(r.at) });
+      for (const x of r.rows) {
+        const box = n("section", null, { class: "fq-se-panel fq-se-log-det" });
+        const head = n("div", null, { class: "fq-se-ph" });
+        const left = n("div");
+        left.append(n("h3", F.time(x.at) + " · " + (x.summary || (logState.kind === "login" ? "登录会话" : "操作记录"))));
+        head.append(left);
+        box.append(head);
+        let hasDiff = false;
+        const body = n("div", null, { class: "fq-se-pb" });
+        for (const key of ["before_json", "after_json"]) {
+          if (!x[key]) continue;
+          hasDiff = true;
+          const det = n("details", null, { class: "fq-se-diff" });
+          det.append(n("summary", key === "before_json" ? "修改前" : "修改后"), n("pre", parseJsonPretty(x[key]), { class: "fq-se-pre" }));
+          body.append(det);
+        }
+        if (!hasDiff) body.append(n("p", "该条记录无字段变更明细。", { class: "fq-se-empty" }));
+        box.append(body);
+        d.body.append(box);
+      }
+    }
+
+    function drawTable(data, offset) {
+      // 同一人、同类操作、同一分钟合并（仅限已加载的这一页）。
+      const grouped = new Map();
+      for (const row of data.items || []) {
+        const key = [row.actor_label || row.user_id, row.module, row.action || row.event, Math.floor(row.at / 60000)].join("|");
+        if (!grouped.has(key)) grouped.set(key, { ...row, rows: [] });
+        grouped.get(key).rows.push(row);
+      }
+      let rows = [...grouped.values()];
+      const what = (r) =>
+        (me.labels?.modules?.[r.module] || (logState.kind === "login" ? "登录" : "其他")) +
+        " · " +
+        (me.labels?.actions?.[r.action] || me.labels?.events?.[r.event] || "操作") +
+        (r.rows.length > 1 ? " " + r.rows.length + " 条" : "");
+      const pillTone = (r) => (r.action === "delete" || r.action === "reset_password" ? "red" : r.action === "export" || r.action === "download" ? "plum" : "muted");
+
+      if (logState.q) {
+        const kw = logState.q.toLowerCase();
+        rows = rows.filter((r) => {
+          const hay = [r.actor_label, what(r), r.summary, ...r.rows.map((x) => x.summary)].filter(Boolean).join(" ").toLowerCase();
+          return hay.includes(kw);
+        });
+      }
+
+      const lp = panel(
+        [logState.kind === "login" ? "登录记录" : "操作记录", n("span", "共 " + (data.total ?? 0) + " 条")],
+        rows.length < (data.items || []).length && !logState.q ? "同一人同一分钟的同类操作已合并；点击「查看」展开完整明细。" : "点击「查看」展开该条记录的变更前后明细。",
+      );
+
+      if (!rows.length) {
+        lp.append(n("p", hasFilters() ? "没有符合筛选条件的记录。" : "还没有记录。", { class: "fq-se-empty" }));
+      } else {
+        const cols = [
+          ["时间", (r) => n("span", F.date(r.at).slice(5) + " " + F.time(r.at), { class: "fq-se-mono" })],
+          [
+            "操作人",
+            (r) => {
+              const who = r.actor_label || "本人登录账号";
+              const w = n("span", null, { class: "fq-se-who" });
+              w.append(n("span", Array.from(who)[0], { class: "fq-se-av" + (who === "系统" ? " is-ink" : "") }), n("strong", who));
+              return w;
+            },
+          ],
+          ["动作", (r) => pill(what(r), pillTone(r))],
+          [
+            "对象 / 摘要",
+            (r) => n("span", r.rows.length > 1 ? "多个对象（" + r.rows.length + " 条）" : r.summary || (logState.kind === "login" ? "登录会话" : "—"), { class: "fq-se-log-sum" }),
+          ],
+          ["", (r) => btn("查看", () => openDetail(r, what(r)), "is-soft is-sm"), "is-act"],
+        ];
+        lp.append(table(cols, rows));
+      }
+
+      const pf = n("div", null, { class: "fq-se-pf" });
+      const infoText =
+        "共 " +
+        (data.total ?? 0) +
+        " 条" +
+        (logState.q ? " · 当前页匹配 " + rows.length + " 组" : rows.length < (data.items || []).length ? " · 本页已合并同分钟同类操作" : "");
+      const pagerBtns = n("div", null, { class: "fq-se-ph-acts" });
+      if (offset > 0) pagerBtns.append(btn("上一页", () => void loadList(Math.max(0, offset - 200)), "is-sm"));
+      if (data.next_offset !== null && data.next_offset !== undefined) pagerBtns.append(btn("下一页", () => void loadList(data.next_offset), "is-sm"));
+      pf.append(n("span", infoText), pagerBtns);
+      lp.append(pf);
+      listSlot.replaceChildren(lp);
+    }
+
+    async function loadList(offset = 0) {
+      currentOffset = offset;
+      if (logState.from && logState.to && logState.from > logState.to) {
+        const ep = panel("筛选有误");
+        const b = n("div", null, { class: "fq-se-pb" });
+        b.append(banner("开始日期不能晚于结束日期，请重新选择。", "error"));
+        ep.append(b);
+        listSlot.replaceChildren(ep);
+        return;
+      }
+      listSlot.replaceChildren(n("p", "正在加载记录…", { class: "fq-se-empty fq-se-panel" }));
+      const q = new URLSearchParams({ kind: logState.kind, offset: String(offset) });
+      for (const k of ["actor", "from", "to"]) if (logState[k]) q.set(k, logState[k]);
+      if (logState.kind === "audit") for (const k of ["module", "action"]) if (logState[k]) q.set(k, logState[k]);
+      try {
+        const data = await api("logs?" + q);
+        lastData = data;
+        if (logState.kind === "audit" && offset === 0 && !hasFilters()) stats.logs = data.items || [];
+        drawTable(data, offset);
+      } catch (e) {
+        const ep = panel("记录加载失败");
+        const b = n("div", null, { class: "fq-se-pb" });
+        b.append(banner(e?.message || "加载操作记录失败，请稍后重试。", "error"));
+        ep.append(b);
+        listSlot.replaceChildren(ep);
+      }
+    }
+
+    renderHead();
+    renderFilters();
+    await loadList(0);
   }
 
   const RENDER = {
