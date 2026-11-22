@@ -1,6 +1,7 @@
 import { refreshGalleryStorage, requireGalleryCapacity, storageFull, storagePending } from "./gallery-storage.js";
 import { dateValue } from "./tool-validation.js";
 import { repo } from "./repo.js";
+import { encrypt, decrypt } from "./crypto.js";
 
 import { body, json, fail, randomId, version, HttpError, b64, unb64 } from "./core.js";
 
@@ -341,12 +342,13 @@ function galleryDto(row, apiBase) {
   };
 }
 
-function institutionDto(row, user) {
+async function institutionDto(env, tenantId, row, user) {
+  const contact = await decrypt(env, row.contact_text, tenantId + ":contact");
   return {
     version: row.version,
     name: row.display_name,
     logo: row.logo ?? null,
-    contact_text: row.contact_text || null,
+    contact_text: contact || null,
     primary_color: row.theme_color,
     editable: user.roles.includes("supervisor")
   };
@@ -363,7 +365,12 @@ function brandImage(v) {
     error("图片编码不正确", "logo");
   }
   const type = /^data:image\/(png|jpeg|webp);/.exec(v)[1];
-  const valid = type === "png" ? [ 137, 80, 78, 71, 13, 10, 26, 10 ].every((x, i) => bytes[i] === x) && String.fromCharCode(...bytes.slice(12, 16)) === "IHDR" : type === "jpeg" ? bytes[0] === 255 && bytes[1] === 216 && bytes.at(-2) === 255 && bytes.at(-1) === 217 : String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
+  const valid =
+    type === "png"
+      ? bytes.length >= 16 && [ 137, 80, 78, 71, 13, 10, 26, 10 ].every((x, i) => bytes[i] === x) && String.fromCharCode(...bytes.slice(12, 16)) === "IHDR"
+      : type === "jpeg"
+        ? bytes.length >= 4 && bytes[0] === 255 && bytes[1] === 216 && bytes.at(-2) === 255 && bytes.at(-1) === 217
+        : bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
   if (!valid) error("图片真实格式不正确", "logo");
   return v;
 }
@@ -788,20 +795,25 @@ export async function toolSettingsApi(req, env, resolved, user, policy, url) {
       if (!user.roles.includes("supervisor")) fail(403, "只有机构主管可以修改机构信息", "forbidden");
       const d = await body(req), row = await r.brand();
       if (Object.keys(d).some(k => ![ "version", "name", "logo", "contact_text" ].includes(k))) error("只能修改机构名称、Logo 和联系说明", "body");
-      if (version(d.version) !== row.version) conflict(institutionDto(row, user));
+      if (version(d.version) !== row.version) conflict(await institutionDto(env, resolved.tenant.id, row, user));
+      let contactEnc = row.contact_text ?? "";
+      if (d.contact_text !== undefined) {
+        const plain = d.contact_text === null ? "" : str(d.contact_text, "contact_text", 300, true);
+        contactEnc = plain ? await encrypt(env, plain, resolved.tenant.id + ":contact") : "";
+      }
       const next = {
         display_name: d.name === undefined ? row.display_name : str(d.name, "name", 100),
         logo: d.logo === undefined ? row.logo ?? null : brandImage(d.logo),
-        contact_text: d.contact_text === undefined ? row.contact_text ?? "" : d.contact_text === null ? "" : str(d.contact_text, "contact_text", 300, true)
+        contact_text: contactEnc
       };
       try {
         await r.settingsInstitutionWrite(next, row, user);
       } catch (e) {
-        if (raced(e)) conflict(institutionDto(await r.brand(), user));
+        if (raced(e)) conflict(await institutionDto(env, resolved.tenant.id, await r.brand(), user));
         throw e;
       }
     } else if (req.method !== "GET") fail(404, "不存在", "not_found");
-    return reply(institutionDto(await r.brand(), user));
+    return reply(await institutionDto(env, resolved.tenant.id, await r.brand(), user));
   }
   if (resource === "brand") {
     allowed(user, policy, req.method === "GET" ? "read" : "write");

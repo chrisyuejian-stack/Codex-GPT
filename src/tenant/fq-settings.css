@@ -590,3 +590,13 @@ html .fq-se-sub .fq-se-main { gap: 14px; }
   html .fq-se-table td, html .fq-se-table td:first-child, html .fq-se-table td:last-child { padding: 3px 0; }
   html .fq-se-table td[data-label]:not([data-label=""])::before { content: attr(data-label); color: var(--fq-faint); font-size: 12px; }
 }
+html .fq-se-acc-box .v-ac-grid { grid-template-columns: minmax(0, 1fr); }
+html .fq-se-personal .fq-se-swr { display: block; }
+html .fq-se-personal .fq-se-hint { margin: 6px 2px 0; }
+html .fq-se-two .fq-se-legacy > form.v-panel { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; backdrop-filter: none; }
+html .fq-se-two .fq-se-legacy > form.v-panel > h3 { display: none; }
+html .fq-se-table td, html .fq-se-cat footer { white-space: nowrap; }
+html .fq-se-table td:first-child { white-space: normal; }
+html .fq-se-acts .ui-button { min-height: 28px; height: 28px; padding: 0 8px; font-size: 13px; }
+html .fq-se-acts .ui-button svg { display: none; }
+html .fq-se-cat footer { gap: 6px; }
