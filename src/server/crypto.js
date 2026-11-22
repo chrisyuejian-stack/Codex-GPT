@@ -48,6 +48,28 @@ export async function decrypt(env, value, context) {
     ),
   );
 }
+// 批量解密（同一密钥只导入一次）：手机尾号搜索要逐条比对加密号码时用。
+export async function fieldDecryptor(env) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    unb64(env.FIELD_KEY),
+    "AES-GCM",
+    false,
+    ["decrypt"],
+  );
+  return async (value, context) => {
+    if (!value) return "";
+    const [v, iv, data] = value.split(".");
+    if (v !== "v1") throw Error("cipher version");
+    return new TextDecoder().decode(
+      await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: unb64(iv), additionalData: textBytes(context) },
+        key,
+        unb64(data),
+      ),
+    );
+  };
+}
 export async function digestPassword(env, password, salt) {
   const peppered = await hmac(env.PW_PEPPER, password);
   const key = await crypto.subtle.importKey(

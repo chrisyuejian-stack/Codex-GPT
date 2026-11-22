@@ -11,6 +11,29 @@ import { effectivePolicies } from "./absence.js";
 import { creditPreview } from "./credits.js";
 import { calculatePayroll } from "./finance.js";
 import { moneyOut } from "./numbers.js";
+import { fieldDecryptor } from "./crypto.js";
+// 手机尾号搜索（第三期决定 2）：搜索词去掉空格、横线后是 4–11 位数字时，
+// 匹配学员本人或家长手机号的末尾。号码是 AES-GCM 加密存储，没有可检索列；
+// 单机构学员量小（上限 5000 条），在 Worker 内解密比对，明文不出 Worker、不写库。
+export async function phoneTailIds(env, t, r, q, status) {
+  const tail = String(q || "").replace(/[\s-]/g, "");
+  if (!/^\d{4,11}$/.test(tail)) return [];
+  const rows = await r.c2StudentPhoneCiphers(status);
+  if (!rows.length) return [];
+  const open = await fieldDecryptor(env),
+    ctx = t.id + ":phone",
+    ids = [];
+  for (const row of rows) {
+    for (const value of [row.phone_enc, row.parent_phone_enc]) {
+      const plain = await open(value, ctx).catch(() => "");
+      if (plain && plain.replace(/\D/g, "").endsWith(tail)) {
+        ids.push(row.id);
+        break;
+      }
+    }
+  }
+  return ids;
+}
 const date = () =>
   new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(
     new Date(now()),
@@ -44,12 +67,15 @@ export async function rebuildApi(
   }
   if (path === "/api/c2/students" && req.method === "GET") {
     requireCan(user, policy, "students", "read");
+    const q = string(url.searchParams.get("q") || "", "搜索", 100, 0),
+      status = string(url.searchParams.get("status") ?? "active", "状态", 10, 0);
     const data = await r.c2StudentPage({
       at: now(),
       today,
       days: settings.expiry_warning_days,
-      q: string(url.searchParams.get("q") || "", "搜索", 100, 0),
-      status: string(url.searchParams.get("status") ?? "active", "状态", 10, 0),
+      q,
+      ids: await phoneTailIds(env, t, r, q, status),
+      status,
       course: string(url.searchParams.get("course") || "", "课程", 80, 0),
       balance: string(url.searchParams.get("balance") || "", "余额筛选", 10, 0),
       sort: url.searchParams.get("sort") || "default",

@@ -1166,5 +1166,7 @@
   }
 
   if (typeof pageHooks !== "undefined") pageHooks.rates = ratesPage;
-  globalThis.ChannelV2People = { studentsRender: render, teachersView, kpi, kpis, avatar, sink, dayLabel, backRow, ratesPage };
+  // fq-students.js（第三期学员页）复用这里的名单状态、取数与缓存，只换界面。
+  globalThis.ChannelV2People = { studentsRender: render, teachersView, kpi, kpis, avatar, sink, dayLabel, backRow, ratesPage,
+    studentData: { state: sState, loadStudents, loadCounts, base: studentBase, cache: dCache, unmask } };
 })();
