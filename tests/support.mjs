@@ -1,6 +1,6 @@
 import { tenantAssets } from '../scripts/frontend-bundle.mjs';
 import {mkdirSync,writeFileSync} from 'node:fs';
-import {emulateD1,validateD1} from './d1-emulator.mjs';
+import {emulateD1,normalizeD1Param,validateD1} from './d1-emulator.mjs';
 import {LocalR2} from './r2.mjs';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {DatabaseSync} from 'node:sqlite';
@@ -9,9 +9,11 @@ import sourceWorker from '../src/server/worker.js';
 import {b64,bytes} from '../src/server/core.js';
 const worker=process.env.TEST_BUNDLE==='1'?(await import('../dist/_worker.js')).default:sourceWorker;
 export class LocalD1 {
-  constructor() {
+  constructor(options = {}) {
     this.raw = new DatabaseSync(":memory:");
-    this.limits = emulateD1(this.raw);
+    // 与线上 Cloudflare D1 一致：默认开启外键约束检查。
+    this.raw.exec("PRAGMA foreign_keys = ON");
+    this.limits = emulateD1(this.raw, options);
     this.context = new AsyncLocalStorage();
     this.queryLimit = 40;
     this.queryReports = [];
@@ -48,25 +50,59 @@ export class LocalD1 {
       params: [],
       bind(...p) {
         validateD1(query, p);
-        this.params = p;
+        this.params = p.map(normalizeD1Param);
         return this;
       },
-      async first() {
+      async first(colName) {
         db.count();
-        return (
-          db.limits.result(db.raw.prepare(query).get(...this.params)) || null
-        );
+        const stmt = db.raw.prepare(query);
+        const colCount = stmt.columns().length;
+        const row = db.limits.result(stmt.get(...this.params), colCount) || null;
+        if (!row) return null;
+        if (colName !== undefined) {
+          if (!Object.hasOwn(row, colName))
+            throw Error("D1_COLUMN_NOTFOUND: Column not found: " + colName);
+          return row[colName];
+        }
+        return row;
       },
       async all() {
         db.count();
+        const stmt = db.raw.prepare(query);
+        const colCount = stmt.columns().length;
         return {
-          results: db.limits.result(db.raw.prepare(query).all(...this.params)),
+          success: true,
+          results: db.limits.result(stmt.all(...this.params), colCount),
         };
+      },
+      async raw({ columnNames = false } = {}) {
+        db.count();
+        const stmt = db.raw.prepare(query);
+        const cols = stmt.columns();
+        const rows = db.limits.result(stmt.all(...this.params), cols.length);
+        const out = rows.map((row) => cols.map((c) => row[c.name]));
+        if (columnNames) out.unshift(cols.map((c) => c.name));
+        return out;
       },
       async run() {
         db.count();
-        const x = db.raw.prepare(query).run(...this.params);
-        return { meta: { changes: Number(x.changes) } };
+        const stmt = db.raw.prepare(query);
+        const cols = stmt.columns();
+        if (cols.length) {
+          const results = db.limits.result(stmt.all(...this.params), cols.length);
+          return { success: true, results, meta: { changes: 0 } };
+        }
+        const ddl = /^\s*(?:CREATE|ALTER)\b/i.test(query);
+        if (ddl) db.raw.exec("BEGIN IMMEDIATE");
+        try {
+          const x = stmt.run(...this.params);
+          db.limits.installRows();
+          if (ddl) db.raw.exec("COMMIT");
+          return { success: true, results: [], meta: { changes: Number(x.changes) } };
+        } catch (e) {
+          if (ddl) db.raw.exec("ROLLBACK");
+          throw e;
+        }
       },
     };
   }
@@ -79,20 +115,28 @@ export class LocalD1 {
       const results = [];
       for (const s of statements) {
         const statement = this.raw.prepare(s.query);
-        if (statement.columns().length)
+        const cols = statement.columns();
+        if (cols.length)
           results.push({
-            results: this.limits.result(statement.all(...s.params)),
+            success: true,
+            results: this.limits.result(statement.all(...s.params), cols.length),
             meta: { changes: 0 },
           });
         else
           results.push({
+            success: true,
+            results: [],
             meta: { changes: Number(statement.run(...s.params).changes) },
           });
       }
+      this.limits.installRows();
       this.raw.exec("COMMIT");
+      // D1 PRAGMA 仅在当前事务生效；提交后恢复默认外键检查。
+      this.raw.exec("PRAGMA foreign_keys = ON");
       return results;
     } catch (e) {
       this.raw.exec("ROLLBACK");
+      this.raw.exec("PRAGMA foreign_keys = ON");
       throw e;
     }
   }

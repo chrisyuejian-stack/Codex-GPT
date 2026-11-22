@@ -1228,5 +1228,5 @@
     }
     g.tabs = [route, ...rest.filter((t) => !LEGACY[t.key])];
   });
-  globalThis.FengqinToday = { todayPage, todoPage };
+  globalThis.FengqinToday = { todayPage, todoPage, renewalRules }; // renewalRules：设置 › 教务规则也用
 })();

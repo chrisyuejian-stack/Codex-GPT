@@ -2032,6 +2032,17 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
       ops.push(sql(`INSERT INTO tenant_brand(tenant_id,id,qr_image_id) VALUES(?,'brand',?) ON CONFLICT(tenant_id,id) DO UPDATE SET qr_image_id=excluded.qr_image_id`,tenantId,data.qr_image_id));
       ops.push(settingAudit(tenantId,actor,'brand','brand',old,data));await db.batch(ops);
     },
+    // 第三期 · 设置：主管修改机构名称、Logo、联系说明（tenant_branding），版本守卫 + 审计。审计不写 Logo 原图，只记是否更换。
+    async settingsInstitutionWrite(data,old,actor) {
+      scoped();const at=now();
+      const brief=(x,logo)=>({name:x.display_name,contact_text:x.contact_text||null,logo:logo});
+      await db.batch([
+        sql(`INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES(?,?,?,COALESCE((SELECT version FROM tenant_branding WHERE tenant_id=? AND id='brand'),-1))`,tenantId,randomId('guard'),old.version,tenantId),
+        sql(`UPDATE tenant_branding SET display_name=?,logo=?,contact_text=?,version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id='brand'`,data.display_name,data.logo,data.contact_text,at,actor.id,tenantId),
+        sql('INSERT INTO audit_log(tenant_id,id,at,actor_id,actor_label,module,action,entity_id,summary,before_json,after_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)',tenantId,randomId('aud'),at,actor.id,actor.name||actor.username||'系统维护','settings','update','institution','修改机构信息',
+          JSON.stringify({version:old.version,...brief(old,old.logo?'已设置':null)}),JSON.stringify(brief(data,data.logo?(data.logo===old.logo?'未更换':'已更换'):null))),
+      ]);
+    },
     async galleryUnmeasured(limit=20){scoped();return all('SELECT id,r2_key FROM gallery_images WHERE tenant_id=? AND bytes=0 ORDER BY id LIMIT ?',tenantId,limit);},
     async gallerySetSizes(rows){scoped();await db.batch(rows.map(x=>sql('UPDATE gallery_images SET bytes=? WHERE tenant_id=? AND id=? AND bytes=0',x.bytes,tenantId,x.id)));},
     async galleryStorage(){scoped();const row=await first(`SELECT t.gallery_storage_limit AS "limit",COALESCE(SUM(g.bytes),0) used,COALESCE(SUM(CASE WHEN g.bytes=0 THEN 1 ELSE 0 END),0) pending,COALESCE(SUM(CASE WHEN g.id IS NOT NULL AND g.deleted_at IS NULL AND g.bytes IS NULL THEN 1 ELSE 0 END),0) missing,t.version FROM tenants t LEFT JOIN gallery_images g ON g.tenant_id=t.id WHERE t.id=? GROUP BY t.id`,tenantId);if(!row)fail(404,'不存在','not_found');return {...row,complete:row.pending===0};},
@@ -2616,7 +2627,7 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
     },
     async c2StudentPage(v) {
       scoped();
-      const base = `WITH a AS(SELECT ? tenant_id,? at),b AS(SELECT x.package_id,SUM(x.delta) balance FROM package_transactions x,a WHERE x.tenant_id=a.tenant_id GROUP BY x.package_id),p AS(SELECT p.*,COALESCE(b.balance,0) balance,c.name course_name FROM packages p JOIN a ON p.tenant_id=a.tenant_id LEFT JOIN b ON b.package_id=p.id JOIN course_types c ON c.tenant_id=p.tenant_id AND c.id=p.course_type_id WHERE p.deleted_at IS NULL),s AS(SELECT s.id,s.name,s.grade,s.parent_name,s.status,s.version,s.sort_order,COUNT(*) OVER(PARTITION BY s.name) same_name_count,COUNT(*) OVER(PARTITION BY s.name,s.grade) same_grade_count,COALESCE((SELECT ROUND(SUM(balance),2) FROM p WHERE p.student_id=s.id),0) balance,(SELECT COUNT(*) FROM p WHERE p.student_id=s.id) package_count,(SELECT group_concat(DISTINCT course_name) FROM p WHERE p.student_id=s.id) course_names,(SELECT MIN(l.start_at) FROM lessons l JOIN lesson_participants x ON x.tenant_id=l.tenant_id AND x.lesson_id=l.id WHERE l.tenant_id=s.tenant_id AND x.student_id=s.id AND l.deleted_at IS NULL AND x.deleted_at IS NULL AND l.status='planned' AND strftime('%s',l.start_at)*1000>=a.at) next_start,(SELECT group_concat(DISTINCT t.name) FROM lessons l JOIN lesson_participants x ON x.tenant_id=l.tenant_id AND x.lesson_id=l.id JOIN teachers t ON t.tenant_id=l.tenant_id AND t.id=l.teacher_id WHERE l.tenant_id=s.tenant_id AND x.student_id=s.id AND l.deleted_at IS NULL AND x.deleted_at IS NULL AND l.status='planned' AND strftime('%s',l.start_at)*1000>=a.at) teacher_names FROM students s JOIN a ON s.tenant_id=a.tenant_id WHERE s.deleted_at IS NULL AND instr(lower(s.name),lower(?))>0 AND (?='' OR s.status=?) AND (?='' OR EXISTS(SELECT 1 FROM p WHERE p.student_id=s.id AND p.course_type_id=?)))`;
+      const base = `WITH a AS(SELECT ? tenant_id,? at),b AS(SELECT x.package_id,SUM(x.delta) balance FROM package_transactions x,a WHERE x.tenant_id=a.tenant_id GROUP BY x.package_id),p AS(SELECT p.*,COALESCE(b.balance,0) balance,c.name course_name FROM packages p JOIN a ON p.tenant_id=a.tenant_id LEFT JOIN b ON b.package_id=p.id JOIN course_types c ON c.tenant_id=p.tenant_id AND c.id=p.course_type_id WHERE p.deleted_at IS NULL),s AS(SELECT s.id,s.name,s.grade,s.parent_name,s.status,s.version,s.sort_order,COUNT(*) OVER(PARTITION BY s.name) same_name_count,COUNT(*) OVER(PARTITION BY s.name,s.grade) same_grade_count,COALESCE((SELECT ROUND(SUM(balance),2) FROM p WHERE p.student_id=s.id),0) balance,(SELECT COUNT(*) FROM p WHERE p.student_id=s.id) package_count,(SELECT group_concat(DISTINCT course_name) FROM p WHERE p.student_id=s.id) course_names,(SELECT MIN(l.start_at) FROM lessons l JOIN lesson_participants x ON x.tenant_id=l.tenant_id AND x.lesson_id=l.id WHERE l.tenant_id=s.tenant_id AND x.student_id=s.id AND l.deleted_at IS NULL AND x.deleted_at IS NULL AND l.status='planned' AND strftime('%s',l.start_at)*1000>=a.at) next_start,(SELECT group_concat(DISTINCT t.name) FROM lessons l JOIN lesson_participants x ON x.tenant_id=l.tenant_id AND x.lesson_id=l.id JOIN teachers t ON t.tenant_id=l.tenant_id AND t.id=l.teacher_id WHERE l.tenant_id=s.tenant_id AND x.student_id=s.id AND l.deleted_at IS NULL AND x.deleted_at IS NULL AND l.status='planned' AND strftime('%s',l.start_at)*1000>=a.at) teacher_names FROM students s JOIN a ON s.tenant_id=a.tenant_id WHERE s.deleted_at IS NULL AND (instr(lower(s.name),lower(?))>0 OR instr(lower(s.parent_name),lower(?))>0 OR s.id IN (SELECT value FROM json_each(?))) AND (?='' OR s.status=?) AND (?='' OR EXISTS(SELECT 1 FROM p WHERE p.student_id=s.id AND p.course_type_id=?)))`;
       const balanceFilter = v.balance === "zero" || v.balance === "low";
       const groupedFilter = balanceFilter
         ? ",args AS(SELECT tenant_id,? today,? low,? days FROM a)" +
@@ -2631,6 +2642,9 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
         tenantId,
         v.at,
         v.q,
+        v.q,
+        // 手机尾号搜索命中的学员 id（加密字段在 Worker 里解密比对，见 rebuild.js phoneTailIds）。
+        JSON.stringify(v.ids || []),
         v.status,
         v.status,
         v.course,
@@ -2656,6 +2670,16 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
         items: rows.filter((row) => row.id != null).map(({ __total, ...row }) => row),
         total: rows[0]?.__total || 0,
       };
+    },
+    // 手机尾号搜索用：只取 id 与两段加密号码，比对在 Worker 内解密完成，不落明文。
+    async c2StudentPhoneCiphers(status) {
+      scoped();
+      return all(
+        "SELECT id,phone_enc,parent_phone_enc FROM students WHERE tenant_id=? AND deleted_at IS NULL AND (phone_enc IS NOT NULL OR parent_phone_enc IS NOT NULL) AND (?='' OR status=?) ORDER BY id LIMIT 5000",
+        tenantId,
+        status,
+        status,
+      );
     },
     async c2StudentCounts(today, settings) {
       scoped();

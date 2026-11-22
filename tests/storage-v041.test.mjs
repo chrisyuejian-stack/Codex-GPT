@@ -34,13 +34,13 @@ test('V041 G4 历史引用图只隐藏仍计容量，保护旧文档且不能靠
 }));
 
 test('V041 G4 容量和回填限本机构，外机构图库404，不读取其他对象',()=>school(async s=>{
- const b=await setup(s.f,1,'storage-b');b.f=s.f;const aKey=await oldImage(s,'a_image'),bKey=await oldImage(b,'b_image');const get=s.f.env.CHANNEL_MEDIA.get.bind(s.f.env.CHANNEL_MEDIA),seen=[];s.f.env.CHANNEL_MEDIA.get=async key=>{seen.push(key);return get(key)};
- try{assert.equal(ok(await gallery(s)).storage.used,size);assert.deepEqual(seen,[aKey]);assert.ok(!seen.includes(bKey));assert.equal((await b.r.settingsGallery('b_image')).bytes,0);ok(await call(s,'gallery/b_image/file'),404)}finally{s.f.env.CHANNEL_MEDIA.get=get}
+ const b=await setup(s.f,1,'storage-b');b.f=s.f;const aKey=await oldImage(s,'a_image'),bKey=await oldImage(b,'b_image');const get=s.f.env.CHANNEL_MEDIA.get.bind(s.f.env.CHANNEL_MEDIA),head=s.f.env.CHANNEL_MEDIA.head.bind(s.f.env.CHANNEL_MEDIA),seen=[];s.f.env.CHANNEL_MEDIA.get=async key=>{seen.push(key);return get(key)};s.f.env.CHANNEL_MEDIA.head=async key=>{seen.push(key);return head(key)};
+ try{assert.equal(ok(await gallery(s)).storage.used,size);assert.deepEqual(seen,[aKey]);assert.ok(!seen.includes(bKey));assert.equal((await b.r.settingsGallery('b_image')).bytes,0);ok(await call(s,'gallery/b_image/file'),404)}finally{s.f.env.CHANNEL_MEDIA.get=get;s.f.env.CHANNEL_MEDIA.head=head}
 }));
 
 test('V041 G4 缺失旧对象标NULL，网络错误保留待统计；回填不改其他业务列',()=>school(async s=>{
- await oldImage(s,'missing',null);let v=ok(await gallery(s));assert.equal(v.storage.used,0);assert.equal(v.storage.missing,1);assert.equal((await s.r.settingsGallery('missing')).bytes,null);const key=await oldImage(s,'network');const before=await s.r.settingsGallery('network'),get=s.f.env.CHANNEL_MEDIA.get.bind(s.f.env.CHANNEL_MEDIA);s.f.env.CHANNEL_MEDIA.get=async k=>{if(k===key)throw Error('local R2 unavailable');return get(k)};
- try{assert.equal(ok(await gallery(s),503).error,'storage_unavailable');assert.equal((await s.r.settingsGallery('network')).bytes,0)}finally{s.f.env.CHANNEL_MEDIA.get=get}
+ await oldImage(s,'missing',null);let v=ok(await gallery(s));assert.equal(v.storage.used,0);assert.equal(v.storage.missing,1);assert.equal((await s.r.settingsGallery('missing')).bytes,null);const key=await oldImage(s,'network');const before=await s.r.settingsGallery('network'),get=s.f.env.CHANNEL_MEDIA.get.bind(s.f.env.CHANNEL_MEDIA),head=s.f.env.CHANNEL_MEDIA.head.bind(s.f.env.CHANNEL_MEDIA);s.f.env.CHANNEL_MEDIA.get=async k=>{if(k===key)throw Error('local R2 unavailable');return get(k)};s.f.env.CHANNEL_MEDIA.head=async k=>{if(k===key)throw Error('local R2 unavailable');return head(k)};
+ try{assert.equal(ok(await gallery(s),503).error,'storage_unavailable');assert.equal((await s.r.settingsGallery('network')).bytes,0)}finally{s.f.env.CHANNEL_MEDIA.get=get;s.f.env.CHANNEL_MEDIA.head=head}
  v=ok(await gallery(s));assert.equal(v.storage.used,size);const after=await s.r.settingsGallery('network');delete before.bytes;delete after.bytes;assert.deepEqual(after,before);
 }));
 
