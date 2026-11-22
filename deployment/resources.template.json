@@ -49,7 +49,7 @@
     "0 19 * * *",
     "*/5 * * * *"
   ],
-  "database_target_migration": "0032_backup_todo_actions.sql",
+  "database_target_migration": "0033_lead_followups.sql",
   "isolation": {
     "production_and_preview_must_use_separate_resources": true,
     "reuse_legacy_database": false,

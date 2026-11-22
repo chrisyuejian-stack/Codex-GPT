@@ -94,6 +94,7 @@ export const ACTION_LABELS = Object.freeze({
   reset_password: "重置密码",
   password: "修改密码",
   phone: "查看完整手机号",
+  followup: "记录线索回访",
 });
 export const AUTH_EVENT_LABELS = Object.freeze({
   login_success: "登录成功",

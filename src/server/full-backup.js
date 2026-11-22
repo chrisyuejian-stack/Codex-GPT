@@ -125,7 +125,7 @@ async function loadBackup(env, tenantId, id) {
   )
     fail(
       422,
-      "旧自动备份版本不兼容，请使用0032之后生成的全量备份",
+      "旧自动备份版本不兼容，请使用0033之后生成的全量备份",
       "backup_version_mismatch",
     );
   const payload = {

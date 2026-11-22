@@ -871,6 +871,7 @@
           const main = act(
             actionLabel(it),
             async () => {
+              if (a.kind === "contact_lead" && globalThis.FQLeads?.followup) return globalThis.FQLeads.followup(await recordOf(it), reload); // 第三期：记录回访改到新线索详情（fq-leads.js）
               if (INLINE.has(a.kind)) {
                 await recordOf(it);
                 st.open = it.item_key;

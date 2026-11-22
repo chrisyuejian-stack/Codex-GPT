@@ -175,6 +175,64 @@ function safe(kind, row) {
     out.phone = row.phone_last4 ? "***" + row.phone_last4 : "";
   return kind === "class_members" ? withStudentSearchKeys(out) : out;
 }
+// 0033：线索回访记录。读沿用 leads.read；写沿用 leads.update、线索 version 与 operation_id（同一编号重放返回原结果）。
+// 写入与线索更新（next_followup，可选 stage / trial_at）同一批次提交，并按线索模块写审计（action=followup）。
+export const LEAD_FOLLOWUP_CHANNELS = { phone: "电话", wechat: "微信", visit: "到访", other: "其他" };
+const bjNow = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 16) + "+08:00";
+async function leadFollowupsApi(req, r, user, policy, id, readBody) {
+  if (req.method === "GET") {
+    requireCan(user, policy, "leads", "read");
+    const lead = await reference(r, "leads", id);
+    return { lead: safe("leads", lead), items: await r.leadFollowups(lead.id) };
+  }
+  if (req.method !== "POST") fail(404, "不存在");
+  requireCan(user, policy, "leads", "update");
+  const d = await readBody(req);
+  const op = d.operation_id;
+  if (typeof op !== "string" || !/^[A-Za-z0-9_-]{8,100}$/.test(op))
+    fail(400, "缺少有效操作编号");
+  const replay = await r.leadFollowup(op);
+  if (replay) {
+    if (replay.lead_id !== id || replay.actor_id !== user.id)
+      fail(409, "操作编号已使用");
+    const lead = await reference(r, "leads", id);
+    return { id: replay.id, lead_version: lead.version, replayed: true };
+  }
+  const revision = await r.dataVersion(),
+    old = await reference(r, "leads", id);
+  if (version(d.version) !== old.version) fail(409, "记录已变更，请刷新");
+  if (old.student_id) fail(409, "已转正线索不可更改，请编辑学员档案");
+  const channel = d.channel ?? "phone";
+  if (!Object.hasOwn(LEAD_FOLLOWUP_CHANNELS, channel)) fail(400, "回访方式不正确");
+  const row = {
+    id: op,
+    lead_id: old.id,
+    actor_id: user.id,
+    at: d.at ? instant(d.at) : bjNow(),
+    channel,
+    content: text(d, "content", 2000, true),
+    next_followup: d.next_followup ? day(d.next_followup) : null,
+  };
+  const lead = { ...old, next_followup: row.next_followup };
+  if (d.stage !== undefined) {
+    if (!LEAD_STAGES[d.stage] || d.stage === "enrolled")
+      fail(400, "请通过转为正式学员操作转正");
+    lead.stage = d.stage;
+  }
+  if (d.trial_at !== undefined) lead.trial_at = d.trial_at ? instant(d.trial_at) : null;
+  if (lead.stage === "lost") lead.next_followup = row.next_followup = null;
+  await r.commitBusiness(
+    revision,
+    [
+      { resource: "leads", previous: old, data: lead },
+      { resource: "lead_followups", data: row },
+    ],
+    user,
+    "leads",
+    "followup",
+  );
+  return { id: row.id, lead_version: old.version + 1 };
+}
 export async function toolsApi(req, env, t, user, policy, path, url, readBody) {
 
   const r = repo(env, t.id);
@@ -377,6 +435,8 @@ export async function toolsApi(req, env, t, user, policy, path, url, readBody) {
       await r.commitBusiness(revision, added, user, "classes", "create");
     return { added: added.length };
   }
+  const followups = /^\/api\/tools\/leads\/([^/]+)\/followups$/.exec(path);
+  if (followups) return leadFollowupsApi(req, r, user, policy, followups[1], readBody);
   const m =
     /^\/api\/tools\/([a-z_]+)(?:\/([^/]+))?(?:\/(convert|contact))?$/.exec(
       path,

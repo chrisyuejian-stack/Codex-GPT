@@ -206,7 +206,7 @@ const tenantAuthenticatedApi = (path) =>
     "/api/imports/preview",
     "/api/imports/commit",
   ].includes(path) ||
-  /^\/api\/tools\/[a-z_]+(?:\/[^/]+)?(?:\/(convert|contact|members))?$/.test(
+  /^\/api\/tools\/[a-z_]+(?:\/[^/]+)?(?:\/(convert|contact|members|followups))?$/.test(
     path,
   ) ||
   [

@@ -1,6 +1,6 @@
 import { backupTables } from "./backup-model.js";
 import { b64, unb64, bytes, textBytes, sha, fail } from "./core.js";
-export const FULL_BACKUP_VERSION = 32;
+export const FULL_BACKUP_VERSION = 33;
 export const MAX_FULL_BACKUP_BYTES = 16 * 1024 * 1024;
 export const fullBackupTables = Object.fromEntries(
   Object.entries(backupTables).filter(
@@ -129,7 +129,7 @@ export async function validateFullPayload(payload, env, tenantId) {
   )
     fail(
       422,
-      "备份数据库版本不兼容，当前仅支持0032结构",
+      "备份数据库版本不兼容，当前仅支持0033结构",
       "backup_version_mismatch",
     );
   if (payload.tenant_id !== tenantId)
