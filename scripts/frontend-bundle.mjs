@@ -39,7 +39,8 @@ export async function tenantAssets() {
     .replace(/export (?=(?:async )?(?:function|const|class)\b)/g, "")
     .replaceAll("import.meta.url", "document.baseURI");
   return {
-    js: `globalThis.ChannelUISymbols=${JSON.stringify(symbols)};\n(()=>{${shared}\n${ui}\nglobalThis.ChannelUI={switch:switchControl, studentDisplay,personStatus,leadMoveAllowed,${exports.join(",")}};})();\n${calendar}\n${app}\n${await read("src/tenant/c2.js")}\n${await read("src/tenant/c3.js")}\n${await read("src/tenant/v2.js")}\n${await read("src/tenant/v2p.js")}\n${await read("src/tenant/v2t.js")}\n${await read("src/tenant/v2f.js")}\n${await read("src/tenant/v2s.js")}\n${await read("src/tenant/v2a.js")}\n${await read("src/tenant/v2m.js")}\n${await read("src/tenant/v2pay.js")}\n${await read("src/tenant/yx.js")}\n${await read("src/tenant/yx-settings.js")}\n${await read("src/tenant/yx-home.js")}\n${await read("src/tenant/yx-ai.js")}\n${await read("src/tenant/yx-growth.js")}\n${await read("src/tenant/fq-today.js")}\n${await read("src/tenant/fq-finance.js")}\n${await read("src/tenant/fq-student.js")}\n${await read("src/tenant/fq-teacher.js")}\n${await read("src/tenant/fq-backup.js")}\n${await read("src/tenant/fq-schedule.js")}`,
+    js: `globalThis.ChannelUISymbols=${JSON.stringify(symbols)};\n(()=>{${shared}\n${ui}\nglobalThis.ChannelUI={switch:switchControl, studentDisplay,personStatus,leadMoveAllowed,${exports.join(",")}};})();\n${calendar}\n${app}\n${await read("src/tenant/c2.js")}\n${await read("src/tenant/c3.js")}\n${await read("src/tenant/v2.js")}\n${await read("src/tenant/v2p.js")}\n${await read("src/tenant/v2t.js")}\n${await read("src/tenant/v2f.js")}\n${await read("src/tenant/v2s.js")}\n${await read("src/tenant/v2a.js")}\n${await read("src/tenant/v2m.js")}\n${await read("src/tenant/v2pay.js")}\n${await read("src/tenant/yx.js")}\n${await read("src/tenant/yx-settings.js")}\n${await read("src/tenant/yx-home.js")}\n${await read("src/tenant/yx-ai.js")}\n${await read("src/tenant/yx-growth.js")}\n${await read("src/tenant/fq-today.js")}\n${await read("src/tenant/fq-finance.js")}\n${await read("src/tenant/fq-student.js")}\n${await read("src/tenant/fq-teacher.js")}\n${await read("src/tenant/fq-backup.js")}\n${await read("src/tenant/fq-settings.js")}
+${await read("src/tenant/fq-schedule.js")}`,
     css:
       tokens +
       "\n" +
@@ -68,6 +69,8 @@ export async function tenantAssets() {
       (await read("src/tenant/fq-teacher.css")) +
       "\n" +
       (await read("src/tenant/fq-backup.css")) +
+      "\n" +
+      (await read("src/tenant/fq-settings.css")) +
       "\n" +
       (await read("src/tenant/fq-schedule.css")) +
       "\n" +

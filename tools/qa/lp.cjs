@@ -1,0 +1,2 @@
+const { chromium, devices } = require('playwright');
+(async()=>{const b=await chromium.launch(); const c=await b.newContext({...devices['iPhone 13']}); const p=await c.newPage(); const reqs=[]; p.on('request',r=>reqs.push(r.url().replace('http://localhost:4173',''))); await p.goto('http://localhost:4173/login'); await p.waitForLoadState('networkidle'); console.log(reqs); await p.screenshot({path:'login-phone.png'}); await b.close();})();
