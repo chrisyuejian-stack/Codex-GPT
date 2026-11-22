@@ -7,7 +7,7 @@
 | 类型 | 名称 | 说明 |
 |---|---|---|
 | Pages | `fengqin-crm-prod` | 站点，正式地址 https://edu.fantasmearts.com（腾讯云 DNS：`edu` CNAME → `fengqin-crm-prod.pages.dev`）；`pages.dev` 地址因 APP_HOST 限制返回 404 |
-| D1 | `fengqin-crm-prod`（f4eaf652-ce6d-4098-909b-0f6563dbfd31，APAC） | 已执行迁移 0001–0032 |
+| D1 | `fengqin-crm-prod`（f4eaf652-ce6d-4098-909b-0f6563dbfd31，APAC） | 已执行迁移 0001–0033 |
 | R2 | `fengqin-media-prod`、`fengqin-backups-prod` | 私有 |
 | Worker | `fengqin-backup-prod` | 定时备份，cron `0 19 * * *`、`*/5 * * * *`，无公开地址 |
 
@@ -62,3 +62,4 @@ D1 没有 `d1_migrations` 表，迁移是逐个文件手动执行的；新增迁
 | 2026-11-20 11:46 | e9dd0bc | 手机端提速（字体/登录图延迟加载、老师学员首屏预取） |
 | 2026-11-20 11:50 | e9dd0bc | 自定义域名切到 `edu.fantasmearts.com`，APP_HOST 同步修改并重新部署 |
 | 2026-11-20 13:47 | 新提交 | 新增自定义域 `origin.fantasmearts.com`（DNSPod CNAME → pages.dev，供 EdgeOne 回源，始终不改）；设置 `ORIGIN_HOST=origin.fantasmearts.com`；Smart Placement 已开启 |
+| 2026-11-22 13:2x | 本提交 | **第三期上线**：学员/课表/线索/老师/设置重做、线索回访、学员手机尾号搜索、机构信息编辑。生产 D1 执行迁移 0033（Time Travel 回滚书签 `000002a0-00000000-0000512b-199329542096b945854722f0de15e299`，表数 83→84）；重新部署 Pages 与备份 Worker（版本 `739eabbe`，备份版本 32→33，首次定时运行成功）。注意：0032 及更早生成的全量备份不能再恢复，须上线后导出一次新的全量备份（主管在「设置 › 数据备份」操作） |
