@@ -575,6 +575,8 @@
 
   // ---------- 机构与品牌 ----------
   const MAX_LOGO = 180000; // 与后端品牌图片规则一致（data URL 字符数）
+  const MAX_LOGIN_BG = 300000; // 登录背景 data URL 上限（对应压缩后 ≤200KB）
+  const MAX_LOGIN_BG_BYTES = 200 * 1024;
   function readImage(file) {
     return new Promise((resolve, reject) => {
       const fr = new FileReader();
@@ -604,6 +606,39 @@
     }
     throw Error("图片压缩后仍太大，请换一张更小的 Logo");
   }
+  async function loginBgData(file) {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw Error("登录背景图只支持 PNG、JPEG、WebP");
+    const img = await readImage(file);
+    const tries = [
+      ["image/webp", 0.85],
+      ["image/webp", 0.76],
+      ["image/webp", 0.66],
+      ["image/jpeg", 0.84],
+      ["image/jpeg", 0.74],
+      ["image/jpeg", 0.64],
+      ["image/jpeg", 0.52],
+    ];
+    for (const edge of [1600, 1440, 1280, 1024, 800]) {
+      const k = Math.min(1, edge / Math.max(img.naturalWidth, img.naturalHeight));
+      const cv = document.createElement("canvas");
+      cv.width = Math.max(1, Math.round(img.naturalWidth * k));
+      cv.height = Math.max(1, Math.round(img.naturalHeight * k));
+      const ctx = cv.getContext("2d");
+      ctx.fillStyle = "#2a1f3e";
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      for (const [type, q] of tries) {
+        const url = cv.toDataURL(type, q);
+        if (!url.startsWith("data:" + type)) continue;
+        const payload = url.slice(url.indexOf(",") + 1);
+        const pad = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+        const bytes = Math.floor((payload.length * 3) / 4) - pad;
+        if (url.length <= MAX_LOGIN_BG && bytes <= MAX_LOGIN_BG_BYTES)
+          return { url, width: cv.width, height: cv.height, bytes };
+      }
+    }
+    throw Error("图片压缩后仍超过 200KB，请换一张更简洁或更小的图片");
+  }
   function logoMark(src, name) {
     return src ? n("img", null, { src, alt: "机构 Logo", class: "fq-se-logo is-img" }) : n("span", Array.from(name || "枫")[0], { class: "fq-se-logo" });
   }
@@ -614,7 +649,7 @@
     const two = n("div", null, { class: "fq-se-two" });
     const info = await safe(api("settings/institution"));
     stats.inst = info || stats.inst;
-    const preview = { name: info?.name || brand.display_name, logo: info?.logo, contact: info?.contact_text || "", color: info?.primary_color || "#6A35B8" };
+    const preview = { name: info?.name || brand.display_name, logo: info?.logo, contact: info?.contact_text || "", color: info?.primary_color || "#6A35B8", loginBg: info?.login_bg_url || null };
     // 机构信息（DECISIONS 14：主管可直接编辑）
     const card = panel("机构信息", info?.editable ? "单机构部署，主管直接在这里改。" : "只有机构主管可以修改。", info?.editable ? [btn("编辑", () => editInstitution(info), "is-sm")] : null);
     const body = n("div", null, { class: "fq-se-pb" });
@@ -639,11 +674,107 @@
     if (typeof yxsBrandEditor === "function") await yxsBrandEditor(colorBody, institutionAgain);
     two.append(card, color);
     main.append(two);
+    // 登录页背景图（任务 #10：电脑与手机端登录页共用，仅主管可上传/恢复默认）
+    const bgPanel = panel(
+      "登录页背景图",
+      info?.editable
+        ? "电脑端与手机端登录页共用；支持 PNG / JPEG / WebP，上传时自动压缩至长边 ≤1600px、≤200KB。"
+        : "当前登录页背景状态；只有机构主管可以更换或恢复默认。",
+    );
+    const bgBody = n("div", null, { class: "fq-se-pb fq-se-bg-wrap" });
+    const bgPrev = n("div", null, { class: preview.loginBg ? "fq-se-bg-preview is-custom" : "fq-se-bg-preview" });
+    if (preview.loginBg)
+      bgPrev.append(n("img", null, { src: preview.loginBg, alt: "登录页背景预览", class: "fq-se-bg-img" }));
+    bgPrev.append(n("span", preview.loginBg ? "自定义背景图" : "系统默认背景", { class: "fq-se-bg-badge" }));
+    const bgMeta = n("div", null, { class: "fq-se-bg-meta" });
+    bgMeta.append(
+      n("strong", preview.loginBg ? "已使用自定义登录背景图" : "当前使用系统默认背景图"),
+      n("p", "电脑端与手机端登录页都会显示此背景图；建议上传横图，系统会自动缩放至长边 ≤1600px 并压缩到 200KB 以内以保证首屏加载速度。"),
+    );
+    const bgStatus = n("small", "", { class: "fq-se-bg-status" });
+    bgMeta.append(bgStatus);
+    if (info?.editable) {
+      const acts = n("div", null, { class: "fq-se-bg-acts" });
+      const fileInput = n("input", null, {
+        type: "file",
+        accept: "image/png,image/jpeg,image/webp",
+        class: "fq-se-bg-input",
+        "aria-label": "上传登录页背景图",
+      });
+      const saveBg = async (nextBg, okText) => {
+        try {
+          await api("settings/institution", "PATCH", { version: info.version, login_bg: nextBg });
+        } catch (e) {
+          if (e.status === 409) {
+            notice("机构信息刚被别人改过，已刷新，请重新操作。", "error");
+            institutionAgain();
+            return false;
+          }
+          throw e;
+        }
+        try {
+          localStorage.removeItem("fq_brand_v1");
+        } catch {}
+        notice(okText, "success");
+        institutionAgain();
+        return true;
+      };
+      const uploadBtn = btn("上传背景图", () => fileInput.click(), "is-primary is-sm");
+      const resetBtn = btn(
+        "恢复默认",
+        async () => {
+          const yes = await UI.confirmDialog({
+            title: "恢复默认登录背景",
+            message: "将清除当前自定义背景图，电脑端和手机端登录页都恢复为系统默认背景。",
+            confirmLabel: "恢复默认",
+          });
+          if (!yes) return;
+          uploadBtn.disabled = true;
+          resetBtn.disabled = true;
+          bgStatus.textContent = "正在恢复默认背景…";
+          try {
+            await saveBg(null, "登录页背景已恢复默认");
+          } catch (e) {
+            notice(e.message || "恢复默认失败", "error");
+            bgStatus.textContent = "";
+            uploadBtn.disabled = false;
+            resetBtn.disabled = !info.has_login_bg;
+          }
+        },
+        "is-sm",
+      );
+      resetBtn.disabled = !info.has_login_bg;
+      fileInput.addEventListener("change", async () => {
+        const picked = fileInput.files?.[0];
+        if (!picked) return;
+        uploadBtn.disabled = true;
+        resetBtn.disabled = true;
+        bgStatus.textContent = "正在压缩图片…";
+        try {
+          const out = await loginBgData(picked);
+          const kb = Math.max(1, Math.round(out.bytes / 1024));
+          bgStatus.textContent = `已压缩为 ${out.width}×${out.height}（约 ${kb} KB），正在保存…`;
+          await saveBg(out.url, `登录页背景已更新（${out.width}×${out.height}，约 ${kb} KB）`);
+        } catch (e) {
+          notice(e.message || "上传登录页背景失败", "error");
+          bgStatus.textContent = "";
+          fileInput.value = "";
+          uploadBtn.disabled = false;
+          resetBtn.disabled = !info.has_login_bg;
+        }
+      });
+      acts.append(fileInput, uploadBtn, resetBtn);
+      bgMeta.append(acts);
+    }
+    bgBody.append(bgPrev, bgMeta);
+    bgPanel.append(bgBody);
+    main.append(bgPanel);
     // 效果预览：主色改动即时反映（保存前）
     const pv = panel("效果预览", "按当前内容预览；保存后学员、老师下次打开即生效。");
     const grid = n("div", null, { class: "fq-se-previews fq-se-pb" });
-    const login = n("div", null, { class: "fq-se-pv-box fq-se-pv-login" }),
+    const login = n("div", null, { class: preview.loginBg ? "fq-se-pv-box fq-se-pv-login is-custom" : "fq-se-pv-box fq-se-pv-login" }),
       loginCard = n("div");
+    if (preview.loginBg) login.append(n("img", null, { src: preview.loginBg, alt: "", class: "fq-se-pv-bg" }));
     loginCard.append(logoMark(preview.logo, preview.name), n("b", preview.name || "枫琴教务中心"), n("i"), n("i"), n("i", null, { class: "is-btn" }));
     login.append(loginCard);
     const sched = n("div", null, { class: "fq-se-pv-box fq-se-pv-sched" }),

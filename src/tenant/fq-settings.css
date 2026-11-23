@@ -600,3 +600,79 @@ html .fq-se-table td:first-child { white-space: normal; }
 html .fq-se-acts .ui-button { min-height: 28px; height: 28px; padding: 0 8px; font-size: 13px; }
 html .fq-se-acts .ui-button svg { display: none; }
 html .fq-se-cat footer { gap: 6px; }
+/* 登录页背景图卡片（任务 #10） */
+html .fq-se-bg-wrap {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+html .fq-se-bg-preview {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--fq-line);
+  background:
+    linear-gradient(90deg, rgba(42, 31, 62, 0.9) 0%, rgba(42, 31, 62, 0.72) 45%, rgba(42, 31, 62, 0.32) 100%),
+    var(--fq-login-photo, none) right center / cover no-repeat,
+    var(--fq-ink);
+}
+html .fq-se-bg-preview.is-custom {
+  background: var(--fq-ink);
+}
+html .fq-se-bg-preview.is-custom::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(42, 31, 62, 0.78) 0%, rgba(42, 31, 62, 0.42) 55%, rgba(42, 31, 62, 0.18) 100%);
+}
+html .fq-se-bg-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+html .fq-se-bg-badge {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 1;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(24, 17, 37, 0.72);
+  color: #f7f1e8;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+html .fq-se-bg-meta { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+html .fq-se-bg-meta strong { font-size: 14.5px; color: var(--fq-ink); }
+html .fq-se-bg-meta p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--fq-sub); }
+html .fq-se-bg-status { font-size: 12px; color: var(--fq-violet-dark); min-height: 18px; }
+html .fq-se-bg-status:empty { display: none; }
+html .fq-se-bg-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; }
+html .fq-se-bg-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+  pointer-events: none;
+}
+html .fq-se-pv-login.is-custom { background: var(--fq-ink); }
+html .fq-se-pv-login .fq-se-pv-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.72;
+}
+html .fq-se-pv-login > div { position: relative; z-index: 1; }
+@media (max-width: 760px) {
+  html .fq-se-bg-wrap { grid-template-columns: 1fr; gap: 12px; }
+}

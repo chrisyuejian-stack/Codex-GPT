@@ -11,12 +11,26 @@ function yxInput(form, label, name, type, attrs = {}) {
   return input;
 }
 
-// 左侧钢琴照片 + 系统名；右侧放表单。登录页和初始化页共用。
+// 左侧背景照片 + 系统名；右侧放表单。登录页和初始化页共用。
 function fqAuthLayout() {
   root.replaceChildren();
   const page = el("div", null, { class: "fq-login" }),
-    side = el("section", null, { class: "fq-login-side" }),
+    customBg = brand?.login_bg_url || brand?.login_bg || null,
+    side = el("section", null, { class: customBg ? "fq-login-side is-custom-bg" : "fq-login-side" }),
     titleBox = el("div");
+  if (customBg) {
+    side.append(
+      el("img", null, { src: customBg, alt: "", class: "fq-login-bg", decoding: "async", "aria-hidden": "true" }),
+    );
+  } else if (typeof fqLoadDeferredCss === "function") {
+    // 无自定义背景图时，手机端在首屏渲染完成后延迟加载默认背景，避免纯深色且不阻塞首屏。
+    const loadDefaultBg = () => {
+      if (navigator.connection?.saveData === true) return;
+      fqLoadDeferredCss();
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(loadDefaultBg, 0));
+    else setTimeout(loadDefaultBg, 0);
+  }
   titleBox.append(
     el("p", "MUSIC & PERFORMING ARTS", { class: "fq-login-kicker" }),
     el("h1", "枫琴教务中心"),
