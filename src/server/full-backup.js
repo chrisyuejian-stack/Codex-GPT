@@ -12,6 +12,7 @@ import {
   passwordSeal,
   passwordOpen,
   validateFullPayload,
+  normalizeFullBackupFormats,
 } from "./full-backup-format.js";
 export const fullBackupPath = (path) =>
   /^\/api\/backups(?:\/(?:export|restore\/preview|restore\/[^/]+\/confirm|[^/]+\/download))?$/.test(
@@ -324,6 +325,7 @@ export async function fullBackupApi(req, env, resolved, user) {
     checkPassword(d.password);
     const payload = await passwordOpen(d.file, d.password);
     const summary = await validateFullPayload(payload, env, tenantId);
+    normalizeFullBackupFormats(payload);
     await r.validateFullReferences(payload);
     const current_counts = await r.currentFullCounts();
     const comparison = Object.fromEntries(
@@ -397,6 +399,7 @@ export async function fullBackupApi(req, env, resolved, user) {
       if ((await sha(JSON.stringify(payload))) !== job.document_hash)
         fail(400, "恢复预览校验失败", "invalid_backup");
       await validateFullPayload(payload, env, tenantId);
+      normalizeFullBackupFormats(payload);
       await r.validateFullReferences(payload);
       if (payload.missing_media?.length && d.allow_missing_media !== true)
         fail(

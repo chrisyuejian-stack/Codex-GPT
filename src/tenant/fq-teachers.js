@@ -424,7 +424,7 @@
       for (const r of current) {
         const line = n("div", null, { class: "fq-tp-rate" });
         line.append(
-          n("span", (r.course_name || "全部课程") + (r.format === "group" && !/班/.test(r.course_name || "") ? " · 小班" : "") + " · 按" + (me.labels.rate_units?.[r.rate_basis] || "节")),
+          n("span", (r.course_name || "全部课程") + ((r.format === "group" || r.format === "class") && !/班/.test(r.course_name || "") ? " · 班课" : "") + " · 按" + (me.labels.rate_units?.[r.rate_basis] || "节")),
           n("strong", F.money(r.rate) + " / " + (me.labels.rate_units?.[r.rate_basis] || "节")),
         );
         box.append(line);

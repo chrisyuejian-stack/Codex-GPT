@@ -1035,7 +1035,7 @@
       for (const r of current) {
         const lineR = n("div", null, { class: "v-rate" });
         lineR.append(
-          n("span", (r.course_name || "全部课程") + (r.format === "group" && !/班/.test(r.course_name || "") ? " · 小班" : "") + " · 按节"),
+          n("span", (r.course_name || "全部课程") + ((r.format === "group" || r.format === "class") && !/班/.test(r.course_name || "") ? " · 班课" : "") + " · 按节"),
           n("strong", F.money(r.rate) + " / 节"),
         );
         box.append(lineR);
@@ -1125,7 +1125,7 @@
           const line = n("div", null, { class: "v-rate-row" + (live(r) ? "" : " is-old") });
           line.append(
             n("span", r.course_name || "全部课程", { class: "v-rate-course" }),
-            n("span", { individual: "一对一", group: "小班", class: "集训班" }[r.format] || "", { class: "v-muted" }),
+            n("span", { individual: "一对一", group: "班课", class: "班课" }[r.format] || "", { class: "v-muted" }),
             n("strong", F.money(r.rate) + " / " + (me.labels.rate_units?.[r.rate_basis] || "课时")),
             n("span", span(r), { class: "v-muted" }),
           );

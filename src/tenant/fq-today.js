@@ -122,7 +122,7 @@
   };
   const lessonTitle = (r) => {
     const p = r.participants_summary || { count: 0, names: [] };
-    if (p.count > 1) return r.course_name + " · " + (p.class_name ? p.class_name + " " : "小班 ") + p.count + " 人";
+    if (p.count > 1) return r.course_name + " · " + (p.class_name ? p.class_name + " " : "班课 ") + p.count + " 人";
     return r.course_name + " · " + (p.names[0] || "暂无学员");
   };
   const lessonWhere = (r) => [r.teacher_name ? r.teacher_name + "老师" : "", r.location_name || ""].filter(Boolean).join(" · ");
