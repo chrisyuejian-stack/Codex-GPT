@@ -846,6 +846,7 @@ html .fq-se-pre {
   html .fq-se-table td { white-space: normal; word-break: break-word; }
   html .fq-se-table td > * { max-width: 100%; }
   html .fq-se-pf { flex-wrap: wrap; }
+}
 
 /* 登录页背景图卡片（任务 #10） */
 html .fq-se-bg-wrap {
