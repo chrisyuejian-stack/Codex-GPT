@@ -3,7 +3,7 @@ import { matchesDebtScope } from "./debt.js";
 import { withStudentSearchKeys } from "./student-search.js";
 import { quantityIn } from "./numbers.js";
 import { repo } from "./repo.js";
-import { fail, string, integer, randomId, version, now, phone } from "./core.js";
+import { fail, string, integer, randomId, version, now, phone, normalizeFormat } from "./core.js";
 import { can } from "./permissions.js";
 import { requireCan } from "./accounts.js";
 import { encrypt, decrypt } from "./crypto.js";
@@ -243,9 +243,10 @@ async function normalize(env, tenantId, r, resource, d, old) {
     if (resource === "course_types") {
       row.category_id = d.category_id ?? old?.category_id;
       await reference(r, "course_categories", row.category_id);
-      row.format = d.format ?? old?.format ?? "individual";
-      if (!["individual", "group", "class"].includes(row.format))
-        fail(400, "授课形式不正确");
+      row.format = normalizeFormat(
+        d.format ?? old?.format ?? "individual",
+        "授课形式",
+      );
       row.default_minutes = unitMinutes(
         d.default_minutes ?? old?.default_minutes ?? 45,
       );
@@ -345,9 +346,10 @@ async function normalize(env, tenantId, r, resource, d, old) {
       row.start_at = start.slice(0, 16) + "+08:00";
       row.status = old?.status || "planned";
       row.teacher_paid = old?.teacher_paid ?? 0;
-      row.format = d.format ?? old?.format ?? course.format;
-      if (!["individual", "group", "class"].includes(row.format))
-        fail(400, "课程形式不正确");
+      row.format = normalizeFormat(
+        d.format ?? old?.format ?? course.format,
+        "课程形式",
+      );
       row.template_id = old?.template_id || null;
       row.occurrence_date = old?.occurrence_date || null;
       if (d.package_id !== undefined)
@@ -446,7 +448,7 @@ async function validateParticipants(r, row, input, previous = []) {
     fail(400, "参与记录格式不正确");
   const studentIds = ids(list.map((x) => x.student_id));
   const type = await reference(r, "course_types", row.course_type_id);
-  if (type.format === "individual" && list.length !== 1)
+  if (normalizeFormat(type.format) === "individual" && list.length !== 1)
     fail(400, "一对一课程只能选择一名学员");
   if (list.length > type.capacity) fail(400, "超过课程人数上限");
   if (row.location_id) {
@@ -563,7 +565,10 @@ function applyStudentSummaries(items, user, rows) {
       names: participants
         .slice(
           0,
-          participants[0]?.format === "individual" ? participants.length : 3,
+          participants[0]?.format &&
+          normalizeFormat(participants[0].format) === "individual"
+            ? participants.length
+            : 3,
         )
         .map((p) => p.name),
       class_name: user.roles.includes("student")

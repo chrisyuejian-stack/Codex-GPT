@@ -424,7 +424,7 @@
       for (const r of current) {
         const line = n("div", null, { class: "fq-tp-rate" });
         line.append(
-          n("span", (r.course_name || "全部课程") + (r.format === "group" && !/班/.test(r.course_name || "") ? " · 小班" : "") + " · 按" + (me.labels.rate_units?.[r.rate_basis] || "节")),
+          n("span", (r.course_name || "全部课程") + ((r.format === "group" || r.format === "class") && !/班/.test(r.course_name || "") ? " · 班课" : "") + " · 按" + (me.labels.rate_units?.[r.rate_basis] || "节")),
           n("strong", F.money(r.rate) + " / " + (me.labels.rate_units?.[r.rate_basis] || "节")),
         );
         box.append(line);
@@ -599,13 +599,119 @@
     setTimeout(() => name.focus(), 0);
   }
 
-  // ---------- 课酬标准分页：沿用 v2p.js ratesPage，外面套新样式 ----------
+  // ---------- 课酬标准分页（按 design/redesign/teachers/rates-desk.html） ----------
   const ratesOriginal = pageHooks.rates;
+  const rState = { q: "", all: false };
+  const FORMAT_LABEL = { individual: "一对一", group: "小班", class: "集训班" };
   async function ratesPage(c) {
+    if (!c?.isConnected) return;
     c.classList.add("fq-teachers", "fq-tp-ratespage");
-    await ratesOriginal(c);
-    const live = c.querySelectorAll(".v-rate-row:not(.is-old)").length;
-    vHead?.sub("按老师分组 · " + (c.querySelector(".v-rate-row.is-old") ? "显示 " + c.querySelectorAll(".v-rate-row").length + " 条" : "当前生效 " + live + " 条"));
+    c.dataset.page = "teachers-rates";
+    const rates = await api("finance/rates").then((d) => d.items || []);
+    const again = () => ratesPage(c);
+    const today = todayBJ();
+    const isOpen = (d) => !d || d >= "2099-01-01";
+    const isStart = (d) => !d || d <= "1901-01-01";
+    const spanText = (r) =>
+      isStart(r.effective_from) && isOpen(r.effective_to)
+        ? "长期"
+        : (isStart(r.effective_from) ? "" : r.effective_from + " 起") +
+          (isOpen(r.effective_to) ? (isStart(r.effective_from) ? "" : " · 长期") : " 至 " + r.effective_to);
+    const isLive = (r) => (isStart(r.effective_from) || r.effective_from <= today) && (isOpen(r.effective_to) || r.effective_to >= today);
+
+    vHead?.bar();
+    vHead?.actions();
+    const page = n("div", null, { class: "fq-tp-page" });
+    const toolbar = n("div", null, { class: "fq-tp-toolbar" });
+    const sb = n("label", null, { class: "fq-tp-search fq-tp-w220" });
+    const search = n("input", null, { type: "search", placeholder: "老师或课程", "aria-label": "搜索老师或课程", maxlength: "50" });
+    search.value = rState.q;
+    sb.append(icon(IC.search), search);
+    const seg = n("div", null, { class: "fq-tp-seg", role: "group", "aria-label": "范围" });
+    const segBtns = [];
+    for (const [val, label] of [[false, "当前生效"], [true, "全部（含已结束）"]]) {
+      const b = n("button", label, { type: "button", class: rState.all === val ? "is-on" : "", "aria-pressed": String(rState.all === val) });
+      b.addEventListener("click", () => {
+        if (rState.all === val) return;
+        rState.all = val;
+        for (const [x, xv] of segBtns) {
+          x.classList.toggle("is-on", xv === val);
+          x.setAttribute("aria-pressed", String(xv === val));
+        }
+        draw();
+      });
+      segBtns.push([b, val]);
+      seg.append(b);
+    }
+    toolbar.append(sb, seg, n("span", null, { class: "fq-tp-grow" }));
+    if (enabled("teacher_pay", "create")) toolbar.append(btn("新增课酬标准", () => financeRecordForm(sink(again), "rates"), "ink lg", "plus"));
+    const tip = n("p", "改价时新增一条并填生效日，从那天起按新价计算；已锁定的月份不受影响。", { class: "fq-tp-small fq-tp-muted fq-tp-nomt" });
+    const grid = n("div", null, { class: "fq-tp-rgrid" });
+    page.append(toolbar, tip, grid);
+    c.replaceChildren(page);
+
+    const draw = () => {
+      const q = rState.q.trim().toLowerCase();
+      const rows = rates.filter((r) => (rState.all || isLive(r)) && (!q || ((r.teacher_name || "") + " " + (r.course_name || "")).toLowerCase().includes(q)));
+      const liveCount = rows.filter(isLive).length;
+      vHead?.sub("按老师分组 · " + (rState.all ? "共 " + rows.length + " 条（当前生效 " + liveCount + " 条）" : "当前生效 " + rows.length + " 条"));
+      const byTeacher = new Map();
+      for (const r of rows) {
+        const key = r.teacher_id || r.teacher_name || "unknown";
+        if (!byTeacher.has(key)) byTeacher.set(key, []);
+        byTeacher.get(key).push(r);
+      }
+      grid.replaceChildren();
+      const groups = [...byTeacher.values()].sort((a, b) => String(a[0].teacher_name || "").localeCompare(String(b[0].teacher_name || ""), "zh-CN"));
+      for (const list of groups) {
+        const box = card();
+        const ph = n("div", null, { class: "fq-tp-ph" });
+        const row = n("div", null, { class: "fq-tp-row" });
+        row.append(avatar(list[0].teacher_name), n("h2", list[0].teacher_name || "未知老师"), n("span", list.length + " 条", { class: "fq-tp-muted fq-tp-small" }));
+        ph.append(row);
+        box.append(ph);
+        for (const r of list.sort((a, b) => String(a.course_name || "").localeCompare(String(b.course_name || ""), "zh-CN"))) {
+          const line = n("div", null, { class: cls("fq-tp-rrow", !isLive(r) && "is-old") });
+          const course = n("span", null, { class: "fq-tp-grow" });
+          course.append(n("strong", r.course_name || "全部课程"));
+          const fmt = FORMAT_LABEL[r.format];
+          if (fmt) course.append(" ", n("span", fmt, { class: "fq-tp-muted" }));
+          if (!isLive(r)) course.append(" ", pill("已结束", "line"));
+          const unit = me.labels?.rate_units?.[r.rate_basis] || "节";
+          line.append(course, n("b", F.money(r.rate) + " / " + unit), n("span", spanText(r), { class: "fq-tp-muted fq-tp-span" }));
+          const canUpdate = enabled("teacher_pay", "update");
+          const canDelete = enabled("teacher_pay", "delete");
+          if (canUpdate) line.append(link("修改", () => financeRecordForm(sink(again), "rates", r)));
+          const menuItems = [];
+          if (canUpdate) menuItems.push({ label: "修改标准", onSelect: () => financeRecordForm(sink(again), "rates", r) });
+          if (canDelete)
+            menuItems.push({
+              label: "删除",
+              danger: true,
+              onSelect: async () => {
+                if (!(await UI.confirm({ title: "删除这条课酬标准？", consequence: "已锁定月份的课酬不受影响；未锁定月份会按剩下的标准重算。", danger: true }))) return;
+                await api("finance/rates/" + r.id, "DELETE", { version: r.version });
+                await again();
+              },
+            });
+          if (menuItems.length) {
+            const m = UI.actionMenu({ label: "", items: menuItems });
+            m.trigger.classList.add("fq-tp-dots");
+            m.trigger.setAttribute("aria-label", "课酬标准操作");
+            m.trigger.replaceChildren(UI.icon("more"));
+            line.append(m.element);
+          }
+          box.append(line);
+        }
+        grid.append(box);
+      }
+      if (!groups.length) grid.append(n("div", q ? "没有匹配的课酬标准。" : "还没有设置课酬标准。", { class: "fq-tp-card fq-tp-pad fq-tp-muted fq-tp-rfull" }));
+    };
+    search.addEventListener("input", () => {
+      rState.q = search.value;
+      draw();
+    });
+    draw();
   }
 
   const previous = recordsPage;
@@ -614,5 +720,5 @@
     return teachersView(c);
   };
   if (typeof pageHooks !== "undefined" && ratesOriginal) pageHooks.rates = ratesPage;
-  globalThis.FQTeachers = { teachersView, editTeacher };
+  globalThis.FQTeachers = { teachersView, editTeacher, ratesPage };
 })();

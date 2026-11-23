@@ -4,7 +4,7 @@ import { packageStatus, stageStatus } from "../shared/view.js";
 import { effectivePolicies } from "./absence.js";
 import { moneyIn, moneyOut, quantityIn, multiplyCents } from "./numbers.js";
 import { repo } from "./repo.js";
-import { fail, randomId, version, integer, string, sha, now } from "./core.js";
+import { fail, randomId, version, integer, string, sha, now, normalizeFormat } from "./core.js";
 import { can, projectRecord } from "./permissions.js";
 import { requireCan } from "./accounts.js";
 import { day, prepareMakeupLesson, conflicts } from "./scheduling.js";
@@ -844,7 +844,7 @@ async function execute(req, env, tenant, user, policy, path, url, readBody) {
     });
     const type = await owned(r, "course_types", targetLesson.course_type_id);
     if (
-      (type.format === "individual" && targetParts.length) ||
+      (normalizeFormat(type.format) === "individual" && targetParts.length) ||
       targetParts.length + 1 > type.capacity
     )
       fail(400, "超过课程容量");

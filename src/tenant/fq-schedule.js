@@ -48,7 +48,7 @@
   };
   const title = (r) => {
     const p = r.participants_summary || { count: 0, names: [] };
-    return r.course_name + " · " + (p.count > 1 ? (p.class_name ? p.class_name + " " : "小班 ") + p.count + " 人" : p.names[0] || "暂无学员");
+    return r.course_name + " · " + (p.count > 1 ? (p.class_name ? p.class_name + " " : "班课 ") + p.count + " 人" : p.names[0] || "暂无学员");
   };
   const where = (r) => [r.teacher_name ? r.teacher_name + "老师" : "", r.mode === "online" ? "线上课" : r.location_name || ""].filter(Boolean).join(" · ");
   const label = (r) => me.labels?.lessons?.[r.status] || "";
@@ -874,6 +874,588 @@
     return box;
   }
 
+  // ---------- 课程详情抽屉（按 design/redesign/schedule/lesson.html 重排，沿用 v2.js 写入与预览） ----------
+  const prevLessonDetail = typeof lessonDetail === "function" ? lessonDetail : null;
+  async function fqLessonDetail(c, row) {
+    if (!prevLessonDetail) return;
+    await prevLessonDetail(c, row);
+    const dialogs = document.querySelectorAll("dialog.v-lesson");
+    const dlg = dialogs[dialogs.length - 1];
+    if (!dlg) return;
+    dlg.classList.add("fq-sc-lesson-drawer", tone(row || {}, "teacher"));
+    const body = dlg.querySelector(".ui-sheet-body");
+    if (body) {
+      const top = body.querySelector(".v-lesson-top");
+      if (top && row?.template_id && !top.querySelector(".fq-sc-fixed-pill")) {
+        const d = dayOf(row.start_at);
+        const fp = n("span", "固定课" + (d ? " · 每" + wd(d) : ""), { class: "fq-pill is-info fq-sc-fixed-pill" });
+        top.append(fp);
+      }
+      // 把“学员出勤”头与出勤表包进白底卡片，与 lesson.html 一致。
+      const attHead = [...body.children].find((x) => x.classList?.contains("v-lesson-section") && !x.classList.contains("v-lesson-comments"));
+      const roster = body.querySelector(":scope > .v-roster");
+      if (attHead && roster && !attHead.closest(".fq-sc-dr-sec")) {
+        const card = n("section", null, { class: "fq-sc-dr-sec fq-sc-att-card" });
+        attHead.before(card);
+        card.append(attHead, roster);
+        const shortage = body.querySelector(":scope > .v-banner-bad");
+        if (shortage) card.append(shortage);
+      }
+      const comments = body.querySelector(":scope > .v-lesson-comments");
+      if (comments) comments.classList.add("fq-sc-dr-sec");
+      const summary = body.querySelector(":scope > .v-lesson-summary");
+      if (summary) summary.classList.add("fq-sc-dr-sec", "fq-sc-summary");
+    }
+    const foot = dlg.querySelector(".ui-sheet-foot");
+    if (foot) {
+      const moreBtn = foot.querySelector('.ui-menu-holder > button[aria-haspopup="menu"]');
+      if (moreBtn) {
+        moreBtn.classList.add("fq-sc-more-icon");
+        moreBtn.setAttribute("aria-label", "更多操作");
+        const face = moreBtn.querySelector(".ui-button-face");
+        if (face) face.replaceChildren(UI.icon("more"));
+      }
+    }
+  }
+
+  // ---------- 新建 / 编辑课程表单（按 design/redesign/schedule/new.html 重排，沿用 app.js 提交与实时冲突预查） ----------
+  const prevLessonForm = typeof lessonForm === "function" ? lessonForm : null;
+  async function fqLessonForm(c, row = {}) {
+    if (!prevLessonForm) return;
+    await prevLessonForm(c, row);
+    const dialogs = document.querySelectorAll("dialog.business-drawer");
+    const dlg = dialogs[dialogs.length - 1];
+    const form = dlg?.querySelector("form");
+    if (!dlg || !form || !form.elements.start_at || !form.elements.course_type_id) return;
+    dlg.classList.add("fq-sc-new-drawer");
+    if (!row.id && row.start_at && !dlg.querySelector(".fq-sc-form-sub")) {
+      const d = dayOf(row.start_at),
+        t = String(row.start_at).slice(11, 16);
+      const head = dlg.querySelector(".ui-sheet-head > div");
+      if (head && d && t) head.append(n("p", "已填入 " + d.slice(5) + " " + wd(d) + " " + t + "，可随时修改", { class: "fq-sc-form-sub" }));
+    }
+    const holderOf = (name) => {
+      const ctrl = form.elements[name];
+      return ctrl?.closest?.(".ui-field, .field") || ctrl?.parentElement || null;
+    };
+    const makeGroup = (titleText, icName, subText) => {
+      const fs = n("section", null, { class: "fq-sc-fs" });
+      const h = n("h3");
+      if (icName) h.append(UI.icon(icName));
+      h.append(titleText);
+      if (subText) h.append(n("small", subText));
+      fs.append(h);
+      return fs;
+    };
+    const gTime = makeGroup("时间", "clock");
+    const gCourse = makeGroup("课程与老师", "users");
+    const gPlace = makeGroup("地点", "calendar");
+    const gStudents = makeGroup("学员", "users");
+
+    const fStart = holderOf("start_at");
+    const fDur = holderOf("duration");
+    const fUnits = holderOf("units");
+    const fCourse = holderOf("course_type_id");
+    const fTeacher = holderOf("teacher_id");
+    const fAssist = holderOf("assistant_id");
+    const fMode = holderOf("mode");
+    const fRoom = holderOf("location_id");
+    const fNotes = holderOf("notes");
+    const picker = form.querySelector(".v-spick");
+    const live = form.querySelector(".v-live-check");
+    const conflictNotice = form.querySelector(".v-conflict-error");
+    const forceBox = form.querySelector(".v-force-row");
+    const foot = form.querySelector(".v-form-foot");
+
+    if (fStart) {
+      fStart.classList.add("fq-sc-fwide");
+      gTime.append(fStart);
+    }
+    if (fDur) {
+      fDur.classList.add("fq-sc-fhalf");
+      const durInput = form.elements.duration;
+      if (durInput) {
+        const opts = durInput.tagName === "SELECT"
+          ? [...durInput.options].map((o) => o.value).filter(Boolean)
+          : ["45", "60", "90", "120"];
+        if (durInput.tagName === "SELECT") fDur.classList.add("fq-sc-modefield");
+        const quick = n("div", null, { class: "fq-sc-seg is-sm fq-sc-durseg", role: "group", "aria-label": "常用时长" });
+        const syncQuick = () => {
+          for (const b of quick.children) b.setAttribute("aria-pressed", String(b.dataset.min === String(durInput.value)));
+        };
+        for (const m of opts) {
+          const b = n("button", String(m), { type: "button", "data-min": String(m), "aria-pressed": String(String(durInput.value) === String(m)) });
+          b.addEventListener("click", () => {
+            durInput.value = String(m);
+            durInput.dispatchEvent(new Event("input", { bubbles: true }));
+            durInput.dispatchEvent(new Event("change", { bubbles: true }));
+            syncQuick();
+          });
+          quick.append(b);
+        }
+        durInput.addEventListener("input", syncQuick);
+        durInput.addEventListener("change", syncQuick);
+        fDur.append(quick);
+      }
+      gTime.append(fDur);
+    }
+    if (fUnits) {
+      fUnits.classList.add("fq-sc-fhalf");
+      gTime.append(fUnits);
+    }
+    if (fCourse) {
+      fCourse.classList.add("fq-sc-fwide");
+      gCourse.append(fCourse);
+    }
+    if (fTeacher) {
+      fTeacher.classList.add("fq-sc-fhalf");
+      gCourse.append(fTeacher);
+    }
+    if (fAssist) {
+      fAssist.classList.add("fq-sc-fhalf");
+      gCourse.append(fAssist);
+    }
+    if (fMode) {
+      fMode.classList.add("fq-sc-fhalf", "fq-sc-modefield");
+      const modeSel = form.elements.mode;
+      if (modeSel?.tagName === "SELECT") {
+        const mSeg = n("div", null, { class: "fq-sc-seg is-fill", role: "group", "aria-label": "上课方式" });
+        const paintMode = () => {
+          for (const b of mSeg.children) b.setAttribute("aria-pressed", String(b.dataset.val === modeSel.value));
+        };
+        for (const [val, txt] of [["offline", "线下"], ["online", "线上"]]) {
+          const b = n("button", txt, { type: "button", "data-val": val, "aria-pressed": String(modeSel.value === val) });
+          b.addEventListener("click", () => {
+            modeSel.value = val;
+            modeSel.dispatchEvent(new Event("change", { bubbles: true }));
+            paintMode();
+          });
+          mSeg.append(b);
+        }
+        modeSel.addEventListener("change", paintMode);
+        fMode.append(mSeg);
+      }
+      gPlace.append(fMode);
+    }
+    if (fRoom) {
+      fRoom.classList.add("fq-sc-fhalf");
+      gPlace.append(fRoom);
+    }
+    if (picker) {
+      picker.classList.add("fq-sc-fwide");
+      gStudents.append(picker);
+    }
+    const rest = [...form.children].filter((x) => ![gTime, gCourse, gPlace, gStudents, fNotes, live, conflictNotice, forceBox, foot].includes(x) && !x.classList?.contains("v-fgroup"));
+    form.classList.add("fq-sc-form");
+    form.replaceChildren(
+      ...[gTime, gCourse, gPlace, picker && gStudents, fNotes, ...rest, live, conflictNotice, forceBox, foot].filter(Boolean),
+    );
+  }
+
+  // ---------- 固定排课看板与「未生成」提醒（按 design/redesign/schedule/fixed.html） ----------
+  const prevTemplatesPage = typeof templatesPage === "function" ? templatesPage : null;
+  const FState = { view: "board", teacher: "", inactive: true, phoneDay: (new Date(todayBJ() + "T12:00:00Z").getUTCDay() + 6) % 7 };
+  const FIXED_WD = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+  const isOpenEnd = (d) => !d || d >= "2099-01-01";
+  const isOpenStart = (d) => !d || d <= "1901-01-01";
+  const fixedUntil = (d) => (isOpenEnd(d) ? "长期" : "至 " + String(d).slice(5));
+  const fixedSpan = (from, to) =>
+    (isOpenStart(from) ? "" : from + " 起") + (isOpenEnd(to) ? (isOpenStart(from) ? "长期" : " · 长期") : " 至 " + to);
+  const fixedEnd = (start, dur) => {
+    const [h, m] = String(start || "09:00").split(":").map(Number);
+    const total = h * 60 + m + (Number(dur) || 0);
+    return pad(Math.floor(total / 60) % 24) + ":" + pad(total % 60);
+  };
+
+  async function runGenerate(c) {
+    if (!prevTemplatesPage) return;
+    const box = n("div");
+    await prevTemplatesPage(box);
+    const genBtn = [...box.querySelectorAll("button")].find((x) => x.textContent.trim().includes("生成未来课程"));
+    if (genBtn) {
+      new MutationObserver((_, o) => {
+        o.disconnect();
+        void fqTemplatesPage(c);
+      }).observe(box, { childList: true });
+      genBtn.click();
+    }
+  }
+
+  async function addFixedEnrollees(r, who, reopen) {
+    const students = await globalThis.ChannelRebuild.take("data/students");
+    const chosen = new Set(who.map((e) => e.student_id));
+    const list = students.filter((s) => s.status === "active" && !chosen.has(s.id));
+    const pick = new Set();
+    const view = UI.drawer({
+      title: "给这节固定课加学员",
+      subtitle: FIXED_WD[r.weekday] + " " + r.start_time + " · " + (r.course_name || "未设置课程"),
+      secondary: { label: "取消", onSelect: (v) => v.close() },
+      primary: {
+        label: "确定加入",
+        onSelect: async (v) => {
+          if (!pick.size) throw Error("请至少选一位学员");
+          const from = fromIn.value || todayBJ();
+          const to = toIn.value || "2099-12-31";
+          for (const sid of pick) await api("data/schedule_enrollments", "POST", { template_id: r.id, student_id: sid, date_from: from, date_to: to });
+          notice("已加入 " + pick.size + " 位学员", "success");
+          await v.close();
+          await reopen();
+        },
+      },
+    });
+    const fromIn = n("input", null, { type: "date", value: todayBJ(), class: "fq-sc-input" });
+    const toIn = n("input", null, { type: "date", value: "", class: "fq-sc-input" });
+    const dates = n("div", null, { class: "fq-sc-fs" });
+    const f1 = n("label", null, { class: "fq-sc-fld is-half" });
+    f1.append(n("span", "开始日期"), fromIn);
+    const f2 = n("label", null, { class: "fq-sc-fld is-half" });
+    f2.append(n("span", "结束日期（留空为长期）"), toIn);
+    dates.append(f1, f2);
+    const qIn = n("input", null, { type: "search", placeholder: "搜索学员姓名", class: "fq-sc-input", "aria-label": "搜索学员" });
+    const itemsBox = n("div", null, { class: "fq-sc-picklist" });
+    const draw = () => {
+      const q = qIn.value.trim().toLowerCase();
+      itemsBox.replaceChildren();
+      for (const s of list.filter((x) => !q || String(x.name).toLowerCase().includes(q))) {
+        const lb = n("label", null, { class: "fq-sc-pickrow" });
+        const cb = n("input", null, { type: "checkbox" });
+        cb.checked = pick.has(s.id);
+        cb.addEventListener("change", () => (cb.checked ? pick.add(s.id) : pick.delete(s.id)));
+        lb.append(cb, n("span", s.name));
+        itemsBox.append(lb);
+      }
+      if (!itemsBox.childElementCount) itemsBox.append(n("p", "没有可添加的在读学员。", { class: "fq-sc-hint" }));
+    };
+    qIn.addEventListener("input", draw);
+    draw();
+    view.body.append(dates, qIn, itemsBox);
+  }
+
+  async function openTemplateDetail(c, r, who, again) {
+    const P = () => globalThis.ChannelV2People;
+    const R = () => globalThis.ChannelRebuild;
+    const view = UI.drawer({
+      title: FIXED_WD[r.weekday] + " " + r.start_time + "–" + fixedEnd(r.start_time, r.duration) + " · " + (r.course_name || "未设置课程"),
+      subtitle: (r.teacher_name || "未设老师") + " · " + (r.location_name || (r.mode === "online" ? "线上" : "未定教室")) + " · " + fixedSpan(r.date_from, r.date_to),
+    });
+    const reopen = async () => {
+      await again();
+      const [rows, enrollments] = await Promise.all([R().take("data/schedule_templates"), R().take("data/schedule_enrollments")]);
+      const fresh = rows.find((x) => x.id === r.id);
+      if (fresh) await openTemplateDetail(c, fresh, enrollments.filter((e) => e.template_id === r.id), again);
+    };
+    const sec = n("section", null, { class: "fq-sc-dr-sec" });
+    const sh = n("div", null, { class: "fq-sc-dr-h" });
+    sh.append(n("h3", r.class_id ? "按班级名单生成" : "报名学员 · " + who.length + " 人"));
+    if (!r.class_id && enabled("templates", "create")) {
+      sh.append(
+        act("＋ 加学员", async () => {
+          await view.close();
+          await addFixedEnrollees(r, who, reopen);
+        }, "sm"),
+      );
+    }
+    sec.append(sh);
+    if (!r.class_id) {
+      if (!who.length) sec.append(n("p", "还没有学员。点「＋ 加学员」登记谁固定上这节课、从哪天开始。", { class: "fq-sc-hint" }));
+      for (const e of who.slice().sort((a, b) => String(a.student_name).localeCompare(String(b.student_name), "zh-CN"))) {
+        const line = n("div", null, { class: "fq-sc-enr" });
+        const info = n("div", null, { class: "fq-sc-rwho" });
+        const stuLink = link(e.student_name || "学员", async () => {
+          await view.close();
+          R().goStudent(e.student_id);
+        });
+        info.append(stuLink, n("small", fixedSpan(e.date_from, e.date_to)));
+        const acts = n("span", null, { class: "fq-sc-enr-acts" });
+        if (enabled("templates", "update"))
+          acts.append(
+            link("改日期", async () => {
+              await view.close();
+              recordForm(P().sink(reopen), "schedule_enrollments", e);
+            }),
+          );
+        if (enabled("templates", "delete"))
+          acts.append(
+            link("退出", async () => {
+              if (!(await UI.confirm({ title: e.student_name + " 退出这节固定课？", consequence: "已经生成的课程不受影响；之后再生成时不再带上这位学员。", danger: true }))) return;
+              await api("data/schedule_enrollments/" + e.id, "DELETE", { version: e.version });
+              await view.close();
+              await reopen();
+            }),
+          );
+        line.append(info, acts);
+        sec.append(line);
+      }
+    } else sec.append(n("p", "这节固定课关联了班级，生成时读取班级当前名单。", { class: "fq-sc-hint" }));
+    view.body.append(sec);
+    if (enabled("templates", "update"))
+      view.footer.append(
+        act(
+          "修改时间与老师",
+          async () => {
+            await view.close();
+            recordForm(P().sink(again), "schedule_templates", r);
+          },
+          "ink",
+        ),
+      );
+    if (enabled("templates", "delete"))
+      view.footer.append(
+        act(
+          "删除",
+          async () => {
+            if (!(await UI.confirm({ title: "删除这个固定排课？", consequence: "有关联课程或报名时服务器会拒绝，可改为停用。", danger: true }))) return;
+            await api("data/schedule_templates/" + r.id, "DELETE", { version: r.version });
+            await view.close();
+            await again();
+          },
+          "red",
+        ),
+      );
+  }
+
+  async function fqTemplatesPage(c) {
+    if (!c?.isConnected || c.closest?.(".ui-sheet")) return prevTemplatesPage?.(c);
+    const R = () => globalThis.ChannelRebuild;
+    const P = () => globalThis.ChannelV2People;
+    const today = todayBJ();
+    const horizon = dateShift(today, 90);
+    const [rows, enrollments, futureLessons] = await Promise.all([
+      R().take("data/schedule_templates"),
+      R().take("data/schedule_enrollments"),
+      enabled("schedule") ? api("schedule?from=" + today + "&to=" + horizon).then((d) => d.items || []).catch(() => []) : [],
+    ]);
+    if (!c.isConnected) return;
+    c.dataset.page = "schedule-templates";
+    vHead?.sub("每周固定课 · 按有效期与报名名单批量生成");
+    const again = () => fqTemplatesPage(c);
+    const activeRows = rows.filter((r) => r.active !== 0);
+    const studentCount = new Set(enrollments.map((e) => e.student_id)).size;
+    const in60 = dateShift(today, 60);
+    const expiringCount = activeRows.filter((r) => !isOpenEnd(r.date_to) && r.date_to >= today && r.date_to <= in60).length;
+    const generatedDates = futureLessons.filter((l) => l.template_id && l.status !== "cancelled").map((l) => dayOf(l.start_at)).sort();
+    const latestGen = generatedDates[generatedDates.length - 1] || "";
+    const warnCut = dateShift(today, 30);
+    const needsGen = activeRows.length > 0 && (!latestGen || latestGen < warnCut);
+    const nextGenStart = latestGen ? dateShift(latestGen, 1) : today;
+    const nextMonthNum = Number(nextGenStart.slice(5, 7));
+
+    const teachers = [...new Map(rows.filter((r) => r.teacher_id).map((r) => [r.teacher_id, r.teacher_name || "未设老师"])).entries()]
+      .sort((a, b) => String(a[1]).localeCompare(String(b[1]), "zh-CN"));
+
+    const filtered = () =>
+      rows.filter(
+        (r) =>
+          (FState.inactive || r.active !== 0) &&
+          (!FState.teacher || r.teacher_id === FState.teacher),
+      );
+
+    const makeCard = (r) => {
+      const who = enrollments.filter((e) => e.template_id === r.id);
+      const art = n("article", null, { class: cls("fq-sc-tp", tone(r, "teacher"), r.active === 0 && "is-off"), tabindex: "0", role: "button" });
+      const stuText = r.class_id
+        ? (r.class_name || "班级") + "（班级名单）"
+        : who.length === 1
+          ? "1 位学员 · " + (who[0].student_name || "")
+          : who.length + " 位学员";
+      const foot = n("span", null, { class: "fq-sc-tp-foot" });
+      foot.append(n("span", stuText), n("span", r.active === 0 ? "已停用" : fixedUntil(r.date_to)));
+      art.append(
+        n("span", r.start_time + "–" + fixedEnd(r.start_time, r.duration), { class: "fq-sc-tp-time" }),
+        n("b", r.course_name || "未设置课程"),
+        n("span", (r.teacher_name || "未设老师") + " · " + (r.mode === "online" ? "线上" : r.location_name || "未定教室"), { class: "fq-sc-tp-sub" }),
+        foot,
+      );
+      art.title = who.map((e) => e.student_name).join("、");
+      const open = () => openTemplateDetail(c, r, who, again);
+      art.addEventListener("click", open);
+      art.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          void open();
+        }
+      });
+      return art;
+    };
+
+    const draw = () => {
+      const shown = filtered();
+      const todayWd = (new Date(today + "T12:00:00Z").getUTCDay() + 6) % 7;
+      // 电脑工具条
+      const bar = n("span", null, { class: "fq-sc-desk-only fq-sc-bar" });
+      bar.append(
+        seg(
+          [
+            ["board", "看板"],
+            ["list", "列表"],
+          ],
+          FState.view,
+          (v) => {
+            FState.view = v;
+            draw();
+          },
+        ),
+      );
+      const tSel = n("select", null, { class: "fq-sc-sel", "aria-label": "按老师筛选" });
+      options(
+        tSel,
+        teachers.map(([value, label]) => ({ value, label })),
+        "全部老师",
+        FState.teacher,
+      );
+      tSel.addEventListener("change", () => {
+        FState.teacher = tSel.value;
+        draw();
+      });
+      const sSel = n("select", null, { class: "fq-sc-sel", "aria-label": "停用筛选" });
+      sSel.append(n("option", "含已停用", { value: "all" }), n("option", "仅启用", { value: "active" }));
+      sSel.value = FState.inactive ? "all" : "active";
+      sSel.addEventListener("change", () => {
+        FState.inactive = sSel.value === "all";
+        draw();
+      });
+      bar.append(tSel, sSel);
+      vHead?.bar(isPhone() ? null : bar);
+
+      const acts = n("span", null, { class: "fq-sc-desk-only fq-sc-acts" });
+      if (enabled("templates", "create")) {
+        acts.append(
+          act("固定排课", () => recordForm(P().sink(again), "schedule_templates"), "", "plus"),
+          act("生成未来课程", () => runGenerate(c), "ink", "calendar"),
+        );
+      }
+      vHead?.actions(isPhone() ? null : acts);
+
+      const root = n("div", null, { class: "fq-today fq-sc fq-sc-fixed" });
+
+      // 电脑视图
+      const desk = n("div", null, { class: "fq-sc-desk-only fq-sc-stack" });
+      const top = n("div", null, { class: "fq-sc-fixtop" });
+      const sum = n("div", null, { class: "fq-card fq-sc-fixsum" });
+      sum.append(
+        n("b", activeRows.length + " 个每周固定课"),
+        n(
+          "span",
+          [
+            studentCount + " 位学员报名",
+            expiringCount ? expiringCount + " 个 60 天内到期" : "",
+            latestGen ? "已生成到 " + latestGen.slice(5) : "尚未生成未来课程",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        ),
+      );
+      top.append(sum);
+      if (needsGen && enabled("templates", "create")) {
+        const alert = n("div", null, { class: "fq-sc-alert is-amber", role: "status" });
+        const ic = n("span", null, { class: "fq-sc-alert-ic", "aria-hidden": "true" });
+        ic.append(UI.icon("calendar"));
+        const txt = n("div");
+        txt.append(
+          n("b", nextMonthNum + " 月课程还没生成"),
+          n("span", "按固定课和报名名单生成 " + nextGenStart.slice(5) + " 起的课程，先预览冲突再写入。"),
+        );
+        alert.append(ic, txt, act("生成未来课程", () => runGenerate(c), "sm ink"));
+        top.append(alert);
+      }
+      desk.append(top);
+
+      if (!rows.length) {
+        desk.append(
+          UI.empty({
+            text: "固定排课用于按有效期与报名名单批量生成未来课程。",
+            action: enabled("templates", "create") ? { label: "新建固定排课", onSelect: () => recordForm(P().sink(again), "schedule_templates") } : null,
+          }),
+        );
+      } else if (FState.view === "list") {
+        const listCard = n("section", null, { class: "fq-card fq-sc-flist" });
+        const sorted = shown.slice().sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
+        for (const r of sorted) {
+          const who = enrollments.filter((e) => e.template_id === r.id);
+          const item = n("button", null, { type: "button", class: cls("fq-sc-flrow", tone(r, "teacher"), r.active === 0 && "is-off") });
+          item.append(
+            n("span", FIXED_WD[r.weekday] + " " + r.start_time + "–" + fixedEnd(r.start_time, r.duration), { class: "fq-sc-tp-time" }),
+            n("b", r.course_name || "未设置课程"),
+            n("span", (r.teacher_name || "未设老师") + " · " + (r.mode === "online" ? "线上" : r.location_name || "未定教室"), { class: "fq-sc-tp-sub" }),
+            n("span", r.class_id ? "班级名单" : who.length + " 位学员", { class: "fq-sc-tp-sub" }),
+            n("span", r.active === 0 ? "已停用" : fixedUntil(r.date_to), { class: "fq-sc-tp-sub" }),
+          );
+          item.addEventListener("click", () => openTemplateDetail(c, r, who, again));
+          listCard.append(item);
+        }
+        if (!sorted.length) listCard.append(n("p", "没有符合筛选条件的固定排课。", { class: "fq-sc-foot" }));
+        desk.append(listCard);
+      } else {
+        const board = n("div", null, { class: "fq-sc-board" });
+        for (let i = 0; i < 7; i++) {
+          const col = n("section", null, { class: cls("fq-sc-bcol", i === todayWd && "is-on") });
+          const list = shown.filter((r) => r.weekday === i).sort((a, b) => a.start_time.localeCompare(b.start_time));
+          const h = n("header");
+          h.append(n("h3", FIXED_WD[i]), n("span", String(list.length)));
+          col.append(h);
+          for (const r of list) col.append(makeCard(r));
+          if (enabled("templates", "create")) {
+            const addBtn = n("button", "＋ 在" + FIXED_WD[i] + "添加", { type: "button", class: "fq-sc-badd" });
+            addBtn.addEventListener("click", () => recordForm(P().sink(again), "schedule_templates", { weekday: i }));
+            col.append(addBtn);
+          }
+          board.append(col);
+        }
+        desk.append(board);
+      }
+
+      // 手机视图
+      const phone = n("div", null, { class: "fq-sc-phone-only fq-sc-phone" });
+      if (enabled("templates", "create")) {
+        const prow = n("div", null, { class: "fq-sc-phone-row" });
+        prow.append(
+          act("＋ 固定排课", () => recordForm(P().sink(again), "schedule_templates")),
+          act("生成未来课程", () => runGenerate(c), "ink grow"),
+        );
+        phone.append(prow);
+      }
+      if (needsGen && enabled("templates", "create")) {
+        const pa = n("div", null, { class: "fq-sc-alert is-amber is-phone", role: "status" });
+        const txt = n("div");
+        txt.append(n("b", nextMonthNum + " 月课程还没生成"), n("span", "生成 " + nextGenStart.slice(5) + " 起的课程，先预览再写入。"));
+        pa.append(txt);
+        phone.append(pa);
+      }
+      const chips = n("div", null, { class: "fq-sc-chiprow", role: "tablist", "aria-label": "星期" });
+      for (let i = 0; i < 7; i++) {
+        const cnt = shown.filter((r) => r.weekday === i).length;
+        const b = n("button", FIXED_WD[i] + " ", { type: "button", class: "fq-sc-chip", "aria-pressed": String(FState.phoneDay === i) });
+        b.append(n("b", String(cnt)));
+        b.addEventListener("click", () => {
+          FState.phoneDay = i;
+          draw();
+        });
+        chips.append(b);
+      }
+      phone.append(
+        chips,
+        n("p", "共 " + activeRows.length + " 个每周固定课 · " + studentCount + " 位学员" + (latestGen ? " · 已生成到 " + latestGen.slice(5) : ""), { class: "fq-sc-hint" }),
+      );
+      const dayList = n("div", null, { class: "fq-sc-tplist" });
+      const dayRows = shown.filter((r) => r.weekday === FState.phoneDay).sort((a, b) => a.start_time.localeCompare(b.start_time));
+      for (const r of dayRows) dayList.append(makeCard(r));
+      if (!dayRows.length) dayList.append(n("p", FIXED_WD[FState.phoneDay] + "没有固定排课。", { class: "fq-sc-hint" }));
+      if (enabled("templates", "create")) {
+        const addBtn = n("button", "＋ 在" + FIXED_WD[FState.phoneDay] + "添加", { type: "button", class: "fq-sc-badd" });
+        addBtn.addEventListener("click", () => recordForm(P().sink(again), "schedule_templates", { weekday: FState.phoneDay }));
+        dayList.append(addBtn);
+      }
+      phone.append(dayList);
+
+      root.append(desk, phone);
+      c.replaceChildren(root);
+    };
+    draw();
+  }
+
   schedulePage = (c) => schedule(c);
-  globalThis.FengqinSchedule = { schedule, conflicts };
+  if (prevLessonDetail) lessonDetail = fqLessonDetail;
+  if (prevLessonForm) lessonForm = fqLessonForm;
+  if (prevTemplatesPage) templatesPage = fqTemplatesPage;
+  globalThis.FengqinSchedule = { schedule, conflicts, lessonDetail: fqLessonDetail, lessonForm: fqLessonForm, templatesPage: fqTemplatesPage };
 })();

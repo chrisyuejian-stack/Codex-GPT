@@ -624,8 +624,8 @@ function mark() {
     : el("span", brandInitial(), { class: "logo fallback" });
 }
 async function login() {
-  // 艺界星途登录页（根地址 / 机构路径两种），见 yx.js；下面是原渠道版登录页，保留备查。
-  if (globalThis.yxLoginPage) return yxLoginPage();
+  // 枫琴教务中心登录页，见 yx.js；下面是原渠道版登录页，保留备查。
+  if (typeof yxLoginPage === "function") return yxLoginPage();
   root.replaceChildren();
   const layout = el("section", null, { class: "login-layout" }),
     hero = el("div", null, { class: "hero" });
@@ -1845,13 +1845,18 @@ function profile(c) {
     button("我的登录设备", () => devices()),
   );
 }
-// 品牌字体与登录页大图在单独的样式文件里，脚本一开始就挂上，不挡首屏渲染（字体到了再换上）。
-// 手机（窄屏）或开了省流量时不加载：英文小标题改用系统衬线斜体，登录页顶部只显示深紫底色、不显示照片。
+function fqLoadDeferredCss() {
+  try {
+    const deferred = document.querySelector('meta[name="fq-deferred-css"]')?.content;
+    if (deferred && !document.querySelector('link[data-fq-deferred]'))
+      document.head.append(el("link", null, { rel: "stylesheet", href: deferred, "data-fq-deferred": "" }));
+  } catch {}
+}
+// 品牌字体与登录页大图在单独的样式文件里，电脑端脚本一开始就挂上，不挡首屏渲染（字体到了再换上）。
+// 手机（窄屏）或开了省流量时不主动加载；无自定义登录背景图时，由登录页首屏渲染后再延迟加载默认照片。
 try {
-  const deferred = document.querySelector('meta[name="fq-deferred-css"]')?.content;
   const lean = globalThis.matchMedia?.("(max-width: 760px)").matches || navigator.connection?.saveData === true;
-  if (deferred && !lean && !document.querySelector('link[data-fq-deferred]'))
-    document.head.append(el("link", null, { rel: "stylesheet", href: deferred, "data-fq-deferred": "" }));
+  if (!lean) fqLoadDeferredCss();
 } catch {}
 // PWA：注册 /sw.js（缓存带版本号的静态文件与页面外壳，接口不缓存）。只在 https 或本机预览下注册，失败不影响使用。
 try {
@@ -2474,9 +2479,8 @@ async function recordForm(c, resource, row = {}) {
     select("所属大类", "category_id", await choices("course_categories"));
     select("形式", "format", [
       { id: "individual", name: "一对一" },
-      { id: "group", name: "小组课" },
-      { id: "class", name: "班课" },
-    ]).value = row.format || "individual";
+      { id: "group", name: "班课" },
+    ]).value = row.format === "class" ? "group" : row.format || "individual";
     const defaultMins = select(
       "单课时时长（分钟）",
       "default_minutes",

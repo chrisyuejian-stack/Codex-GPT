@@ -441,3 +441,9 @@ html .fq-st .fq-st-link { min-height: 0; min-width: 0; height: auto; line-height
   html .fq-st-hero .fq-st-link { font-size: 12px; }
 }
 html .fq-st-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: #ebe4da; }
+html .fq-st-pk-left b.bad { color: var(--fq-red); }
+html .fq-st-extra[hidden] { display: none; }
+html .fq-st-pk-ops { align-items: center; }
+html .fq-st-pk-ops .ui-menu-holder { display: inline-flex; }
+html .fq-st-pk-ops .ui-button.fq-st-morebtn { min-width: 28px; min-height: 28px; height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--fq-line); background: var(--fq-card-solid); color: var(--fq-text); font-size: 13px; }
+html .fq-st-fold .fq-st-link { font-size: 12px; }
