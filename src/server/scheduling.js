@@ -51,15 +51,59 @@ function time(value) {
 }
 const minute = (value) =>
   Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-const units = (value) => {
-  const result = quantityIn(value, { max: 100 });
-  if (result < 1) fail(400, "每节课至少 1 课时");
-  return result;
-};
-function duration(value) {
+export function unitMinutes(value) {
   if (![30, 45, 60].includes(value))
-    fail(400, "课程时长只能为 30、45 或 60 分钟");
+    fail(422, "单课时时长只能为 30、45 或 60 分钟");
   return value;
+}
+export function units(value) {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0.5 ||
+    value > 100 ||
+    Math.abs(value * 2 - Math.round(value * 2)) >= 1e-9
+  )
+    fail(422, "课时数须为 0.5 的整数倍，且至少 0.5 课时");
+  return Math.round(value * 2) / 2;
+}
+export function totalDuration(unitMins, lessonUnits) {
+  return Math.round(unitMinutes(unitMins) * units(lessonUnits));
+}
+export function resolveScheduleDuration(d, old, course) {
+  const lessonUnits = units(d.units ?? old?.units ?? course.units_per_lesson);
+  const fallbackUnit = [30, 45, 60].includes(old?.unit_minutes)
+    ? old.unit_minutes
+    : [30, 45, 60].includes(old?.duration) && (old?.units ?? 1) === 1
+      ? old.duration
+      : old?.units > 0 && [30, 45, 60].includes(Math.round(old.duration / old.units))
+        ? Math.round(old.duration / old.units)
+        : course.default_minutes;
+  let unitMins;
+  if (d.unit_minutes !== undefined && d.unit_minutes !== null) {
+    unitMins = unitMinutes(d.unit_minutes);
+  } else if (d.duration !== undefined) {
+    if (
+      [30, 45, 60].includes(old?.unit_minutes) &&
+      d.duration === Math.round(old.unit_minutes * lessonUnits)
+    ) {
+      unitMins = old.unit_minutes;
+    } else if ([30, 45, 60].includes(d.duration)) {
+      unitMins = d.duration;
+    } else {
+      const matched = [30, 45, 60].find(
+        (u) => Math.round(u * lessonUnits) === d.duration,
+      );
+      unitMins = matched !== undefined ? matched : unitMinutes(d.duration);
+    }
+  } else {
+    unitMins = unitMinutes(fallbackUnit);
+  }
+  return {
+    unit_minutes: unitMins,
+    units: lessonUnits,
+    duration: totalDuration(unitMins, lessonUnits),
+  };
 }
 function boolean(value, defaultValue = 1) {
   if (value === undefined) return defaultValue;
@@ -203,7 +247,7 @@ async function normalize(env, tenantId, r, resource, d, old) {
         d.format ?? old?.format ?? "individual",
         "授课形式",
       );
-      row.default_minutes = duration(
+      row.default_minutes = unitMinutes(
         d.default_minutes ?? old?.default_minutes ?? 45,
       );
       row.units_per_lesson = units(
@@ -285,10 +329,10 @@ async function normalize(env, tenantId, r, resource, d, old) {
     if (!["offline", "online"].includes(row.mode)) fail(400, "上课方式不正确");
     if (row.mode === "online") row.location_id = null;
     else await reference(r, "locations", row.location_id);
-    row.duration = duration(
-      d.duration ?? old?.duration ?? course.default_minutes,
-    );
-    row.units = units(d.units ?? old?.units ?? course.units_per_lesson);
+    const resolved = resolveScheduleDuration(d, old, course);
+    row.unit_minutes = resolved.unit_minutes;
+    row.units = resolved.units;
+    row.duration = resolved.duration;
     row.note = text("note", 2000);
     if (resource === "lessons") {
       const start = d.start_at ?? old?.start_at;
@@ -436,6 +480,7 @@ function dto(user, resource, row) {
             "id",
             "start_at",
             "duration",
+            "unit_minutes",
             "units",
             "teacher_id",
             "assistant_id",
@@ -998,6 +1043,8 @@ async function generateTemplatesOnce(req, env, tenant, user, policy, data) {
       items: extra.map((l) => ({
         start_at: l.start_at,
         duration: l.duration,
+        unit_minutes: l.unit_minutes,
+        units: l.units,
         teacher_id: l.teacher_id,
         course_type_id: l.course_type_id,
         location_id: l.location_id,

@@ -4690,6 +4690,13 @@ aside.v-rg-side {
 .v-live-check ul { margin: 0; padding-left: 18px; }
 .v-live-check.is-stale { opacity: .55; }
 .v-live-check { transition: opacity .15s ease; }
+.v-unit-step { display: inline-flex; align-items: stretch; gap: 6px; width: 100%; }
+.v-unit-step > input { flex: 1 1 auto; min-width: 0; text-align: center; }
+.v-unit-step-btn { flex: 0 0 36px; height: 36px; border: 1px solid var(--ui-border, #d8d3e0); border-radius: 8px; background: var(--ui-surface, #fff); color: var(--ui-text, #1e1a26); font-size: 16px; font-weight: 600; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+@media (hover: hover) { .v-unit-step-btn:hover { background: var(--ui-surface-2, #f5f3f8); } }
+.v-unit-step-btn:disabled { opacity: .45; cursor: not-allowed; }
+.v-dur-preview { margin: 4px 0 0; font-size: 12.5px; color: var(--ui-muted, #6b6378); line-height: 1.5; }
+.v-dur-preview.is-bad { color: var(--ui-error, #b91c1c); }
 .v-mkp-verdict.is-stale, .v-mkp-fixes.is-stale { opacity: .55; transition: opacity .15s ease; }
 .v-mkp-verdict, .v-mkp-fixes { transition: opacity .15s ease; }
 /* 二级菜单：选中横线滑动（只用 transform）。横线基准宽 100px，按选中项宽度缩放。 */

@@ -141,7 +141,7 @@ test("修复：INTEGER分迁移、0.1+0.2精确合计、金额和课时小数限
         units: 0.0001,
         student_ids: s.students,
       }),
-      400,
+      422,
     );
     await check(
       await mutate(s, "credits/adjust", {
@@ -1162,7 +1162,7 @@ test("第四阶段：未来标准日期调整不改变锁月；财务引用阻�
     f.restore();
   }
 });
-test("第四阶段补充：新课程、模板及默认值限30/45/60分钟且至少1课时，改排和SQL不能绕过", async () => {
+test("第四阶段补充（更新至0035）：单课时时长限30/45/60分钟、课时数按0.5步进且至少0.5课时，改排和SQL不能绕过", async () => {
   const f = await fixture();
   try {
     const s = { ...(await setup(f, 1)), f };
@@ -1170,15 +1170,16 @@ test("第四阶段补充：新课程、模板及默认值限30/45/60分钟且至
       teacher_id: s.teacher,
       course_type_id: s.type,
       location_id: s.room,
-      duration: 45,
+      unit_minutes: 45,
       units: 1,
       student_ids: s.students,
     };
     for (const invalid of [
-      { duration: 15 },
-      { duration: 90 },
-      { units: 0.5 },
-      { units: 0.9999 },
+      { unit_minutes: 15 },
+      { unit_minutes: 90 },
+      { units: 0.3 },
+      { units: 1.01 },
+      { units: 0.25 },
     ]) {
       await check(
         await s.call("data/lessons", "POST", {
@@ -1186,7 +1187,7 @@ test("第四阶段补充：新课程、模板及默认值限30/45/60分钟且至
           start_at: "2026-11-23T09:00",
           ...invalid,
         }),
-        400,
+        422,
       );
       await check(
         await s.call("data/schedule_templates", "POST", {
@@ -1194,12 +1195,14 @@ test("第四阶段补充：新课程、模板及默认值限30/45/60分钟且至
           name: "固定课",
           weekday: 1,
           start_time: "09:00",
+          date_from: "2026-11-01",
+          date_to: "2026-11-30",
           ...invalid,
         }),
-        400,
+        422,
       );
-      const courseInvalid = invalid.duration
-        ? { default_minutes: invalid.duration }
+      const courseInvalid = invalid.unit_minutes
+        ? { default_minutes: invalid.unit_minutes }
         : { units_per_lesson: invalid.units };
       await check(
         await s.call("data/course_types", "POST", {
@@ -1207,37 +1210,40 @@ test("第四阶段补充：新课程、模板及默认值限30/45/60分钟且至
           category_id: s.cat,
           ...courseInvalid,
         }),
-        400,
+        422,
       );
     }
-    for (const [i, duration] of [30, 45, 60].entries()) {
+    for (const [i, unitMins] of [30, 45, 60].entries()) {
       const created = await check(
         await s.call("data/lessons", "POST", {
           ...base,
-          duration,
-          units: 1.25,
+          unit_minutes: unitMins,
+          units: 1.5,
           start_at: `2026-11-${23 + i}T09:00`,
         }),
       );
       const row = await details(s, created.id);
+      assert.equal(row.unit_minutes, unitMins);
+      assert.equal(row.units, 1.5);
+      assert.equal(row.duration, Math.round(unitMins * 1.5));
       await check(
         await s.call("data/lessons/" + created.id, "PATCH", {
           version: row.version,
-          duration: 90,
+          unit_minutes: 90,
         }),
-        400,
+        422,
       );
       await check(
         await s.call("data/lessons/" + created.id, "PATCH", {
           version: row.version,
-          units: 0.5,
+          units: 1.01,
         }),
-        400,
+        422,
       );
       assert.throws(
         () =>
           f.db.raw
-            .prepare("UPDATE lessons SET units=0.5 WHERE tenant_id=? AND id=?")
+            .prepare("UPDATE lessons SET units=0.3 WHERE tenant_id=? AND id=?")
             .run(s.t.id, created.id),
         /course_duration_or_units/,
       );
@@ -1245,7 +1251,7 @@ test("第四阶段补充：新课程、模板及默认值限30/45/60分钟且至
         () =>
           f.db.raw
             .prepare(
-              "UPDATE lessons SET duration=90 WHERE tenant_id=? AND id=?",
+              "UPDATE lessons SET unit_minutes=90 WHERE tenant_id=? AND id=?",
             )
             .run(s.t.id, created.id),
         /course_duration_or_units/,
@@ -1269,20 +1275,20 @@ test("第四阶段补充：新课程、模板及默认值限30/45/60分钟且至
         date_to: "2026-11-30",
       }),
     );
-    for (const bad of [{ duration: 90 }, { units: 0.5 }]) {
+    for (const bad of [{ unit_minutes: 90 }, { units: 0.3 }]) {
       await check(
         await s.call("data/schedule_templates/" + template.id, "PATCH", {
           version: 1,
           ...bad,
         }),
-        400,
+        422,
       );
     }
     assert.throws(
       () =>
         f.db.raw
           .prepare(
-            "UPDATE schedule_templates SET units=0.5 WHERE tenant_id=? AND id=?",
+            "UPDATE schedule_templates SET units=0.3 WHERE tenant_id=? AND id=?",
           )
           .run(s.t.id, template.id),
       /course_duration_or_units/,
@@ -1292,19 +1298,19 @@ test("第四阶段补充：新课程、模板及默认值限30/45/60分钟且至
         name: "30分钟课",
         category_id: s.cat,
         default_minutes: 30,
-        units_per_lesson: 1.25,
+        units_per_lesson: 1.5,
       }),
     );
-    for (const bad of [{ default_minutes: 90 }, { units_per_lesson: 0.5 }]) {
+    for (const bad of [{ default_minutes: 90 }, { units_per_lesson: 0.3 }]) {
       await check(
         await s.call("data/course_types/" + course.id, "PATCH", {
           version: 1,
           ...bad,
         }),
-        400,
+        422,
       );
     }
-    // Wallet quantities remain fractional: the minimum applies to each lesson, not balances.
+    // Wallet quantities remain fractional: the 0.5-step minimum applies to lessons, not balances.
     await pack(s, s.students[0], 1.25);
   } finally {
     f.restore();

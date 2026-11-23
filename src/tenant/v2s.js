@@ -550,7 +550,7 @@
         },
         { label: "大类", value: (r) => look.cats.find((x) => x.id === r.category_id)?.name || "—" },
         { label: "形式", value: (r) => FORMAT[r.format] || "—" },
-        { label: "每节时长", num: true, value: (r) => (r.default_minutes ? r.default_minutes + " 分钟" : "—") },
+        { label: "单课时时长", num: true, value: (r) => (r.default_minutes ? r.default_minutes + " 分钟" : "—") },
         { label: "每节扣课时", num: true, value: (r) => String(r.units_per_lesson ?? 1) },
         { label: "人数上限", num: true, value: (r) => String(r.capacity ?? "—") },
         { label: "状态", value: state },
