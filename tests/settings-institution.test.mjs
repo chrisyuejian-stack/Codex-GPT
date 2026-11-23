@@ -310,3 +310,55 @@ test("第三期设置页（fq-settings.js/.css）与登录页背景：无 HTML �
   assert.ok(js.includes('localStorage.removeItem("fq_brand_v1")'));
   assert.ok(js.includes("loginBgData"));
 });
+
+test("第三期设置未出稿三区（教务规则、AI 设置、操作记录）：统一 .fq-se-* 视觉体系、接口字段与权限禁用态完整对齐", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const js = await readFile("src/tenant/fq-settings.js", "utf8");
+  const css = await readFile("src/tenant/fq-settings.css", "utf8");
+
+  // 静态安全与样式约束：无内联 HTML、无原生弹窗、无外链字体、动效不含 height 且有减少动态兜底。
+  assert.doesNotMatch(js, /\.innerHTML\s*=|insertAdjacentHTML|document\.write/);
+  assert.ok(!/(?<![.\w])(?:alert|prompt|confirm)\(/.test(js));
+  assert.doesNotMatch(js + css, /fonts\.googleapis|cdn\.jsdelivr|unpkg\.com/);
+  assert.doesNotMatch(css, /transition(?:-property)?:[^;]*\bheight\b/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce/);
+
+  // 1. 教务规则：不再外包 c3Part("absence") / c3Part("view")，复用 .fq-se-sw，覆盖缺勤/欠课时/课表视图/续费提醒。
+  const rulesBlock = js.slice(js.indexOf("// ---------- 教务规则 ----------"), js.indexOf("// ---------- AI 设置 ----------"));
+  assert.doesNotMatch(rulesBlock, /c3Part\(/);
+  assert.match(rulesBlock, /toggleSwitch\(/);
+  for (const key of ["student_leave", "student_no_show", "teacher_leave", "cancelled"])
+    assert.ok(rulesBlock.includes('"' + key + '"'), key);
+  assert.match(rulesBlock, /api\("absence-policies", "PUT", \{ policies: draftAb \}\)/);
+  assert.match(rulesBlock, /api\("settings", "PUT", \{ key: "max_debt_units", value: numVal \}\)/);
+  assert.match(rulesBlock, /api\("settings", "PUT", \{ key: "default_schedule_view", value: v \}\)/);
+  // 课表默认视图值与后端 worker.js 校验严格一致（time/teacher/location/list）。
+  for (const v of ['["time", "按时间"]', '["teacher", "按教师"]', '["location", "按教室"]', '["list", "列表"]'])
+    assert.ok(rulesBlock.includes(v), v);
+  assert.match(rulesBlock, /api\("renewal-settings", "PUT", \{ low_balance_threshold: low, expiry_warning_days: days \}\)/);
+  assert.match(rulesBlock, /disabled: !editable/);
+
+  // 2. AI 设置：不再调用旧 yxAiUsagePage，支持 GET/PUT settings/ai（含版本冲突 409 与环境变量切换）、DEEPSEEK_API_KEY 说明与用量统计。
+  const aiBlock = js.slice(js.indexOf("// ---------- AI 设置 ----------"), js.indexOf("// ---------- 数据与备份 ----------"));
+  assert.doesNotMatch(aiBlock, /yxAiUsagePage\(/);
+  assert.match(aiBlock, /DEEPSEEK_API_KEY/);
+  assert.match(aiBlock, /api\("settings\/ai"\)/);
+  assert.match(aiBlock, /api\("settings\/ai", "PUT", payload\)/);
+  assert.match(aiBlock, /use_environment: useEnv/);
+  assert.match(aiBlock, /e\?\.status === 409/);
+  assert.match(aiBlock, /api\("ai\/usage\?date=" \+ encodeURIComponent\(usageDate\)\)/);
+  assert.match(aiBlock, /fq-se-prog/);
+  assert.match(aiBlock, /by_tool/);
+  assert.match(aiBlock, /by_user/);
+
+  // 3. 操作记录：不再调用旧 logsV，支持操作记录/登录记录切换、快捷动作/模块/操作人/日期/关键字筛选与抽屉明细。
+  const logsBlock = js.slice(js.indexOf("// ---------- 操作记录 ----------"), js.indexOf("const RENDER = {"));
+  assert.doesNotMatch(logsBlock, /logsV\(/);
+  assert.match(logsBlock, /"操作记录"/);
+  assert.match(logsBlock, /"登录记录"/);
+  assert.match(logsBlock, /if \(logState\.kind === "audit"\) for \(const k of \["module", "action"\]\) if \(logState\[k\]\) q\.set\(k, logState\[k\]\);/);
+  assert.match(logsBlock, /api\("logs\?" \+ q\)/);
+  assert.match(logsBlock, /UI\.drawer\(/);
+  assert.match(logsBlock, /before_json/);
+  assert.match(logsBlock, /after_json/);
+});
