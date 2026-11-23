@@ -342,28 +342,33 @@ function galleryDto(row, apiBase) {
   };
 }
 
-async function institutionDto(env, tenantId, row, user) {
+async function institutionDto(env, tenantId, row, user, base = "/") {
   const contact = await decrypt(env, row.contact_text, tenantId + ":contact");
+  const hasBg = Boolean(row.login_bg);
   return {
     version: row.version,
     name: row.display_name,
     logo: row.logo ?? null,
+    has_login_bg: hasBg,
+    login_bg_url: hasBg ? base + "api/public/brand/login-bg?v=" + row.version : null,
     contact_text: contact || null,
     primary_color: row.theme_color,
     editable: user.roles.includes("supervisor")
   };
 }
 
-// 品牌图片规则沿用原平台机构配置：压缩后的 PNG/JPEG/WebP data URL，不超过 180000 字符，并校验文件头。
-function brandImage(v) {
+// 品牌图片规则：压缩后的 PNG/JPEG/WebP data URL，并校验魔数头与体积上限。
+// Logo 默认 ≤180,000 字符；登录背景图允许压缩后 ≤200KB（Data URL ≤300,000 字符）。
+function brandImage(v, field = "logo", maxLen = 180000, maxBytes = null) {
   if (v == null || v === "") return null;
-  if (typeof v !== "string" || v.length > 180000 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v)) error("品牌图片须为压缩后的PNG/JPEG/WebP", "logo");
+  if (typeof v !== "string" || v.length > maxLen || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v)) error("品牌图片须为压缩后的PNG/JPEG/WebP", field);
   let bytes;
   try {
     bytes = Uint8Array.from(atob(v.split(",")[1]), c => c.charCodeAt(0));
   } catch {
-    error("图片编码不正确", "logo");
+    error("图片编码不正确", field);
   }
+  if (maxBytes !== null && bytes.length > maxBytes) error("图片体积超出限制", field);
   const type = /^data:image\/(png|jpeg|webp);/.exec(v)[1];
   const valid =
     type === "png"
@@ -371,7 +376,7 @@ function brandImage(v) {
       : type === "jpeg"
         ? bytes.length >= 4 && bytes[0] === 255 && bytes[1] === 216 && bytes.at(-2) === 255 && bytes.at(-1) === 217
         : bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
-  if (!valid) error("图片真实格式不正确", "logo");
+  if (!valid) error("图片真实格式不正确", field);
   return v;
 }
 
@@ -788,14 +793,14 @@ export async function toolSettingsApi(req, env, resolved, user, policy, url) {
     profile: "profile"
   }[resource.split("/")[0]];
 
-  // 第三期 · 设置（DECISIONS 14）：机构名称、Logo、联系说明，主管可直接修改。
+  // 第三期 · 设置（DECISIONS 14）+ 任务 #10：机构名称、Logo、联系说明、登录背景，仅主管可直接修改。
   if (resource === "institution") {
     allowed(user, policy, "read");
     if (req.method === "PATCH") {
       if (!user.roles.includes("supervisor")) fail(403, "只有机构主管可以修改机构信息", "forbidden");
       const d = await body(req), row = await r.brand();
-      if (Object.keys(d).some(k => ![ "version", "name", "logo", "contact_text" ].includes(k))) error("只能修改机构名称、Logo 和联系说明", "body");
-      if (version(d.version) !== row.version) conflict(await institutionDto(env, resolved.tenant.id, row, user));
+      if (Object.keys(d).some(k => ![ "version", "name", "logo", "contact_text", "login_bg" ].includes(k))) error("只能修改机构名称、Logo、联系说明和登录背景", "body");
+      if (version(d.version) !== row.version) conflict(await institutionDto(env, resolved.tenant.id, row, user, resolved.base));
       let contactEnc = row.contact_text ?? "";
       if (d.contact_text !== undefined) {
         const plain = d.contact_text === null ? "" : str(d.contact_text, "contact_text", 300, true);
@@ -803,17 +808,18 @@ export async function toolSettingsApi(req, env, resolved, user, policy, url) {
       }
       const next = {
         display_name: d.name === undefined ? row.display_name : str(d.name, "name", 100),
-        logo: d.logo === undefined ? row.logo ?? null : brandImage(d.logo),
+        logo: d.logo === undefined ? row.logo ?? null : brandImage(d.logo, "logo", 180000),
+        login_bg: d.login_bg === undefined ? row.login_bg ?? null : brandImage(d.login_bg, "login_bg", 300000, 200 * 1024),
         contact_text: contactEnc
       };
       try {
         await r.settingsInstitutionWrite(next, row, user);
       } catch (e) {
-        if (raced(e)) conflict(await institutionDto(env, resolved.tenant.id, await r.brand(), user));
+        if (raced(e)) conflict(await institutionDto(env, resolved.tenant.id, await r.brand(), user, resolved.base));
         throw e;
       }
     } else if (req.method !== "GET") fail(404, "不存在", "not_found");
-    return reply(await institutionDto(env, resolved.tenant.id, await r.brand(), user));
+    return reply(await institutionDto(env, resolved.tenant.id, await r.brand(), user, resolved.base));
   }
   if (resource === "brand") {
     allowed(user, policy, req.method === "GET" ? "read" : "write");
