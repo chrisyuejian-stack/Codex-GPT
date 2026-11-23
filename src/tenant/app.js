@@ -581,6 +581,13 @@ function submit(form, label, handler) {
     }, 300);
     form.querySelector(".form-error")?.remove();
     try {
+      for (const di of form.querySelectorAll(".ui-date-input, .ui-month-input")) {
+        di.dispatchEvent(new Event("blur"));
+        if (di.getAttribute("aria-invalid") === "true") {
+          di.focus();
+          throw Error(di.validationMessage || "请填写有效日期，例如 2026-11-22");
+        }
+      }
       await handler(Object.fromEntries(new FormData(form)));
     } catch (e) {
       const feedback = el("p", e.message, {

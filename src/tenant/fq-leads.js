@@ -756,21 +756,26 @@
       f.append(n("b", label), ...controls);
       return f;
     };
-    const nextDay = n("input", null, { type: "date", class: "fq-ld-input fq-ld-grow", "aria-label": "下次回访" });
-    nextDay.value = dateShift(today, 3);
+    const nextDay = UI.datePicker({
+      label: "下次回访",
+      value: dateShift(today, 3),
+      allowEmpty: true,
+      onChange: () => sync(),
+    });
+    nextDay.element.classList.add("ui-inner-pick", "fq-ld-grow");
     const quick = n("div", null, { class: "fq-ld-row" });
     const quickBtns = [];
     for (const [t, d] of [["明天", 1], ["3 天后", 3], ["下周", 7]]) {
       const b = n("button", t, { type: "button", class: "fq-ld-chip" });
       b.addEventListener("click", () => {
-        nextDay.value = dateShift(today, d);
+        nextDay.setValue(dateShift(today, d));
         sync();
       });
       quickBtns.push([b, d]);
       quick.append(b);
     }
     const nextRow = n("div", null, { class: "fq-ld-row is-wrap" });
-    nextRow.append(nextDay, quick);
+    nextRow.append(nextDay.element, quick);
     const trial = n("input", null, { type: "datetime-local", class: "fq-ld-input", "aria-label": "试听时间" });
     trial.value = (lead.trial_at || dateShift(today, 2) + "T10:00").slice(0, 16);
     const note = n("textarea", null, { class: "fq-ld-input is-area", rows: "3", maxlength: "1900", placeholder: "家长关心什么、聊到哪、下一步做什么", "aria-label": "沟通内容" });
@@ -781,7 +786,6 @@
       nextF.hidden = result === "trial" || result === "lost";
       for (const [b, d] of quickBtns) b.classList.toggle("is-on", nextDay.value === dateShift(today, d));
     };
-    nextDay.addEventListener("input", sync);
     const foot = n("div", null, { class: "fq-ld-row is-end" });
     if (onCancel) foot.append(btn("取消", onCancel));
     const save = n("button", "保存回访", { type: "submit", class: "fq-ld-btn is-violet" });
