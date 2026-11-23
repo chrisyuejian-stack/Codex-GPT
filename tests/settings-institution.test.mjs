@@ -187,16 +187,126 @@ test("第三期设置：机构信息（含加密联系说明与 Logo）随全量
     assert.equal(rb.contact_text, "教务老师微信：fq_edu_01");
   }));
 
-test("第三期设置页（fq-settings.js/.css）：已进打包且在 fq.css 之前，旧路由映射完整，无 HTML 注入汇与原生弹窗", async () => {
+// 最小合法 JPEG 与 WebP 文件头（用于登录背景图测试）。
+const JPEG = "data:image/jpeg;base64," + Buffer.from([255, 216, 255, 224, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 255, 217]).toString("base64");
+const WEBP = "data:image/webp;base64," + Buffer.from("RIFF\x1a\x00\x00\x00WEBPVP8 \x0e\x00\x00\x00\x30\x01\x00\x9d\x01\x2a\x01\x00\x01\x00\x00\x00\x00\x00", "binary").toString("base64");
+
+test("任务 #10 登录页背景：主管上传/预览/恢复默认、公开接口版本缓存、审计脱敏、409/422/403 与全量备份往返", () =>
+  withSchool(async (s) => {
+    const before = ok(await request(s, "settings/institution"));
+    assert.equal(before.has_login_bg, false);
+    assert.equal(before.login_bg_url, null);
+
+    // 1. 上传自定义登录背景图（WebP，也支持 JPEG/PNG，允许 180k~200KB 大图）。
+    const saved = ok(
+      await request(s, "settings/institution", "PATCH", {
+        version: before.version,
+        login_bg: WEBP,
+      }),
+    );
+    assert.equal(saved.has_login_bg, true);
+    assert.equal(saved.version, before.version + 1);
+    assert.ok(saved.login_bg_url.endsWith("api/public/brand/login-bg?v=" + saved.version));
+    assert.ok(!("login_bg" in saved), "institution 接口不直接下发大段 base64");
+
+    // 2. 公开接口同步返回带版本号 login_bg_url，且图片路由强缓存返回原始二进制。
+    const liteRes = await s.f.request("https://school.test/" + s.t.slug + "/api/public/brand?lite=1");
+    const lite = await liteRes.json();
+    assert.equal(lite.login_bg_url, saved.login_bg_url);
+    const imgRes = await s.f.request("https://school.test" + saved.login_bg_url);
+    assert.equal(imgRes.status, 200);
+    assert.equal(imgRes.headers.get("content-type"), "image/webp");
+    assert.equal(imgRes.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assert.deepEqual(Buffer.from(await imgRes.arrayBuffer()), Buffer.from(WEBP.split(",")[1], "base64"));
+    // 旧版本号返回 404。
+    assert.equal((await s.f.request("https://school.test/" + s.t.slug + "/api/public/brand/login-bg?v=" + before.version)).status, 404);
+
+    // 3. 审计日志脱敏：不保存 base64 原文，只记状态。
+    const audits = s.f.db.raw
+      .prepare("SELECT before_json,after_json FROM audit_log WHERE tenant_id=? AND entity_id='institution' ORDER BY rowid")
+      .all(s.t.id);
+    assert.equal(audits.length, 1);
+    assert.equal(JSON.parse(audits[0].before_json).login_bg, null);
+    assert.equal(JSON.parse(audits[0].after_json).login_bg, "已更换");
+    assert.ok(!audits[0].after_json.includes("base64") && !audits[0].after_json.includes("data:image"));
+
+    // 4. 409 乐观锁返回最新状态含 has_login_bg/login_bg_url。
+    const stale = await request(s, "settings/institution", "PATCH", { version: before.version, login_bg: JPEG });
+    assert.equal(stale.status, 409);
+    assert.equal(stale.body.details.latest.has_login_bg, true);
+    assert.equal(stale.body.details.latest.login_bg_url, saved.login_bg_url);
+
+    // 5. 422 校验：非白名单格式、伪造魔数头、截断 JPEG、超 200KB 字节、超 300,000 字符。
+    const over200kBytes = Buffer.alloc(200 * 1024 + 4, 0);
+    over200kBytes[0] = 255;
+    over200kBytes[1] = 216;
+    over200kBytes[over200kBytes.length - 2] = 255;
+    over200kBytes[over200kBytes.length - 1] = 217;
+    const over200kJpeg = "data:image/jpeg;base64," + over200kBytes.toString("base64");
+    for (const bad of [
+      { login_bg: "data:image/gif;base64,R0lGODlh" },
+      { login_bg: "data:image/png;base64," + Buffer.from("not-a-png").toString("base64") },
+      { login_bg: "data:image/jpeg;base64," + Buffer.from([255, 216]).toString("base64") },
+      { login_bg: over200kJpeg },
+      { login_bg: "data:image/png;base64," + "A".repeat(300001) },
+    ]) {
+      assert.equal((await request(s, "settings/institution", "PATCH", { version: saved.version, ...bad })).status, 422);
+    }
+
+    // 6. 非主管 403（教务/财务可读但不可写；老师/学员读写均 403）。
+    const academic = await accountToken(s, ["academic"]);
+    const acRead = ok(await request(s, "settings/institution", "GET", undefined, academic.token));
+    assert.equal(acRead.editable, false);
+    assert.equal(acRead.has_login_bg, true);
+    assert.equal(acRead.login_bg_url, saved.login_bg_url);
+    assert.equal((await request(s, "settings/institution", "PATCH", { version: saved.version, login_bg: null }, academic.token)).status, 403);
+    const finance = await accountToken(s, ["finance"]);
+    assert.equal((await request(s, "settings/institution", "PATCH", { version: saved.version, login_bg: JPEG }, finance.token)).status, 403);
+    const student = await accountToken(s, ["student"], s.students[0]);
+    assert.equal((await request(s, "settings/institution", "PATCH", { version: saved.version, login_bg: JPEG }, student.token)).status, 403);
+
+    // 7. 全量备份导出 -> 恢复默认 -> 全量备份恢复 -> 背景完整回滚。
+    const exported = await request(s, "backups/export", "POST", { password: PASSWORD });
+    ok(exported);
+    const backupFile = JSON.parse(exported.text);
+
+    // 恢复默认（传 null 清空）。
+    const reset = ok(await request(s, "settings/institution", "PATCH", { version: saved.version, login_bg: null }));
+    assert.equal(reset.has_login_bg, false);
+    assert.equal(reset.login_bg_url, null);
+    const liteCleared = await (await s.f.request("https://school.test/" + s.t.slug + "/api/public/brand?lite=1")).json();
+    assert.equal(liteCleared.login_bg_url, null);
+    assert.equal((await s.f.request("https://school.test" + saved.login_bg_url)).status, 404);
+
+    // 执行全量恢复，确认自定义背景图与版本一同还原。
+    const p = ok(await request(s, "backups/restore/preview", "POST", { password: PASSWORD, file: backupFile }), 201);
+    ok(await request(s, "backups/restore/" + p.id + "/confirm", "POST", { confirm: true }));
+    const sup = s.f.db.raw.prepare("SELECT * FROM users WHERE tenant_id=? AND active=1 AND roles LIKE '%supervisor%' LIMIT 1").get(s.t.id);
+    const freshToken = b64(bytes(32));
+    await s.r.createSession(await sha(freshToken), sup, { ip: "127.0.0.1", ua: "test" });
+    const restored = ok(await request(s, "settings/institution", "GET", undefined, freshToken));
+    assert.equal(restored.has_login_bg, true);
+    assert.equal(restored.login_bg_url, saved.login_bg_url);
+    const restoredImg = await s.f.request("https://school.test" + restored.login_bg_url);
+    assert.equal(restoredImg.status, 200);
+    assert.deepEqual(Buffer.from(await restoredImg.arrayBuffer()), Buffer.from(WEBP.split(",")[1], "base64"));
+  }));
+
+test("第三期设置页（fq-settings.js/.css）与登录页背景：无 HTML 注入汇、原生弹窗与禁止内联样式", async () => {
   const { readFile } = await import("node:fs/promises");
   const { tenantAssets } = await import("../scripts/frontend-bundle.mjs");
   const js = await readFile("src/tenant/fq-settings.js", "utf8");
+  const yx = await readFile("src/tenant/yx.js", "utf8");
   const assets = await tenantAssets();
   assert.ok(assets.js.includes("settings/institution"));
   assert.ok(assets.css.indexOf(".fq-se") > 0 && assets.css.indexOf(".fq-se") < assets.css.lastIndexOf("/* ---------- 按钮 ---------- */"));
   assert.doesNotMatch(js, /\.innerHTML\s*=|insertAdjacentHTML|document\.write/);
   assert.ok(!/(?<![.\w])(?:alert|prompt|confirm)\(/.test(js));
+  assert.doesNotMatch(yx, /\.innerHTML\s*=|\.style\.|setAttribute\(["']style["']|insertAdjacentHTML|document\.write/);
+  assert.ok(!/(?<![.\w])(?:alert|prompt|confirm)\(/.test(yx));
+  assert.ok(yx.includes("fq-login-bg") && yx.includes("fqLoadDeferredCss"));
   for (const route of ["settings-institution", "settings-logs", "settings-accounts", "admin-courses", "settings-data"])
     assert.ok(js.includes(route), route);
   assert.ok(js.includes('localStorage.removeItem("fq_brand_v1")'));
+  assert.ok(js.includes("loginBgData"));
 });
