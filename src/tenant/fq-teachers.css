@@ -89,7 +89,7 @@ html .fq-tp-rgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1f
 html .fq-tp-rgrid .fq-tp-ph h2 { font-size: 15px; }
 html .fq-tp-rrow { display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--fq-line-soft); font-size: 13px; }
 html .fq-tp-rrow:last-child { border-bottom: 0; }
-html .fq-tp-rrow b { font-family: var(--fq-serif); font-size: 17px; }
+html .fq-tp-rrow b { font-family: var(--fq-serif); font-size: 17px; white-space: nowrap; flex: none; }
 html .fq-tp-span { width: 128px; font-size: 12px; text-align: right; }
 html .fq-tp-dots { color: var(--fq-faint); display: flex; }
 html .fq-tp-dots svg { width: 16px; height: 16px; }
@@ -279,23 +279,27 @@ html .fq-tp-note[hidden] { display: none; }
 html .fq-tp-switch { border: 0; cursor: pointer; padding: 0; }
 html .fq-tp-switch i { transition: left 0.15s; }
 html .fq-tp-advbox summary { cursor: pointer; font-size: 12.5px; color: var(--fq-sub); margin-bottom: 8px; }
-/* 课酬标准分页：两列卡片（内容由 v2p.js ratesPage 渲染） */
-html .fq-tp-ratespage .v-rates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
-html .fq-tp-ratespage .v-rate-card { margin: 0; background-color: var(--fq-card); border: 1px solid var(--fq-line); border-radius: 16px; box-shadow: var(--fq-shadow); overflow: hidden; }
+/* 课酬标准分页（rates-desk.html） */
+html .fq-tp-rrow.is-old { opacity: 0.62; }
+html .fq-tp-rrow .ui-menu-holder { display: inline-flex; flex: none; }
+html .fq-tp-rrow .ui-button.fq-tp-dots {
+  min-width: 28px; min-height: 28px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: var(--fq-faint); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+html .fq-tp-rrow .ui-button.fq-tp-dots:hover { background: var(--fq-violet-soft); color: var(--fq-violet-dark); }
+html .fq-tp-rrow .ui-button.fq-tp-dots .ui-icon { width: 16px; height: 16px; }
+html .fq-tp-rfull { grid-column: 1 / -1; }
 @media (max-width: 760px) {
   html .fq-tp-split { display: block; }
-  html .fq-tp-ratespage .v-rates { grid-template-columns: 1fr; }
+  html .fq-tp-toolbar { flex-wrap: wrap; }
+  html .fq-tp-toolbar .fq-tp-w220 { width: 100%; }
+  html .fq-tp-rgrid { grid-template-columns: 1fr; }
+  html .fq-tp-rrow { flex-wrap: wrap; gap: 6px 10px; padding: 11px 14px; }
+  html .fq-tp-span { width: auto; text-align: left; }
   html .fq-tp-hero .fq-tp-id h2 { color: #fff; }
   html .fq-tp-hero .fq-tp-pill.is-line { color: #e6def0; border-color: rgba(255, 255, 255, 0.3); }
   html .fq-tp-bar .ui-menu-holder > .ui-button { height: 42px; width: 46px; }
   html .fq-tp-two { grid-template-columns: 1fr; }
 }
 html .fq-tp-dark .fq-tp-dark-link { color: #f0c98f; display: block; margin-top: 12px; font-size: 12.5px; font-weight: 700; }
-html .fq-tp-ratespage .v-rate-card > header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--fq-line-soft); background: none; }
-html .fq-tp-ratespage .v-rate-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 11px 18px; border-bottom: 1px solid var(--fq-line-soft); font-size: 13px; }
-html .fq-tp-ratespage .v-rate-row:last-child { border-bottom: 0; }
-html .fq-tp-ratespage .v-rate-row > .v-rate-course { flex: 1 1 120px; font-weight: 700; }
-html .fq-tp-ratespage .v-rate-row > strong { font-family: var(--fq-serif); font-size: 17px; white-space: nowrap; }
-html .fq-tp-ratespage .v-rate-row > span.v-muted { font-size: 12px; white-space: nowrap; }
-html .fq-tp-ratespage .v-rate-acts { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
 html .fq-tp-search input, html .fq-tp-search input:focus { padding: 0; border: 0; box-shadow: none; height: 32px; min-height: 0; }
