@@ -48,6 +48,8 @@ function summarize(original, teacher, room, course) {
   return {
     start_at: original.start_at,
     duration: original.duration,
+    unit_minutes: original.unit_minutes,
+    units: original.units,
     teacher_id: original.teacher_id,
     teacher_name: teacher?.name || "原课教师",
     location_id: original.location_id,
@@ -59,6 +61,7 @@ function summarize(original, teacher, room, course) {
 function candidateData(original, student, start_at, changes = {}) {
   return {
     start_at,
+    unit_minutes: original.unit_minutes,
     duration: original.duration,
     teacher_id: original.teacher_id,
     assistant_id: original.assistant_id,
@@ -189,6 +192,8 @@ function recommendations(
   return picked.sort(order).map(({ date, start, reason, reason_text }) => ({
     start_at: at(date, start),
     duration: row.duration,
+    unit_minutes: row.unit_minutes,
+    units: row.units,
     reason,
     reason_text,
     teacher_id: row.teacher_id,
@@ -322,6 +327,13 @@ export async function makeupPlanning(
           d.teacher_id === undefined ? original.teacher_id : d.teacher_id,
         location_id: location,
         mode: location !== null ? "offline" : original.mode,
+        unit_minutes:
+          d.unit_minutes !== undefined
+            ? d.unit_minutes
+            : d.duration !== undefined
+              ? undefined
+              : original.unit_minutes,
+        units: d.units === undefined ? original.units : d.units,
         duration: d.duration === undefined ? original.duration : d.duration,
       }),
     );

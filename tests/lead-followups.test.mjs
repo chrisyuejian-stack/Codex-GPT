@@ -132,9 +132,9 @@ test("记录回访：读沿用 leads.read，写沿用 leads.update；仅财务�
     ok(await request(s, path(lead), "POST", body("op_lead_fu_2002", lead.version + 1)), 409);
   }));
 
-test("回访记录进入全量备份（迁移版本 33）并随恢复整体回到备份时的状态", () =>
+test("回访记录进入全量备份（迁移版本 35）并随恢复整体回到备份时的状态", () =>
   school(async (s) => {
-    assert.equal(FULL_BACKUP_VERSION, 33);
+    assert.equal(FULL_BACKUP_VERSION, 35);
     assert.ok(fullBackupTables.lead_followups);
     const lead = await newLead(s);
     ok(await request(s, path(lead), "POST", { version: lead.version, operation_id: "op_lead_fu_3000", content: "有意向，约试听", channel: "visit" }));
@@ -142,7 +142,7 @@ test("回访记录进入全量备份（迁移版本 33）并随恢复整体回�
     ok(exported);
     const file = JSON.parse(exported.text),
       decoded = await passwordOpen(file, PASSWORD);
-    assert.equal(decoded.migration_version, 33);
+    assert.equal(decoded.migration_version, 35);
     assert.equal(decoded.tables.lead_followups.length, 1);
     assert.equal(decoded.tables.lead_followups[0].channel, "visit");
     const now = ok(await request(s, "tools/leads/" + lead.id)).record;

@@ -580,13 +580,14 @@ const businessSql = {
       "version",
       "deleted_at",
       "class_id",
+      "unit_minutes",
     ],
     list: "SELECT p.*,t.name AS teacher_name,c.name AS course_name,o.name AS location_name FROM schedule_templates p JOIN teachers t ON t.tenant_id=p.tenant_id AND t.id=p.teacher_id JOIN course_types c ON c.tenant_id=p.tenant_id AND c.id=p.course_type_id LEFT JOIN locations o ON o.tenant_id=p.tenant_id AND o.id=p.location_id WHERE p.tenant_id=? AND p.deleted_at IS NULL ORDER BY p.id LIMIT 200 OFFSET ?",
     get: "SELECT * FROM schedule_templates WHERE tenant_id=? AND id=? AND deleted_at IS NULL",
     insert:
-      "INSERT INTO schedule_templates(tenant_id,id,teacher_id,assistant_id,course_type_id,location_id,weekday,start_time,duration,units,mode,date_from,date_to,active,note,created_at,created_by,updated_at,updated_by,version,deleted_at,class_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO schedule_templates(tenant_id,id,teacher_id,assistant_id,course_type_id,location_id,weekday,start_time,duration,units,mode,date_from,date_to,active,note,created_at,created_by,updated_at,updated_by,version,deleted_at,class_id,unit_minutes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     update:
-      "UPDATE schedule_templates SET teacher_id=?,assistant_id=?,course_type_id=?,location_id=?,weekday=?,start_time=?,duration=?,units=?,mode=?,date_from=?,date_to=?,active=?,note=?,created_at=?,created_by=?,updated_at=?,updated_by=?,version=?,deleted_at=?,class_id=? WHERE tenant_id=? AND id=?",
+      "UPDATE schedule_templates SET teacher_id=?,assistant_id=?,course_type_id=?,location_id=?,weekday=?,start_time=?,duration=?,units=?,mode=?,date_from=?,date_to=?,active=?,note=?,created_at=?,created_by=?,updated_at=?,updated_by=?,version=?,deleted_at=?,class_id=?,unit_minutes=? WHERE tenant_id=? AND id=?",
     guard:
       "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?,?,?,COALESCE((SELECT version FROM schedule_templates WHERE tenant_id=? AND id=? AND deleted_at IS NULL),-1)",
   },
@@ -639,13 +640,14 @@ const businessSql = {
       "version",
       "deleted_at",
       "class_id",
+      "unit_minutes",
     ],
     list: "SELECT * FROM lessons WHERE tenant_id=? AND deleted_at IS NULL ORDER BY id LIMIT 200 OFFSET ?",
     get: "SELECT l.*,c.name course_name,t.name teacher_name,o.name location_name FROM lessons l JOIN course_types c ON c.tenant_id=l.tenant_id AND c.id=l.course_type_id JOIN teachers t ON t.tenant_id=l.tenant_id AND t.id=l.teacher_id LEFT JOIN locations o ON o.tenant_id=l.tenant_id AND o.id=l.location_id WHERE l.tenant_id=? AND l.id=? AND l.deleted_at IS NULL",
     insert:
-      "INSERT INTO lessons(tenant_id,id,start_at,duration,units,teacher_id,assistant_id,course_type_id,location_id,mode,status,template_id,occurrence_date,note,teacher_paid,override_rate,override_basis,locked_rate,format,current_submission_id,created_at,created_by,updated_at,updated_by,version,deleted_at,class_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO lessons(tenant_id,id,start_at,duration,units,teacher_id,assistant_id,course_type_id,location_id,mode,status,template_id,occurrence_date,note,teacher_paid,override_rate,override_basis,locked_rate,format,current_submission_id,created_at,created_by,updated_at,updated_by,version,deleted_at,class_id,unit_minutes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     update:
-      "UPDATE lessons SET start_at=?,duration=?,units=?,teacher_id=?,assistant_id=?,course_type_id=?,location_id=?,mode=?,status=?,template_id=?,occurrence_date=?,note=?,teacher_paid=?,override_rate=?,override_basis=?,locked_rate=?,format=?,current_submission_id=?,created_at=?,created_by=?,updated_at=?,updated_by=?,version=?,deleted_at=?,class_id=? WHERE tenant_id=? AND id=?",
+      "UPDATE lessons SET start_at=?,duration=?,units=?,teacher_id=?,assistant_id=?,course_type_id=?,location_id=?,mode=?,status=?,template_id=?,occurrence_date=?,note=?,teacher_paid=?,override_rate=?,override_basis=?,locked_rate=?,format=?,current_submission_id=?,created_at=?,created_by=?,updated_at=?,updated_by=?,version=?,deleted_at=?,class_id=?,unit_minutes=? WHERE tenant_id=? AND id=?",
     guard:
       "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?,?,?,COALESCE((SELECT version FROM lessons WHERE tenant_id=? AND id=? AND deleted_at IS NULL),-1)",
   },
@@ -3546,7 +3548,7 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
             SELECT template_id,COUNT(DISTINCT id) member_count FROM roster
             WHERE date_from<=?3 AND date_to>=?3 GROUP BY template_id
           )
-          SELECT t.id,t.weekday,t.start_time,t.duration,
+          SELECT t.id,t.weekday,t.start_time,t.duration,t.unit_minutes,t.units,
             CASE WHEN time(t.start_time,'+'||t.duration||' minutes')='00:00:00' THEN '24:00'
               ELSE substr(time(t.start_time,'+'||t.duration||' minutes'),1,5) END end_time,
             c.id course_type_id,c.name course_name,h.id teacher_id,h.name teacher_name,

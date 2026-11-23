@@ -334,6 +334,7 @@ export const backupTables = {
       "version",
       "deleted_at",
       "class_id",
+      "unit_minutes",
     ],
     tenant: true,
   },
@@ -383,6 +384,7 @@ export const backupTables = {
       "locked_rate",
       "current_submission_id",
       "class_id",
+      "unit_minutes",
     ],
     tenant: true,
   },
@@ -1119,6 +1121,7 @@ export const IMPORT_SHAPES = {
     version: { required: true, has_default: true, default: 1 },
     deleted_at: { required: false, has_default: false, default: null },
     class_id: { required: false, has_default: false, default: null },
+    unit_minutes: { required: false, has_default: false, default: null },
   },
   schedule_enrollments: {
     tenant_id: { required: true, has_default: false, default: null },
@@ -1188,6 +1191,7 @@ export const IMPORT_SHAPES = {
       default: null,
     },
     class_id: { required: false, has_default: false, default: null },
+    unit_minutes: { required: false, has_default: false, default: null },
   },
   lesson_participants: {
     tenant_id: { required: true, has_default: false, default: null },
