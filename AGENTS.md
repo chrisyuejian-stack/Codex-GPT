@@ -42,6 +42,7 @@
 - **任务板** `docs/fengqin/任务板.md`：开工前登记任务、负责人、会改的文件、审查人；同一文件同一时间只允许一人修改。完成后更新状态。
 - **审查**：Antigravity 的前端改动由 Claude 审，后端改动由 GPT 审；GPT 与 Claude 改到对方目录时互相审查。
 - **部署**：只有 Claude 部署上线（Cloudflare Pages、备份 Worker、生产 D1 迁移），部署后核对线上并记入 `deployment/cloudflare/README.md`。其他人需要上线时在 PR 里说明，合入 main 后由 Claude 执行。
+  - **临时授权（2026-11-23，用户）**：Claude 额度不足期间，Antigravity 可按 `docs/fengqin/部署手册.md` 执行演练、生产迁移与部署，仅限该手册范围；手册之外的生产写操作先问用户。Claude 恢复后接回。
 - **Antigravity 发现的问题**：不直接改业务代码；提 Issue（写复现步骤、账号角色、设备尺寸、截图），或在 `tests/e2e/` 写一个会失败的复现测试，由对应负责人修。受托任务（任务板写明）除外。
 - **共享文件**：`scripts/frontend-bundle.mjs`、`docs/fengqin/接口变更.md`、`AGENTS.md`、`package.json` 谁改都在 PR 描述里单独说明。
 - **线上差异**：本地测试用模拟的 D1/R2（`tests/d1-emulator.mjs`、`tests/r2.mjs`）。已知线上限制：每个 compound SELECT 最多 5 段（用 `repo.js` 的 `unionAll`）、单条 SQL ≤100KB、≤100 个参数、R2 `list` 不接受空 cursor。新发现的限制要同时补进模拟器。
