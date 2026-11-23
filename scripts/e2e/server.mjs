@@ -1,7 +1,7 @@
 // Local development adapter only. No imports from production code into this file.
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { createScenario, SCENARIO_NOW } from './scenario.mjs';
+import { createScenario, SCENARIO_NOW, SCENARIO_KINDS } from './scenario.mjs';
 
 const RealDate = Date;
 let fixed = RealDate.parse(SCENARIO_NOW);
@@ -11,7 +11,7 @@ globalThis.Date = class extends RealDate {
 };
 const key = process.env.E2E_CONTROL_KEY;
 if (!key || key.length < 32) throw Error('E2E_CONTROL_KEY must be provided by the local test runner');
-let current = await createScenario();
+let current = await createScenario('fengqin');
 const authorized = req => {
   const supplied = Buffer.from(String(req.headers['x-e2e-key'] || ''));
   const expected = Buffer.from(key);
@@ -29,8 +29,8 @@ const server = http.createServer(async (req, res) => {
       if (url.pathname === '/__e2e/health' && req.method === 'GET') return json(res, 200, { ready: true });
       if (!authorized(req)) return json(res, 403, { error: 'test controller required' });
       if (url.pathname === '/__e2e/reset' && req.method === 'POST') {
-        const kind = url.searchParams.get('kind') || 'attendance';
-        if (!['attendance', 'makeup', 'scheduling', 'payments', 'balance', 'concurrency', 'settlement', 'reversal-used', 'authentication'].includes(kind)) return json(res, 400, { error: 'unknown scenario' });
+        const kind = url.searchParams.get('kind') || 'fengqin';
+        if (!SCENARIO_KINDS.includes(kind)) return json(res, 400, { error: 'unknown scenario' });
         if (busy) return json(res, 409, { error: 'reset already running' });
         busy = true;
         try { current.f.restore(); fixed = RealDate.parse(SCENARIO_NOW); current = await createScenario(kind); }
@@ -51,7 +51,7 @@ const server = http.createServer(async (req, res) => {
       if (url.pathname === '/__e2e/session' && req.method === 'POST') {
         const token = current.tokens[url.searchParams.get('role')];
         if (!token) return json(res, 400, { error: 'unknown role' });
-        return json(res, 200, { ok: true }, { 'set-cookie': `channel_session=${token}; HttpOnly; SameSite=Strict; Path=/` });
+        return json(res, 200, { ok: true }, { 'set-cookie': `__Host-fengqin_session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/` });
       }
       if (url.pathname === '/__e2e/state' && req.method === 'GET') return json(res, 200, await current.state());
       return json(res, 404, { error: 'unknown test control' });
@@ -62,7 +62,7 @@ const server = http.createServer(async (req, res) => {
     const headers = { ...req.headers, host: 'localhost' };
     if (headers.origin) headers.origin = 'http://localhost';
     // Preserve each browser's real session cookie; do not select the role here.
-    const response = await current.f.request(`http://localhost${req.url}`, {
+    const response = await current.f.directRequest(`http://localhost${req.url}`, {
       method: req.method, headers,
       body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks),
     });
