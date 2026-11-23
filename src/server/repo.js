@@ -2032,17 +2032,19 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
       ops.push(sql(`INSERT INTO tenant_brand(tenant_id,id,qr_image_id) VALUES(?,'brand',?) ON CONFLICT(tenant_id,id) DO UPDATE SET qr_image_id=excluded.qr_image_id`,tenantId,data.qr_image_id));
       ops.push(settingAudit(tenantId,actor,'brand','brand',old,data));await db.batch(ops);
     },
-    // 第三期 · 设置：主管修改机构名称、Logo、联系说明（tenant_branding），版本守卫 + 审计。审计不写 Logo 原图与联系说明原文/密文，只记状态。
+    // 第三期 · 设置：主管修改机构名称、Logo、联系说明、登录背景（tenant_branding），版本守卫 + 审计。审计不写图片原图与联系说明原文/密文，只记状态。
     async settingsInstitutionWrite(data,old,actor) {
       scoped();const at=now();
-      const brief=(x,logo,contact)=>({name:x.display_name,contact_text:contact,logo:logo});
+      const brief=(x,logo,contact,bg)=>({name:x.display_name,contact_text:contact,logo:logo,login_bg:bg});
       const oldContact=old.contact_text?'已设置':null;
       const newContact=data.contact_text?(data.contact_text===old.contact_text?'未更换':'已更新'):null;
+      const oldBg=old.login_bg?'已设置':null;
+      const newBg=data.login_bg?(data.login_bg===old.login_bg?'未更换':'已更换'):null;
       await db.batch([
         sql(`INSERT INTO mutation_guards(tenant_id,id,expected,actual) VALUES(?,?,?,COALESCE((SELECT version FROM tenant_branding WHERE tenant_id=? AND id='brand'),-1))`,tenantId,randomId('guard'),old.version,tenantId),
-        sql(`UPDATE tenant_branding SET display_name=?,logo=?,contact_text=?,version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id='brand'`,data.display_name,data.logo,data.contact_text,at,actor.id,tenantId),
+        sql(`UPDATE tenant_branding SET display_name=?,logo=?,contact_text=?,login_bg=?,version=version+1,updated_at=?,updated_by=? WHERE tenant_id=? AND id='brand'`,data.display_name,data.logo,data.contact_text,data.login_bg,at,actor.id,tenantId),
         sql('INSERT INTO audit_log(tenant_id,id,at,actor_id,actor_label,module,action,entity_id,summary,before_json,after_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)',tenantId,randomId('aud'),at,actor.id,actor.name||actor.username||'系统维护','settings','update','institution','修改机构信息',
-          JSON.stringify({version:old.version,...brief(old,old.logo?'已设置':null,oldContact)}),JSON.stringify(brief(data,data.logo?(data.logo===old.logo?'未更换':'已更换'):null,newContact))),
+          JSON.stringify({version:old.version,...brief(old,old.logo?'已设置':null,oldContact,oldBg)}),JSON.stringify(brief(data,data.logo?(data.logo===old.logo?'未更换':'已更换'):null,newContact,newBg))),
       ]);
     },
     async galleryUnmeasured(limit=20){scoped();return all('SELECT id,r2_key FROM gallery_images WHERE tenant_id=? AND bytes=0 ORDER BY id LIMIT ?',tenantId,limit);},
