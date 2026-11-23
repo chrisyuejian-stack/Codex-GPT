@@ -48,7 +48,7 @@
   };
   const title = (r) => {
     const p = r.participants_summary || { count: 0, names: [] };
-    return r.course_name + " · " + (p.count > 1 ? (p.class_name ? p.class_name + " " : "小班 ") + p.count + " 人" : p.names[0] || "暂无学员");
+    return r.course_name + " · " + (p.count > 1 ? (p.class_name ? p.class_name + " " : "班课 ") + p.count + " 人" : p.names[0] || "暂无学员");
   };
   const where = (r) => [r.teacher_name ? r.teacher_name + "老师" : "", r.mode === "online" ? "线上课" : r.location_name || ""].filter(Boolean).join(" · ");
   const label = (r) => me.labels?.lessons?.[r.status] || "";

@@ -116,3 +116,8 @@ export const RATE_UNITS = Object.freeze({
   lesson: "课次",
   person: "人次",
 });
+export const FORMAT_LABELS = Object.freeze({
+  individual: "一对一",
+  group: "班课",
+  class: "班课",
+});

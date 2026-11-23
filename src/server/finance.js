@@ -1,7 +1,7 @@
-import { LESSON_LABELS, MODULE_LABELS, ACTION_LABELS, EXPORT_KIND_LABELS, beijingTime } from "./presentation.js";
+import { LESSON_LABELS, MODULE_LABELS, ACTION_LABELS, EXPORT_KIND_LABELS, FORMAT_LABELS, beijingTime } from "./presentation.js";
 import { effectivePolicies } from "./absence.js";
 import { repo } from "./repo.js";
-import { HttpError, fail, string, integer, version, randomId, sha, now } from "./core.js";
+import { HttpError, fail, string, integer, version, randomId, sha, now, normalizeFormat } from "./core.js";
 import { can, projectRecord } from "./permissions.js";
 import { requireCan } from "./accounts.js";
 import { day } from "./scheduling.js";
@@ -33,7 +33,7 @@ async function settlementFingerprint(ctx) {
       (l) =>
         l.teacher_id === r.teacher_id &&
         l.course_type_id === r.course_type_id &&
-        l.format === r.format &&
+        normalizeFormat(l.format) === normalizeFormat(r.format) &&
         r.effective_from <= l.start_at.slice(0, 10) &&
         r.effective_to >= l.start_at.slice(0, 10),
     ),
@@ -207,7 +207,7 @@ export function calculatePayroll(ctx, policies) {
             (r) =>
               r.teacher_id === l.teacher_id &&
               r.course_type_id === l.course_type_id &&
-              r.format === l.format &&
+              normalizeFormat(r.format) === normalizeFormat(l.format) &&
               r.effective_from <= l.start_at.slice(0, 10) &&
               r.effective_to >= l.start_at.slice(0, 10),
           ),
@@ -604,10 +604,11 @@ async function exportApi(env, tenant, user, policy, url, r, month, teacher) {
     requireCan(user, policy, "lessons", "read", own(user));
     const items = await r.exportLessons(month, user);
     rows.push(
-      ["北京时间", "课程", "教师", "地点", "分钟", "课时", "状态"],
+      ["北京时间", "课程", "形式", "教师", "地点", "分钟", "课时", "状态"],
       ...items.map((l) => [
         beijingTime(Date.parse(l.start_at)),
         l.course_name,
+        FORMAT_LABELS[normalizeFormat(l.format || "individual")] || "",
         l.teacher_name,
         l.location_name,
         l.duration,
@@ -1075,9 +1076,10 @@ async function writeApi(req, env, tenant, user, policy, path, url, body) {
       });
       await get(r, "teachers", row.teacher_id);
       const type = await get(r, "course_types", row.course_type_id);
-      row.format = old?.format || d.format || type.format;
-      if (!["individual", "group", "class"].includes(row.format))
-        fail(400, "课程形式不正确");
+      row.format = normalizeFormat(
+        old?.format || d.format || type.format,
+        "课程形式",
+      );
       row.rate_basis = d.rate_basis ?? old?.rate_basis ?? "legacy";
       if (!["legacy", "unit", "lesson", "person"].includes(row.rate_basis))
         fail(400, "计费模式不正确");

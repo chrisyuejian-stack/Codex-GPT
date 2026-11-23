@@ -732,7 +732,7 @@
     ["types", "course_types", "细分课程", "排课时选这里的课程；时长和扣课时作为默认值，单节课仍可改。", "＋ 新增细分课程"],
     ["rooms", "locations", "教室与地点", "排课时选择教室；校外地点用于演出、外出课。", "＋ 新增教室"],
   ];
-  const FORMAT = { individual: "一对一", group: "小班课", class: "集训班" };
+  const FORMAT = { individual: "一对一", group: "班课", class: "班课" };
   async function coursesSection(main) {
     const s = sec("courses");
     setSub("课程与教室 · 排课、课表颜色、扣课时都按这里");

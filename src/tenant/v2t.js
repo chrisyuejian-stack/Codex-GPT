@@ -1165,7 +1165,7 @@
         }
       }
     }
-    secJoin.append(secHead(3, "加入已有的同类课", "小组课可以直接插班，不用新开一节"));
+    secJoin.append(secHead(3, "加入已有的同类课", "班课可以直接插班，不用新开一节"));
     secJoin.append(
       button("选择已有课程…", async () => {
         await view.close();

@@ -1157,7 +1157,7 @@
                 key: "format",
                 label: "形式",
                 render: (r) =>
-                  ({ individual: "一对一", group: "班课", class: "集训班" })[
+                  ({ individual: "一对一", group: "班课", class: "班课" })[
                     r.format
                   ],
               },
@@ -1501,7 +1501,7 @@
       person: "按人次",
       individual: "一对一",
       group: "班课",
-      class: "集训班",
+      class: "班课",
       type: "指定课程",
       category: "同大类通用",
     };
@@ -1953,7 +1953,7 @@
     if (!rows.length) {
       c.append(
         U.empty({
-          text: "班级用于管理固定名单和集训班，整班排课时自动带入学员。",
+          text: "班级用于管理固定名单的班课，整班排课时自动带入学员。",
           action: enabled("classes", "create")
             ? { label: "新建班级", onSelect: () => classForm(c) }
             : null,

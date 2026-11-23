@@ -2474,9 +2474,8 @@ async function recordForm(c, resource, row = {}) {
     select("所属大类", "category_id", await choices("course_categories"));
     select("形式", "format", [
       { id: "individual", name: "一对一" },
-      { id: "group", name: "小组课" },
-      { id: "class", name: "班课" },
-    ]).value = row.format || "individual";
+      { id: "group", name: "班课" },
+    ]).value = row.format === "class" ? "group" : row.format || "individual";
     select(
       "默认分钟",
       "default_minutes",

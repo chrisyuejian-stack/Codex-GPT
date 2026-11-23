@@ -1,6 +1,15 @@
 import { repo } from "./repo.js";
 import { requireCan } from "./accounts.js";
-import { fail, randomId, now, string, unb64, sha } from "./core.js";
+import {
+  fail,
+  randomId,
+  now,
+  string,
+  unb64,
+  sha,
+  normalizeFormat,
+  parseImportFormat,
+} from "./core.js";
 import { encrypt, decrypt } from "./crypto.js";
 import { prepareStudent, prepareTeacher, day } from "./scheduling.js";
 import { quantityIn } from "./numbers.js";
@@ -53,6 +62,16 @@ function importedDate(value) {
   }
   return day(value);
 }
+function matchCourseTypes(types, values) {
+  const name = values["课程名称"];
+  const rawFormat = typeof values["形式"] === "string" ? values["形式"].trim() : "";
+  const fmt = rawFormat ? parseImportFormat(rawFormat, "形式") : null;
+  return types.filter(
+    (x) =>
+      x.name === name &&
+      (!fmt || normalizeFormat(x.format || "individual") === fmt),
+  );
+}
 async function prepare(env, t, r, kind, values, id) {
   let row;
   if (kind === "students")
@@ -82,6 +101,8 @@ async function prepare(env, t, r, kind, values, id) {
     };
     string(values["学员姓名"], "学员姓名", 50);
     string(values["课程名称"], "课程名称", 100);
+    if (typeof values["形式"] === "string" && values["形式"].trim())
+      parseImportFormat(values["形式"], "形式");
   }
   row.id = id;
   return row;
@@ -136,11 +157,9 @@ export async function importsApi(
           matches = (
             kind === "teachers" ? refs.teachers : refs.students
           ).filter((x) => x.name === name);
-        if (
-          kind === "balances" &&
-          (!matches.length ||
-            !refs.types.some((x) => x.name === values["课程名称"]))
-        )
+        const matchedCourses =
+          kind === "balances" ? matchCourseTypes(refs.types, values) : [];
+        if (kind === "balances" && (!matches.length || !matchedCourses.length))
           fail(400, "请先建立本机构学员和课程档案");
         const duplicate =
           kind !== "balances" && (matches.length > 0 || seen.has(name));
@@ -163,9 +182,7 @@ export async function importsApi(
           })),
           courses:
             kind === "balances"
-              ? refs.types
-                  .filter((x) => x.name === values["课程名称"])
-                  .map((x) => ({ id: x.id, name: x.name }))
+              ? matchedCourses.map((x) => ({ id: x.id, name: x.name }))
               : undefined,
           token,
         });
@@ -250,7 +267,7 @@ export async function importsApi(
         (same.length === 1 && !input.student_id && same[0].status === "active"
           ? same[0]
           : null);
-      const types = refs.types.filter((x) => x.name === values["课程名称"]);
+      const types = matchCourseTypes(refs.types, values);
       const type =
         types.find((x) => x.id === input.course_type_id) ||
         (types.length === 1 && !input.course_type_id ? types[0] : null);
