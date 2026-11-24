@@ -140,7 +140,7 @@ test("UI B2：同范围提醒落库及审计，拒绝其他学员/机构和无�
     );
     const written = ok(await request(s, "renewals/remind", "POST", payload));
     assert.equal(written.sent_at, "2026-11-04T20:00:00+08:00");
-    const row = ok(await request(s, "renewals")).items.find(
+    const row = ok(await request(s, "c2/renewals")).items.find(
       (r) => r.student_id === s.students[0],
     );
     assert.equal(row.reminded_count, 1);

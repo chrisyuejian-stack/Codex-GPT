@@ -255,10 +255,10 @@ test("D1回归：历史超大记录备份预检回滚，不产生半快照或SQL
   }
 });
 test("D1回归：清单/导入行超限预先拒绝，推广GLOB断言及JSON函数32参数生效", async () => {
+  const LEGACY_ROW_BUDGET = 500000; // Historical fixture budget; no production JSON import remains.
   const {
     boundedText,
     MANIFEST_BUDGET,
-    LEGACY_ROW_BUDGET,
     assertPattern,
     auditChunks,
     AUDIT_PAIR_BUDGET,

@@ -5,7 +5,6 @@ export const D1_RECORD_BUDGET = 800000;
 export const AUDIT_PAIR_BUDGET = 200000;
 export const BRAND_IMAGE_BUDGET = 260000;
 export const MANIFEST_BUDGET = 256000;
-export const LEGACY_ROW_BUDGET = 500000;
 export const SNAPSHOT_SAFE_ASCII_PATTERN = "*[^A-Za-z0-9+/=;:.,_-]*";
 export function byteLength(value) {
   return new TextEncoder().encode(value).byteLength;

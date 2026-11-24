@@ -45,7 +45,6 @@ const sample = (name, body, trips) => {
 };
 async function importOriginal(f) {
   const s = { ...(await schoolFixture(f, "makeup100")), f };
-  f.env.ACCESS_MODE = "off";
   const raw = JSON.parse(
     await readFile(
       new URL("../dev/mock/教务模拟数据_100人.json", import.meta.url),

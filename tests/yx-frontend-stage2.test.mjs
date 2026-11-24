@@ -37,7 +37,7 @@ test('YXF me 使用固定实例与根 API 路径', async () => {
     const login = await f.request('https://school.test/api/auth/login', {
       method: 'POST',
       headers: { Origin: 'https://school.test', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: '13911112222', password: PASSWORD, turnstile: 'fixture-valid' }),
+      body: JSON.stringify({ phone: '13911112222', password: PASSWORD }),
     });
     assert.equal(login.status, 200);
     const cookie = login.headers.get('set-cookie').split(';')[0];

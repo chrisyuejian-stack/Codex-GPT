@@ -219,7 +219,7 @@ test("B1 未购包欠课：可登记续费提醒，非欠课学员不能伪造�
   const body = { course_type_id: s.type, package_ids: [], channel: "text" };
   ok(await request(s, "renewals/remind", "POST", { ...body, student_id: s.students[0] }));
   ok(await request(s, "renewals/remind", "POST", { ...body, student_id: s.students[1] }), 404);
-  const out = ok(await request(s, "renewals?group=debt"));
+  const out = ok(await request(s, "c2/renewals?group=debt"));
   assert.equal(out.total, 1);
   assert.equal(out.items[0].reminded_count, 1);
 }));

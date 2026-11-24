@@ -22,7 +22,6 @@ function verifyTiming(response) {
 test("速度 S1：仅成功白名单静态响应可缓存，合法版本号、HTML、API 与越界路径", async () => {
   const f = await fixture();
   try {
-    f.env.ACCESS_MODE = "off";
     const s = await setup(f, 1);
     const resources = [
       [tenant, "/assets/tenant.js"],
@@ -80,7 +79,6 @@ test("速度 S1：仅成功白名单静态响应可缓存，合法版本号、HT
       });
       assert.equal(response.headers.get("cache-control"), "no-store");
     }
-    f.env.ACCESS_MODE = "on";
     const denied = await f.request(
       consoleOrigin + "/console-assets/console.js?v=01234567",
     );
