@@ -71,3 +71,12 @@
   - 复用 `ui-audit-crawl.mjs` 在 Desktop（`1280×800`）与 Mobile（`390×844`）双视口下遍历主管 13 个核心页面与老师端/学员端首页；
   - 验证全站 0 `pageerror`、0 非预期 `5xx`、线索抽屉必填校验/手机键盘类型/脏关闭「放弃更改」确认、`Esc` 关闭铃铛弹层、手机底栏热区 ≥ 40px 及老师/学员端离线提示条 `.fq-offline-bar`。
 - **回归测试**：`tests/e2e/usability-audit.spec.mjs` **2 / 2 通过**（51.3s）。
+
+## 2026-11-24：最新 `main@fee425a` 部署上线、只读浏览器核对与暂代 Claude 同步文档
+
+- **Pages 部署上线**：将合入 PR #34（#12 溢出修复 + #11 按钮交互规范）、PR #35（#4 死代码第 5 批）、PR #36（#15 可用性彻查）的 `main@fee425a` 构建部署至 Cloudflare Pages `fengqin-crm-prod`（Deployment `2af262cb`）。
+- **只读线上核对**：
+  - 使用 Playwright 无头浏览器（桌面 `1440×900` + 手机 `390×844`）实测 `https://edu.fantasmearts.com/login`：HTTP 200、`errs: []`、`bad: []`、`overflow: false`；线上 `/assets/tenant.css?v=8468806870ad` 与 `/assets/tenant.js?v=535dc52e35e9` SHA-256 与本地构建 `dist/` **完全一致**；
+  - `GET /api/setup` → `{"initialized":true}`，未登录 `GET /api/tools/leads` → HTTP 401。
+- **暂代 Claude 文档同步**：Claude 暂休期间，按用户委托同步更新过时的 `docs/fengqin/任务板.md`、`docs/fengqin/项目状态.md` 与 `deployment/cloudflare/README.md`，与 GPT 当前正在执行的后端补审及 #5 清理零冲突。
+
