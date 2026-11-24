@@ -32,6 +32,7 @@ const exact = new Set([
   "tools/classes",
   "c3/leads-summary",
   "c3/report",
+  "c3/report/earned",
   "c3/receipts",
   "c3/costs-summary",
   "c3/teachers",

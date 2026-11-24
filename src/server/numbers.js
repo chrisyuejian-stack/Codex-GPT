@@ -44,6 +44,8 @@ const fields = new Set([
   "cost_amount",
   "profit_amount",
   "earned_amount",
+  "lesson_amount",
+  "reversal_amount",
   "profit_cash",
   "profit_earned",
   "accrued_amount",

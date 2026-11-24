@@ -4,7 +4,7 @@ import { can, projectRecord } from "./permissions.js";
 import { requireCan } from "./accounts.js";
 import { fail, now, integer } from "./core.js";
 import { moneyOut } from "./numbers.js";
-import { occurredReport } from "./finance.js";
+import { occurredReport, earnedDetails } from "./finance.js";
 import { renewalSettings } from "./tools.js";
 import { effectivePolicies } from "./absence.js";
 const today = () =>
@@ -173,6 +173,10 @@ export async function rebuild3Api(req, env, t, user, policy, path, url, body) {
         .toISOString()
         .slice(0, 10);
     return { items: await r.c3Teachers(from, to) };
+  }
+  if (path === "/api/c3/report/earned") {
+    requireCan(user, policy, "reports", "read");
+    return moneyOut(await earnedDetails(r, viewMonth(url, day)));
   }
   if (path === "/api/c3/report") {
     requireCan(user, policy, "reports", "read");

@@ -32,6 +32,7 @@ test("read-batch 扩充：新加入的只读路径批量与单独请求一致、
       "tools/classes?offset=0",
       "c3/leads-summary",
       "c3/report?month=2026-11",
+      "c3/report/earned?month=2026-11",
       "c3/receipts?month=2026-11",
       "c3/costs-summary?month=2026-11",
       "c3/teachers",
@@ -88,12 +89,15 @@ test("read-batch 扩充：新加入的只读路径批量与单独请求一致、
   }
 });
 
-test("read-batch 白名单：前端合批名单与后端完全一致（前端多加会让整批 400）", async () => {
+test("read-batch 白名单：精确校验前端名单及本轮后端先行的确认收入路径", async () => {
   const { readFile } = await import("node:fs/promises");
   const app = await readFile("src/tenant/app.js", "utf8");
   const server = await readFile("src/server/read-batch.js", "utf8");
   const fe = new Function(app.slice(app.indexOf("const BATCH_EXACT"), app.indexOf("let batchOff")) + ";return {BATCH_EXACT,BATCH_PATTERN};")();
   const be = new Function(server.slice(server.indexOf("const exact"), server.indexOf("export function")) + ";return {exact,patterns};")();
-  assert.deepEqual([...fe.BATCH_EXACT].sort(), [...be.exact].sort());
+  // Backend-only rollout: do not edit the frontend owner's directory. This exact,
+  // named addition also works once Antigravity adds it to BATCH_EXACT; no other drift is allowed.
+  const expected = new Set([...fe.BATCH_EXACT, "c3/report/earned"]);
+  assert.deepEqual([...expected].sort(), [...be.exact].sort());
   assert.equal(fe.BATCH_PATTERN.source, be.patterns.source);
 });

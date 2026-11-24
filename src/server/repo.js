@@ -2942,6 +2942,30 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
         offset,
       );
     },
+    async earnedDetails(month, cutoff) {
+      scoped();
+      const entries = await all(`SELECT e.id,e.booked_on date,e.amount,e.unpriced_units,e.source,
+        x.delta,x.note,p.id package_id,p.unit_price,c.id course_type_id,c.name course_name,pc.name package_name,
+        s.id student_id,s.name student_name,s.billing_mode,
+        l.id lesson_id,l.start_at,l.teacher_id,t.name teacher_name
+        FROM credit_income_entries e
+        JOIN package_transactions x ON x.tenant_id=e.tenant_id AND x.id=e.id
+        JOIN packages p ON p.tenant_id=x.tenant_id AND p.id=x.package_id
+        JOIN course_types pc ON pc.tenant_id=p.tenant_id AND pc.id=p.course_type_id
+        JOIN students s ON s.tenant_id=x.tenant_id AND s.id=x.student_id
+        LEFT JOIN lesson_participants lp ON lp.tenant_id=x.tenant_id AND lp.id=x.participant_id
+        LEFT JOIN lessons l ON l.tenant_id=lp.tenant_id AND l.id=lp.lesson_id
+        JOIN course_types c ON c.tenant_id=p.tenant_id AND c.id=COALESCE(l.course_type_id,p.course_type_id)
+        LEFT JOIN teachers t ON t.tenant_id=l.tenant_id AND t.id=l.teacher_id
+        WHERE e.tenant_id=? AND e.deleted_at IS NULL AND e.booked_on>=? AND e.booked_on<=? ORDER BY e.booked_on DESC,e.id DESC LIMIT 20001`,tenantId,month+'-01',cutoff);
+      const other = await all(`SELECT r.id,r.recognized_date date,p.amount,r.other_category course_name,r.other_note note,
+        s.id student_id,s.name student_name FROM student_payment_resolutions r
+        JOIN student_payments p ON p.tenant_id=r.tenant_id AND p.id=r.id AND p.deleted_at IS NULL
+        JOIN students s ON s.tenant_id=r.tenant_id AND s.id=r.student_id
+        WHERE r.tenant_id=? AND r.kind='other_income' AND r.deleted_at IS NULL AND r.recognized_date>=? AND r.recognized_date<=? ORDER BY r.recognized_date DESC,r.id DESC LIMIT 20001`,tenantId,month+'-01',cutoff);
+      if(entries.length+other.length>20000) fail(400,'确认收入明细过多，请缩小范围');
+      return {entries,other};
+    },
     async financeContext(month, teacherId = null, includeDebt = false, checkCheckout = false) {
       scoped();
       const from = month + "-01",
