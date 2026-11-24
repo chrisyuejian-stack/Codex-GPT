@@ -621,35 +621,54 @@
   }
   function renderEarnedDetails(host, data, { initialFilter = "all", initialQuery = "", onClose = null } = {}) {
     host.replaceChildren();
-    if (!data || data.earned_amount === null || !Array.isArray(data.items)) {
-      host.append(UI.empty({ text: data?.earned_amount === null ? "该月锁定早于确认收入口径，暂无逐笔确认收入明细。" : "当前暂无确认收入明细，或明细接口尚未启用。" }));
+    if (!data || !Array.isArray(data.items)) {
+      host.append(UI.empty({ text: data?._error ? "暂时无法加载确认收入明细：" + data._error : "当前暂无确认收入明细，或明细接口尚未启用。" }));
       return;
     }
     const local = { filter: initialFilter || "all", q: initialQuery || "" };
     const items = data.items || [];
+    const hasSnapshot = typeof data.earned_amount === "number" && Number.isFinite(data.earned_amount);
+    if (!hasSnapshot && items.length === 0) {
+      host.append(UI.empty({ text: "历史快照未记录确认收入口径，且当月暂无实时明细，暂不可核对。" }));
+      return;
+    }
+    const toCents = (v) => Math.round(Number(v || 0) * 100);
     const sum = data.summary || {};
-    const lessonAmt = Number(sum.lesson_amount ?? items.filter((r) => r.category === "lesson").reduce((s, r) => s + Number(r.amount || 0), 0));
-    const otherAmt = Number(sum.other_income_amount ?? items.filter((r) => r.category === "other").reduce((s, r) => s + Number(r.amount || 0), 0));
-    const revAmt = Number(sum.reversal_amount ?? items.filter((r) => r.category === "reversal").reduce((s, r) => s + Number(r.amount || 0), 0));
-    const totalAmt = Number(data.earned_amount || 0);
+    const lessonCents = sum.lesson_amount !== undefined
+      ? toCents(sum.lesson_amount)
+      : items.filter((r) => r.category === "lesson").reduce((s, r) => s + toCents(r.amount), 0);
+    const otherCents = sum.other_income_amount !== undefined
+      ? toCents(sum.other_income_amount)
+      : items.filter((r) => r.category === "other").reduce((s, r) => s + toCents(r.amount), 0);
+    const revCents = sum.reversal_amount !== undefined
+      ? toCents(sum.reversal_amount)
+      : items.filter((r) => r.category === "reversal").reduce((s, r) => s + toCents(r.amount), 0);
+    const itemsCents = items.reduce((s, r) => s + toCents(r.amount), 0);
+    const totalCents = hasSnapshot ? toCents(data.earned_amount) : null;
+    const itemsTotal = itemsCents / 100;
+    const totalAmt = totalCents !== null ? totalCents / 100 : null;
+    const matched = hasSnapshot && itemsCents === totalCents;
     const wrap = n("div", null, { class: "fq-fin-edwrap" });
 
     // 顶部来源核对条
     const rec = n("div", null, { class: "fq-fin-edsum" });
     const formula = n("div", null, { class: "fq-fin-edform" });
     formula.append(
-      n("span", "课程消课 "), n("strong", money(lessonAmt)),
-      n("span", " + 其他收入 ", { class: "is-sep" }), n("strong", money(otherAmt), { class: "is-ok" }),
-      n("span", " − 冲红撤回 ", { class: "is-sep" }), n("strong", money(Math.abs(revAmt)), { class: "is-bad" }),
-      n("span", " = ", { class: "is-sep" }), n("strong", money(totalAmt), { class: "is-tot" }),
+      n("span", "课程消课 "), n("strong", money(lessonCents / 100)),
+      n("span", " + 其他收入 ", { class: "is-sep" }), n("strong", money(otherCents / 100), { class: "is-ok" }),
+      n("span", " − 冲红撤回 ", { class: "is-sep" }), n("strong", money(Math.abs(revCents) / 100), { class: "is-bad" }),
+      n("span", " = ", { class: "is-sep" }),
+      hasSnapshot
+        ? n("strong", money(totalAmt), { class: "is-tot" })
+        : n("strong", "快照未记录", { class: "is-warn" }),
     );
-    const itemsTotal = Math.round(items.reduce((s, r) => s + Number(r.amount || 0), 0) * 100) / 100;
-    const matched = Math.abs(itemsTotal - totalAmt) < 0.02;
     const check = n(
       "div",
-      matched
-        ? (data.locked ? "✓ 已锁月 · 台账明细与锁月快照核对一致" : "✓ 明细合计与本月确认收入完全一致")
-        : "明细合计 " + money(itemsTotal) + " · 快照 " + money(totalAmt),
+      !hasSnapshot
+        ? "历史快照未记录确认收入口径，暂不可核对（实时台账合计 " + money(itemsTotal) + "）"
+        : matched
+          ? (data.locked ? "✓ 已锁月 · 台账明细与锁月快照核对一致" : "✓ 明细合计与本月确认收入完全一致")
+          : "明细合计 " + money(itemsTotal) + " · 快照 " + money(totalAmt),
       { class: "fq-fin-edchk" + (matched ? " is-ok" : " is-warn") },
     );
     rec.append(formula, check);
@@ -947,10 +966,19 @@
           },
           { label: "已发生课次", num: true, value: (r) => String(r.lesson_count) },
           { label: "课时", num: true, value: (r) => String(r.units) },
-          ...(hasRowEarned ? [{ label: "确认收入", num: true, value: (r) => money(r.earned_amount) }] : []),
+          ...(hasRowEarned ? [{ label: "确认收入", num: true, value: (r) => (r.earned_amount === null || r.earned_amount === undefined ? "—" : money(r.earned_amount)) }] : []),
           ...(pay ? [{ label: "课酬分摊", num: true, value: (r) => cell(r.teacher_pay_amount) }] : []),
           ...(hasRowEarned && pay
-            ? [{ label: "课酬后毛利", num: true, value: (r) => money(Number(r.earned_amount || 0) - Number(r.teacher_pay_amount || 0)) }]
+            ? [
+                {
+                  label: "课酬后毛利",
+                  num: true,
+                  value: (r) =>
+                    r.earned_amount === null || r.earned_amount === undefined || r.teacher_pay_amount === null || r.teacher_pay_amount === undefined
+                      ? "—"
+                      : money((Math.round(Number(r.earned_amount) * 100) - Math.round(Number(r.teacher_pay_amount) * 100)) / 100),
+                },
+              ]
             : []),
         ],
         rows,

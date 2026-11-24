@@ -118,29 +118,73 @@ const MOCK_EARNED = {
 };
 
 test.describe("财务：确认收入来源明细（概览下钻抽屉与报表页签）", () => {
-  test("@smoke 点击概览确认收入卡片弹出明细抽屉并支持来源筛选与搜索，报表页支持确认收入页签", async ({ browser, request }, info) => {
+  test("@smoke 真实后端联调：概览下钻抽屉与报表维度/收入明细页签均通过真实接口与 read-batch 加载", async ({ browser, request }, info) => {
     const h = await createHarness(browser, request, info, ["supervisor"]);
     try {
       const page = await h.openApp("supervisor", "#finance-overview");
-      await page.route("**/api/c3/report/earned*", async (route) => {
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_EARNED) });
-      });
-
-      // 1. 概览页点击「确认收入」卡片或摘要条打开明细抽屉
       const earnedCard = page.locator("button.fq-fin-stat.is-earned-link").first();
       await expect(earnedCard).toBeVisible();
       await expect(earnedCard).toContainText("查看明细");
-      await earnedCard.click();
+
+      const [directRes] = await Promise.all([
+        page.waitForResponse((r) => new URL(r.url()).pathname === "/api/c3/report/earned" && r.request().method() === "GET"),
+        earnedCard.click(),
+      ]);
+      expect(directRes.status()).toBe(200);
 
       const sheet = topSheet(page);
       await expect(sheet).toBeVisible();
       await expect(sheet).toContainText("确认收入明细");
-      await expect(sheet).toContainText("明细合计与本月确认收入完全一致");
-      await expect(sheet).toContainText("林思语");
-      await expect(sheet).toContainText("周子轩");
+      await expect(sheet).toContainText(/明细合计与本月确认收入完全一致|已锁月/);
+
+      await page.keyboard.press("Escape");
+      await expect(sheet).toBeHidden();
+
+      // 报表页 #finance-reports 应通过 read-batch 联合加载确认收入维度列与第 4 个「收入明细」页签
+      const [batchRes] = await Promise.all([
+        page.waitForResponse(async (r) => {
+          if (new URL(r.url()).pathname !== "/api/read-batch" || r.request().method() !== "POST") return false;
+          return (r.request().postData() || "").includes("c3/report/earned");
+        }),
+        page.evaluate(() => { location.hash = "#finance-reports"; }),
+      ]);
+      expect(batchRes.status()).toBe(200);
+
+      const earnedTab = page.locator(".v-ptab:has-text('收入明细')").first();
+      await expect(earnedTab).toBeVisible();
+      if (!info.project.use.isMobile) {
+        await expect(page.locator(".v-content")).toContainText("确认收入");
+      }
+      await earnedTab.click();
+      await expect(page.locator(".fq-fin-edwrap")).toBeVisible();
+      await expect(page.locator(".fq-fin-edwrap")).toContainText(/明细合计与本月确认收入完全一致|已锁月/);
+
+      await h.healthy();
+    } finally {
+      await h.close();
+    }
+  });
+
+  test("@smoke 边界校验：历史快照 null 不误报 0 元、1 分钱差异告警、筛选搜索与去补单价", async ({ browser, request }, info) => {
+    const h = await createHarness(browser, request, info, ["supervisor"]);
+    try {
+      const page = await h.openApp("supervisor", "#finance-overview");
+
+      // 1. 1 分钱差异（1560.01 vs 1560.00）必须判为不一致警告，且支持筛选/搜索/去补单价
+      await page.route("**/api/c3/report/earned*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ...MOCK_EARNED, earned_amount: 1560.01 }),
+        });
+      });
+      await page.locator("button.fq-fin-stat.is-earned-link").first().click();
+      let sheet = topSheet(page);
+      await expect(sheet).toBeVisible();
+      await expect(sheet.locator(".fq-fin-edchk.is-warn")).toContainText("明细合计 ¥1,560 · 快照 ¥1,560.01");
+      await expect(sheet).not.toContainText("完全一致");
       await expect(sheet).toContainText("去补单价");
 
-      // 2. 来源筛选与关键词搜索
       await sheet.getByRole("button", { name: /冲红撤回/ }).click();
       await expect(sheet).toContainText("周子轩");
       await expect(sheet).not.toContainText("林思语");
@@ -153,18 +197,30 @@ test.describe("财务：确认收入来源明细（概览下钻抽屉与报表�
       await page.keyboard.press("Escape");
       await expect(sheet).toBeHidden();
 
-      // 3. 报表页 #finance-reports 第四个「收入明细」页签
-      await page.evaluate(() => { location.hash = "#finance-reports"; });
-      await page.waitForTimeout(450);
-      const earnedTab = page.locator(".v-ptab:has-text('收入明细')").first();
-      await expect(earnedTab).toBeVisible();
-      await earnedTab.click();
-      await expect(page.locator(".fq-fin-edwrap")).toBeVisible();
-      await expect(page.locator(".fq-fin-edwrap")).toContainText("林思语");
+      // 2. 早期锁月 earned_amount === null：保留实时明细并提示“快照未记录 / 暂不可核对”，绝不归零
+      await page.unroute("**/api/c3/report/earned*");
+      await page.route("**/api/c3/report/earned*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ...MOCK_EARNED, locked: true, earned_amount: null }),
+        });
+      });
+      await page.locator("button.fq-fin-stat.is-earned-link").first().click();
+      sheet = topSheet(page);
+      await expect(sheet).toBeVisible();
+      await expect(sheet.locator(".fq-fin-edform")).toContainText("快照未记录");
+      await expect(sheet.locator(".fq-fin-edchk.is-warn")).toContainText("历史快照未记录确认收入口径，暂不可核对");
+      await expect(sheet.locator(".fq-fin-edchk.is-warn")).toContainText("¥1,560");
+      await expect(sheet).not.toContainText("核对一致");
+      await expect(sheet).toContainText("林思语");
 
+      await page.keyboard.press("Escape");
+      await expect(sheet).toBeHidden();
       await h.healthy();
     } finally {
       await h.close();
     }
   });
 });
+

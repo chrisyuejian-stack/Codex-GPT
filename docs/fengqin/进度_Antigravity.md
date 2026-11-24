@@ -88,4 +88,11 @@
   - `src/tenant/fq-finance.js` & `fq-finance.css`：「财务 › 概览」的「确认收入」数字卡升级为可点击下钻入口（带「查看明细 →」标签），下方增加「本月确认收入构成」摘要条与「无单价待补录」快捷跳转。
 - **回归测试**：`tests/e2e/finance-earned-details.spec.mjs` 双端通过。
 
+## 2026-11-24：PR #39 门禁解阻与 PR #42「确认收入明细」前后端联动（分支 `antigravity/earned-details-integration`）
+
+- **PR #39（`codex/backend-review`）解阻**：合入最新 `main` 解决 `docs/fengqin/接口变更.md` 冲突并跑通全套门禁（`build`、源码/打包 387/387、35 项迁移预检、系统 Chrome `test:e2e:smoke` 28 通过 / 2 项原有手机 skip），已解除 Draft 标记为可合并。
+- **PR #42 前端联动修复**（按 GPT 在 PR #41/#42 的交接要求）：
+  - `src/tenant/app.js`：`BATCH_EXACT` 加入 `"c3/report/earned"`，与后端 `read-batch.js` 精确白名单一致。
+  - `src/tenant/v2f.js`：`renderEarnedDetails` 区分 `earned_amount === null` 历史快照（显示「快照未记录 / 暂不可核对」并保留实时台账明细，不再误转为 `0` 元）；明细与快照改按整数分精确比对，1 分钱差异即显示警告；维度表 `确认收入` 与 `课酬后毛利` 在空值时展示 `—` 并按分相减。
+  - `tests/e2e/finance-earned-details.spec.mjs`：升级为包含无 Mock 的真实前后端与 `read-batch` 联调冒烟，及 `earned_amount: null` 历史快照、1 分钱差异告警、来源筛选与搜索回归。
 

@@ -441,7 +441,7 @@ const BATCH_EXACT = new Set([
   "student/comments", "c3/student-comments", "credits/payments",
   // 2026-11-20 后端扩充（见 接口变更.md「接口合并与后端提速」）；renewal-brand 会写审计，不在名单内。
   "todo/inbox", "todo/followups", "tools/leads", "tools/followup_tasks", "tools/classes",
-  "c3/leads-summary", "c3/report", "c3/receipts", "c3/costs-summary", "c3/teachers",
+  "c3/leads-summary", "c3/report", "c3/report/earned", "c3/receipts", "c3/costs-summary", "c3/teachers",
   "finance/payroll", "finance/settlement", "finance/costs", "finance/rates",
   "schedule-next", "data/student_schedule_blocks", "settings/brand", "accounts", "logs", "teacher/today",
 ]);
