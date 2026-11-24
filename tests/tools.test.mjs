@@ -99,11 +99,11 @@ test("第六阶段：班级、跟进、线索均校验同机构关联；招生�
     );
     await pack(s, s.students[0], 2);
     const dashboard = await ok(
-      await request(s, "workbench", "GET", undefined, academic.token),
+      await request(s, "c2/home", "GET", undefined, academic.token),
     );
     assert.ok(!("tuition_amount" in dashboard));
     const renewal = await ok(
-      await request(s, "renewals", "GET", undefined, academic.token),
+      await request(s, "c2/renewals", "GET", undefined, academic.token),
     );
     assert.equal(renewal.items[0].balance, 2);
     assert.ok(!("amount" in renewal.items[0]));

@@ -63,7 +63,6 @@ try{
   await sample("report","finance/report?month=2026-11");
   await sample("tenant-me","me");
   await sample("console-me","me","GET",undefined,undefined,true);
-  f.env.TURNSTILE_MODE="off";
   for (let i=1;i<=3;i++)
     await sample("bad-login-"+i,"login","POST",{phone:"13911112222",password:"BadPassword8"});
   f.db.raw.exec("DELETE FROM security_limits WHERE instr(key,'login')=1");

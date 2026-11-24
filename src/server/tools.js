@@ -5,7 +5,7 @@ import { fail, string, integer, randomId, now, version, phone } from "./core.js"
 import { requireCan } from "./accounts.js";
 import { can } from "./permissions.js";
 import { encrypt, decrypt } from "./crypto.js";
-import { day, prepareStudent, addStudentSummaries } from "./scheduling.js";
+import { day, prepareStudent } from "./scheduling.js";
 import { moneyOut } from "./numbers.js";
 export const toolResources = {
   classes: "classes",
@@ -311,27 +311,6 @@ export async function toolsApi(req, env, t, user, policy, path, url, readBody) {
       data.followup_today += data.stage_expired || 0;
     return data;
   }
-  if (path === "/api/workbench" && req.method === "GET") {
-    requireCan(user, policy, "home", "read");
-    const date = new Date(now()).toLocaleDateString("sv-SE", {
-      timeZone: "Asia/Shanghai",
-    });
-    const data = await r.workbench(date, renewalSettings(policy.settings));
-    if (!can(user, policy, "schedule", "read")) delete data.lessons;
-    else await addStudentSummaries(r, data.lessons, user);
-    if (!can(user, policy, "attendance", "read")) {
-      delete data.pending;
-      delete data.overdue;
-    }
-    if (!can(user, policy, "packages", "read")) {
-      delete data.renewals;
-      delete data.expiring;
-    }
-    if (!can(user, policy, "followup", "read")) delete data.tasks;
-    if (!can(user, policy, "tuition", "read")) delete data.tuition_amount;
-    if (!can(user, policy, "schedule", "read")) delete data.lesson_count;
-    return moneyOut(data);
-  }
   if (path === "/api/renewals/remind" && req.method === "POST") {
     requireCan(user, policy, "packages", "read");
     requireCan(user, policy, "exports", "export");
@@ -356,32 +335,6 @@ export async function toolsApi(req, env, t, user, policy, path, url, readBody) {
         ids,
         d.channel,
       ),
-    };
-  }
-  if (path === "/api/renewals" && req.method === "GET") {
-    requireCan(user, policy, "packages", "read");
-    const date = new Date(now()).toLocaleDateString("sv-SE", {
-      timeZone: "Asia/Shanghai",
-    });
-    const settings = renewalSettings(policy.settings);
-    const offset = integer(
-      Number(url.searchParams.get("offset") || 0),
-      "分页",
-      0,
-      1000000,
-    );
-    const group = url.searchParams.get("group") || "";
-    if (!["", "debt", "zero", "low", "expiring", "expired"].includes(group))
-      fail(400, "分组不正确");
-    const rows = await r.renewals(date, settings, offset, group);
-    const total =
-      rows[0]?.page_total ??
-      (offset ? ((await r.renewals(date, settings, 0, group))[0]?.page_total ?? 0) : 0);
-    return {
-      items: rows.map(({ page_total, ...row }) => row),
-      settings,
-      total,
-      next_offset: offset + 200 < total ? offset + 200 : null,
     };
   }
   if (path === "/api/renewal-brand" && req.method === "GET") {
