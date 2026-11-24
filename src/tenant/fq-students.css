@@ -447,3 +447,8 @@ html .fq-st-pk-ops { align-items: center; }
 html .fq-st-pk-ops .ui-menu-holder { display: inline-flex; }
 html .fq-st-pk-ops .ui-button.fq-st-morebtn { min-width: 28px; min-height: 28px; height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--fq-line); background: var(--fq-card-solid); color: var(--fq-text); font-size: 13px; }
 html .fq-st-fold .fq-st-link { font-size: 12px; }
+html .fq-st-link { flex-shrink: 0; }
+@media (max-width: 1024px) {
+  html .fq-st-split { grid-template-columns: 1fr; }
+  html .fq-st-list { position: static; }
+}

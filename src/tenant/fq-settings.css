@@ -597,9 +597,20 @@ html .fq-se-two .fq-se-legacy > form.v-panel { margin: 0; padding: 0; border: 0;
 html .fq-se-two .fq-se-legacy > form.v-panel > h3 { display: none; }
 html .fq-se-table td, html .fq-se-cat footer { white-space: nowrap; }
 html .fq-se-table td:first-child { white-space: normal; }
-html .fq-se-acts .ui-button { min-height: 28px; height: 28px; padding: 0 8px; font-size: 13px; }
-html .fq-se-acts .ui-button svg { display: none; }
+html .fq-se-acts > .ui-button,
+html .fq-se-acts > .ui-menu-holder > .ui-button { min-height: 28px; height: 28px; padding: 0 8px; font-size: 13px; }
+html .fq-se-acts > .ui-button svg,
+html .fq-se-acts > .ui-menu-holder > .ui-button svg { display: none; }
 html .fq-se-cat footer { gap: 6px; }
+@media (max-width: 1180px) {
+  html .fq-se-cats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 960px) {
+  html .fq-se { grid-template-columns: 1fr; }
+  html .fq-se-nav { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; position: static; }
+  html .fq-se-nav-label, html .fq-se-nav-foot { display: none; }
+  html .fq-se-stats, html .fq-se-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 /* ---------- 未出稿三区：教务规则 / AI 设置 / 操作记录 ---------- */
 html button.fq-se-sw {

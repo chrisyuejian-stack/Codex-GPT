@@ -303,3 +303,11 @@ html .fq-tp-rfull { grid-column: 1 / -1; }
 }
 html .fq-tp-dark .fq-tp-dark-link { color: #f0c98f; display: block; margin-top: 12px; font-size: 12.5px; font-weight: 700; }
 html .fq-tp-search input, html .fq-tp-search input:focus { padding: 0; border: 0; box-shadow: none; height: 32px; min-height: 0; }
+@media (max-width: 1080px) {
+  html .fq-tp-split { display: block; }
+  html .fq-tp-grid { grid-template-columns: 1fr; }
+  html .fq-tp-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html .fq-tp-ops { padding-left: 0; }
+  html .fq-tp-rgrid { grid-template-columns: 1fr; }
+  html .fq-tp-rrow { flex-wrap: wrap; gap: 6px 10px; }
+}

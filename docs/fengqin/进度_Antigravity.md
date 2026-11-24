@@ -47,3 +47,13 @@
   - 全量门禁 `npm run build && npm test && TEST_BUNDLE=1 npm test`：**377/377** 全绿（0 失败、0 跳过）；
   - 验收报告：`docs/qa/任务14_日期输入验收记录_2026-11-23.md`。
 - **生产部署**：已将含 P0 CSS 修复 + 任务 #14 日期/日历组件修复的最新 `dist/` 部署至 Cloudflare Pages `fengqin-crm-prod`（Deployment `ea427c1f`）。
+
+## 2026-11-23：任务 #12 全站界面溢出彻查修复 & 任务 #11 按钮交互反馈统一规范（分支 `antigravity/ui-audit-fix`）
+
+- **#12 全站溢出彻查与修复**（详见 `docs/qa/界面溢出彻查_2026-11-22.md`）：
+  - 使用 `scripts/e2e/ui-audit-crawl.mjs` 遍历 5 视口 × 5 角色（210 个页面状态），共检出 183 条问题（全部集中在 `768×1024` 平板竖屏顶栏不换行溢出、老师/课酬标准按钮被裁切、学员「显示号码」截断），以及设置 › 课程大类「⋯」菜单非锚点定位兼容与 `.fq-se-acts` 选择器误伤菜单高度问题；
+  - 在 `v2.css`、`components.js`、`fq-settings.css`、`fq-teachers.css`、`fq-students.css` 统一层修复后，平板竖屏问题降至 **0 条**。
+- **#11 按钮悬停/按下/焦点/禁用/减弱动态统一规范**（详见 `docs/qa/按钮交互规范验收_2026-11-23.md`）：
+  - 在 `src/ui/components.css` 与 `src/tenant/fq.css` 统一层为所有第三期 `.fq-*` 按钮、筛选药丸、页签、列表行、图标按钮、手机底栏补充 `0.16s` 过渡、`@media (hover: hover)` 悬停反馈、`:active` 按下微缩、`:focus-visible` 焦点环、禁用态及 `prefers-reduced-motion: reduce` 支持。
+- **验证**：`tests/e2e/ui-audit-and-hover.spec.mjs` 4/4 通过（Desktop / Tablet `768×1024` / Mobile `390×844`）。
+

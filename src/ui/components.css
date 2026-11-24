@@ -927,6 +927,20 @@ textarea.ui-control {
     color: var(--ui-error);
     background: var(--ui-error-bg);
   }
+  .ui-button--chip:hover:not(:disabled):not([aria-pressed="true"]) .ui-button-face {
+    border-color: var(--ui-primary);
+    color: var(--ui-primary);
+    background: var(--ui-primary-soft);
+  }
+  .ui-button--link:hover:not(:disabled) .ui-button-face {
+    background: transparent;
+    border-color: transparent;
+    text-decoration: underline;
+  }
+  .ui-page-tabs .ui-button:hover:not(:disabled):not([aria-current="page"]) .ui-button-face {
+    background: rgba(106, 53, 184, 0.06);
+    color: var(--ui-primary);
+  }
   .ui-interactive:hover {
     transform: translateY(-2px);
     border-color: var(--ui-input-border);
