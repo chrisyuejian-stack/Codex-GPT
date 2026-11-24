@@ -2107,6 +2107,21 @@ export function filterBar(items = []) {
   return row;
 }
 export function actionMenu({ label = "更多", items = [] } = {}) {
+  const clampMenu = () => {
+    const tr = trigger.getBoundingClientRect();
+    const mr = menu.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (!CSS.supports?.("position-area", "block-end") || mr.right > vw - 6 || mr.left < 6 || mr.bottom > vh - 6 || mr.top < 6) {
+      menu.style.inset = "auto";
+      menu.style.margin = "0";
+      const left = Math.max(8, Math.min(tr.right - mr.width, vw - mr.width - 8));
+      const preferBelow = tr.bottom + 4 + mr.height <= vh - 8 || tr.top - 4 - mr.height < 8;
+      const top = preferBelow ? Math.min(tr.bottom + 4, vh - mr.height - 8) : Math.max(8, tr.top - 4 - mr.height);
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.top = `${Math.round(top)}px`;
+    }
+  };
   const menu = node("div", null, {
       class: "ui-root ui-more-menu",
       popover: "auto",
@@ -2114,7 +2129,12 @@ export function actionMenu({ label = "更多", items = [] } = {}) {
     trigger = button(label, {
       icon: "chevron-down",
       onClick: () => {
+        menu.style.left = "";
+        menu.style.top = "";
+        menu.style.inset = "";
+        menu.style.margin = "";
         menu.showPopover({ source: trigger });
+        clampMenu();
         menu.querySelector("button:not(:disabled)")?.focus();
       },
     }),

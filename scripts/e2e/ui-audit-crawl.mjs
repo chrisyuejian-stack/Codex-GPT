@@ -513,7 +513,7 @@ export async function runFullAudit({
   const browser = await chromium.launch({
     headless: true,
     executablePath: chromePath,
-    args: ["--no-sandbox", "--disable-gpu"],
+    args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
   });
 
   const allIssues = [];
@@ -608,6 +608,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   );
   const res = await runFullAudit({
     screenshotDir: args.shots || null,
+    roles: args.roles ? args.roles.split(",").filter(Boolean) : undefined,
+    viewports: args.viewports
+      ? VIEWPORTS.filter((v) => args.viewports.split(",").includes(v.id))
+      : undefined,
   });
   if (args.out) {
     await mkdir(path.dirname(args.out), { recursive: true });
