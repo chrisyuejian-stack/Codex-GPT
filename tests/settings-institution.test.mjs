@@ -1,6 +1,8 @@
 // 第三期 · 设置（DECISIONS 14）：主管直接修改机构名称、Logo、联系说明。
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { fixture } from "./support.mjs";
 import { setup, request, accountToken, pack } from "./fixtures-credit.mjs";
 import { b64, bytes, sha } from "../src/server/core.js";
@@ -361,4 +363,35 @@ test("第三期设置未出稿三区（教务规则、AI 设置、操作记录�
   assert.match(logsBlock, /UI\.drawer\(/);
   assert.match(logsBlock, /before_json/);
   assert.match(logsBlock, /after_json/);
+});
+
+test("全站 CSS 花括号配对检查：防止未闭合 @media 吞掉后续 fq.css 登录页与卡片样式", () => {
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+  const dirs = [
+    path.join(root, "src/ui"),
+    path.join(root, "src/tenant"),
+  ];
+  const files = [];
+  for (const dir of dirs) {
+    for (const name of fs.readdirSync(dir)) {
+      if (name.endsWith(".css")) files.push(path.join(dir, name));
+    }
+  }
+  const builtCss = path.join(root, "dist/assets/tenant.css");
+  if (fs.existsSync(builtCss)) files.push(builtCss);
+  assert.ok(files.length >= 10);
+  for (const file of files) {
+    const clean = fs.readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    let depth = 0;
+    let min = 0;
+    for (const ch of clean) {
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth < min) min = depth;
+      }
+    }
+    assert.equal(depth, 0, `${path.relative(root, file)} 存在未闭合花括号 (depth=${depth})`);
+    assert.equal(min, 0, `${path.relative(root, file)} 存在多余右花括号 (min=${min})`);
+  }
 });
