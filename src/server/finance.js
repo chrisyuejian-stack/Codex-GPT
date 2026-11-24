@@ -510,6 +510,193 @@ export function occurredReport(
     ).length,
   };
 }
+// Shared by the read-only ledger endpoint and the occurred-report export. Values remain cents here.
+export async function earnedDetails(r, month, context = null) {
+  const today = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Shanghai",
+  }).format(new Date(now()));
+  const end = new Date(
+    Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0),
+  )
+    .toISOString()
+    .slice(0, 10);
+  const cutoff = end < today ? end : today;
+  const ctx = context || (await r.financeContext(month)),
+    policies = contextPolicies(ctx);
+  const report = occurredReport(ctx, policies, cutoff);
+  const { entries, other } = await r.earnedDetails(month, cutoff);
+  const labels = {
+    checkout: "课程消课",
+    debt_repayment: "补扣欠课时",
+    unpriced: "无单价消课",
+    reversal: "冲红撤回",
+    price_completion: "补填单价",
+    legacy_estimate: "历史消课",
+    legacy_no_price: "历史无单价",
+    legacy_overall: "整体收费",
+  };
+  const items = entries.map((x) => ({
+    id: x.id,
+    date: x.date,
+    category:
+      x.amount < 0
+        ? "reversal"
+        : x.amount === 0 && x.unpriced_units > 0
+          ? "unpriced"
+          : "lesson",
+    source: x.source,
+    source_label: labels[x.source] || x.source,
+    student_id: x.student_id,
+    student_name: x.student_name,
+    course_type_id: x.course_type_id,
+    course_name: x.course_name,
+    teacher_id: x.teacher_id ?? null,
+    teacher_name: x.teacher_name ?? null,
+    lesson_id: x.lesson_id ?? null,
+    start_at: x.start_at ?? null,
+    package_id: x.package_id,
+    package_name: x.package_name,
+    units: -x.delta,
+    unit_price: x.unit_price,
+    unpriced_units: x.unpriced_units,
+    amount: x.amount,
+    can_fix_price:
+      x.amount === 0 &&
+      x.unpriced_units > 0 &&
+      x.unit_price === null &&
+      x.billing_mode !== "overall",
+    note: x.note,
+  }));
+  for (const x of other)
+    items.push({
+      ...x,
+      category: "other",
+      source: "other_income",
+      source_label: "其他收入",
+      course_type_id: null,
+      teacher_id: null,
+      teacher_name: null,
+      lesson_id: null,
+      start_at: null,
+      package_id: null,
+      package_name: null,
+      units: null,
+      unit_price: null,
+      unpriced_units: 0,
+      can_fix_price: false,
+    });
+  // Overall-billed attendance has no package transaction; group once, rather than scanning all participants per lesson.
+  const overall = new Map();
+  for (const p of ctx.participants) {
+    if (p.billing_mode !== "overall" || !(p.attendance === "attended" ||
+        p.attendance === "no_show" && policies.student_no_show?.deduct)) continue;
+    if (!overall.has(p.lesson_id)) overall.set(p.lesson_id, []);
+    overall.get(p.lesson_id).push(p);
+  }
+  const through = Math.min(now(), Date.parse(cutoff + "T23:59:59.999+08:00"));
+  for (const l of ctx.lessons) {
+    if (Date.parse(l.start_at) > through || ["planned", "cancelled"].includes(l.status)) continue;
+    for (const p of overall.get(l.id) || []) {
+      items.push({
+        id: "overall_" + p.id,
+        date: l.start_at.slice(0, 10),
+        category: "unpriced",
+        source: "overall",
+        source_label: "整体收费",
+        student_id: p.student_id,
+        student_name: p.student_name,
+        course_type_id: l.course_type_id,
+        course_name: l.course_name,
+        teacher_id: l.teacher_id,
+        teacher_name: l.teacher_name,
+        lesson_id: l.id,
+        start_at: l.start_at,
+        package_id: null,
+        package_name: null,
+        units: l.units,
+        unit_price: null,
+        unpriced_units: l.units,
+        amount: 0,
+        can_fix_price: false,
+        note: "",
+      });
+    }
+  }
+  if (items.length > 20000) fail(400, "确认收入明细过多，请缩小范围");
+  items.sort(
+    (a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id),
+  );
+  const summary = {
+    lesson_amount: 0,
+    other_income_amount: 0,
+    reversal_amount: 0,
+    lesson_count: 0,
+    other_count: 0,
+    reversal_count: 0,
+    unpriced_count: 0,
+  };
+  const dims = { courses: new Map(), students: new Map(), teachers: new Map() };
+  const seen = { courses: new Map(), students: new Map(), teachers: new Map() };
+  for (const x of items) {
+    summary[x.category + "_count"]++;
+    if (x.category !== "unpriced")
+      summary[
+        {
+          lesson: "lesson_amount",
+          other: "other_income_amount",
+          reversal: "reversal_amount",
+        }[x.category]
+      ] += x.amount;
+    for (const [key, id, name] of [
+      ["courses", x.course_type_id, x.course_name],
+      ["students", x.student_id, x.student_name],
+      ["teachers", x.teacher_id, x.teacher_name],
+    ]) {
+      if (!id) continue;
+      if (!dims[key].has(id)) {
+        dims[key].set(id, {
+          id,
+          name,
+          lesson_count: 0,
+          units: 0,
+          earned_amount: 0,
+          unpriced_units: 0,
+          ...(key === "students" ? { other_income_amount: 0 } : {}),
+        });
+        seen[key].set(id, new Set());
+      }
+      const d = dims[key].get(id);
+      d.earned_amount += x.amount;
+      d.units += x.units || 0;
+      d.unpriced_units += x.unpriced_units;
+      if (x.category === "other" && key === "students")
+        d.other_income_amount += x.amount;
+      if (x.lesson_id) seen[key].get(id).add(x.lesson_id);
+    }
+  }
+  const dimensions = Object.fromEntries(
+    Object.entries(dims).map(([key, map]) => [
+      key,
+      [...map.values()].map((d) => ({
+        ...d,
+        units: Math.round(d.units * 100) / 100,
+        unpriced_units: Math.round(d.unpriced_units * 100) / 100,
+        lesson_count: seen[key].get(d.id).size,
+      })),
+    ]),
+  );
+  return {
+    month,
+    cutoff,
+    locked: report.locked,
+    earned_amount: report.earned_amount,
+    unpriced_units: report.unpriced_units,
+    summary,
+    dimensions,
+    items,
+  };
+}
+
 async function readApi(req, env, tenant, user, policy, path, url) {
   const r = repo(env, tenant.id),
     kindMatch =
@@ -599,7 +786,7 @@ async function readApi(req, env, tenant, user, policy, path, url) {
 async function exportApi(env, tenant, user, policy, url, r, month, teacher) {
   requireCan(user, policy, "exports", "export", own(user));
   const kind = url.searchParams.get("kind"),
-    rows = [];
+    rows = [], extraSheets = [];
   if (kind === "lessons") {
     requireCan(user, policy, "lessons", "read", own(user));
     const items = await r.exportLessons(month, user);
@@ -783,6 +970,13 @@ async function exportApi(env, tenant, user, policy, url, r, month, teacher) {
         ]),
       ),
     );
+    if (url.searchParams.get("scope") === "occurred") {
+      const details = moneyOut(await earnedDetails(r, month, ctx));
+      extraSheets.push({name:"确认收入明细",rows:[
+        ['入账日期','来源类型','学员','课程或说明','老师','课时','单价（元）','无单价课时','确认金额（元）','备注'],
+        ...details.items.map(x=>[x.date,x.source_label,x.student_name,x.course_name,x.teacher_name,x.units,moneyCell(x.unit_price),x.unpriced_units,moneyCell(x.amount),x.note])
+      ]});
+    }
   } else if (kind === "logs") {
     const full = can(user, policy, "logs", "read");
     if (!full) requireCan(user, policy, "logs", "read_finance");
@@ -813,7 +1007,7 @@ async function exportApi(env, tenant, user, policy, url, r, month, teacher) {
       "行",
   );
   env.__exportRecordCount = Math.max(0, rows.length - 1);
-  return new Response(workbook(rows, "教务数据"), {
+  return new Response(workbook(rows, "教务数据", extraSheets), {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

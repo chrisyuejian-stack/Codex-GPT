@@ -93,9 +93,9 @@ export function moneyCell(value) {
     ? { money: true, value }
     : value;
 }
-export function workbook(rows, sheet = "数据") {
+function sheetBody(rows) {
   if (rows.length > 20001) throw Error("export too large");
-  const body = rows
+  return rows
     .map(
       (row, r) =>
         '<row r="' +
@@ -126,7 +126,10 @@ export function workbook(rows, sheet = "数据") {
         "</row>",
     )
     .join("");
-  return zip({
+}
+export function workbook(rows, sheet = "数据", additionalSheets = []) {
+  const body = sheetBody(rows);
+  const files = {
     "[Content_Types].xml":
       '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
     "_rels/.rels":
@@ -143,11 +146,37 @@ export function workbook(rows, sheet = "数据") {
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" state="frozen"/></sheetView></sheetViews><sheetData>' +
       body +
       "</sheetData></worksheet>",
+  };
+  additionalSheets.forEach(({ name, rows }, index) => {
+    const id = index + 2,
+      rid = id + 1;
+    files["[Content_Types].xml"] = files["[Content_Types].xml"].replace(
+      "</Types>",
+      `<Override PartName="/xl/worksheets/sheet${id}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`,
+    );
+    files["xl/workbook.xml"] = files["xl/workbook.xml"].replace(
+      "</sheets>",
+      `<sheet name="${xml(name)}" sheetId="${id}" r:id="rId${rid}"/></sheets>`,
+    );
+    files["xl/_rels/workbook.xml.rels"] = files[
+      "xl/_rels/workbook.xml.rels"
+    ].replace(
+      "</Relationships>",
+      `<Relationship Id="rId${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${id}.xml"/></Relationships>`,
+    );
+    files[`xl/worksheets/sheet${id}.xml`] =
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+      sheetBody(rows) +
+      "</sheetData></worksheet>";
   });
+  return zip(files);
 }
 
 // Import accepts ordinary Excel STORE/DEFLATE OOXML. No macros, formulas, external entities or evaluation.
-export async function readWorkbook(bytes) {
+export async function readWorkbook(
+  bytes,
+  { sheet = 1, singleSheet = true } = {},
+) {
   if (
     !(bytes instanceof Uint8Array) ||
     bytes.length > 750000 ||
@@ -196,7 +225,7 @@ export async function readWorkbook(bytes) {
     total += rawSize;
     if (
       ![
-        "xl/worksheets/sheet1.xml",
+        `xl/worksheets/sheet${sheet}.xml`,
         "xl/sharedStrings.xml",
         "xl/workbook.xml",
       ].includes(name)
@@ -242,8 +271,11 @@ export async function readWorkbook(bytes) {
       throw Error("请去除 Excel 公式后重新导入");
     files[name] = text;
   }
-  if (!files["xl/worksheets/sheet1.xml"]) throw Error("未找到工作表");
-  if ((files["xl/workbook.xml"]?.match(/<sheet\s/g) || []).length > 1)
+  if (!files[`xl/worksheets/sheet${sheet}.xml`]) throw Error("未找到工作表");
+  if (
+    singleSheet &&
+    (files["xl/workbook.xml"]?.match(/<sheet\s/g) || []).length > 1
+  )
     throw Error("请只保留一个待导入工作表");
   const decode = (text) =>
     text.replace(/&(?:amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);/gi, (token) => {
@@ -273,7 +305,7 @@ export async function readWorkbook(bytes) {
     ),
   ].map((m) => texts(m[1]));
   const rows = [];
-  for (const match of files["xl/worksheets/sheet1.xml"].matchAll(
+  for (const match of files[`xl/worksheets/sheet${sheet}.xml`].matchAll(
     /<row(?:\s[^>]*)?>([\s\S]*?)<\/row>/g,
   )) {
     if (rows.length >= 2001) throw Error("单个 Excel 最多2000行，请拆分文件");
