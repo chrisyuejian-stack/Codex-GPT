@@ -587,10 +587,10 @@ test("第三期学员页（fq-students.js）：替换员工端学员入口；名
   assert.doesNotMatch(js, /\.innerHTML\s*=|\.style\.|setAttribute\(["']style["']/);
   assert.ok(!/(?<![.\w])(?:alert|prompt|confirm)\(/.test(js));
   for (const m of js.matchAll(/api\(\s*"([a-z0-9/_-]+)/g))
-    assert.ok(["c2/students", "credits/packages", "data/students/", "renewal-brand", "tools/followup_tasks/", "accounts/"].some((p) => m[1].startsWith(p)), m[1]);
+    assert.ok(["c2/students", "credits/packages", "credits/transactions", "credits/payments", "data/students/", "renewal-brand", "tools/followup_tasks/", "accounts/"].some((p) => m[1].startsWith(p)), m[1]);
   for (const m of js.matchAll(/api\(\s*"([^"]+)"[^)]*?"(PATCH|DELETE|POST|PUT)"/g))
     assert.ok(/^(data\/students\/|tools\/followup_tasks\/|accounts\/)/.test(m[1]), m[1]);
-  for (const form of ["recordForm(", "creditForm(", "followupForm(", "followupPage(", "creditPage(", "renewalNotice(", "timetableImage(", "personalAccount(", "lessonDetail(", "studentFunds(", "studentBlocks(", "yxRepertoireTab(", 'exportLink("students")'])
+  for (const form of ["recordForm(", "creditForm(", "adjustForm(", "transferForm(", "followupForm(", "followupPage(", "creditPage(", "renewalNotice(", "timetableImage(", "personalAccount(", "lessonDetail(", "studentFunds(", "studentBlocks(", "yxRepertoireTab(", 'exportLink("students")'])
     assert.ok(js.includes(form), form);
   // 编辑时不回填打码号码；换学员/分页只换右侧；先显示名单，详情随后补上。
   assert.match(js, /recordForm\(sink\(done\), "students", row \? D\.unmask\(row\) : undefined\)/);
@@ -602,4 +602,37 @@ test("第三期学员页（fq-students.js）：替换员工端学员入口；名
   assert.match(js, /enabled\("exports", "export"\) && !phone\(\)\) \{\s*const b = btn\("导出 Excel"/);
   // 决定 3/7：展示同意字段保留，分组改称「学员端与 AI」。
   assert.match(js, /\["学员端与 AI", \["nickname", "parent_consent_media"\]\]/);
+});
+
+test("任务 #9 设计稿差距补齐：课表详情抽屉/新建表单/固定排课看板、学员课时与缴费卡片行与手机信息卡、老师课酬标准「⋯」菜单；无内联样式/HTML/原生弹窗", async () => {
+  const scJs = await readFile("src/tenant/fq-schedule.js", "utf8"),
+    scCss = await readFile("src/tenant/fq-schedule.css", "utf8"),
+    stJs = await readFile("src/tenant/fq-students.js", "utf8"),
+    tcJs = await readFile("src/tenant/fq-teachers.js", "utf8"),
+    tcCss = await readFile("src/tenant/fq-teachers.css", "utf8");
+  for (const src of [scJs, stJs, tcJs]) {
+    assert.doesNotMatch(src, /\.innerHTML\s*=|\.style\.|setAttribute\(["']style["']/);
+    assert.ok(!/(?<![.\w])(?:alert|prompt|confirm)\(/.test(src));
+  }
+  // 课表：包装 lessonDetail/lessonForm、覆盖 templatesPage（看板 + 未生成提醒 + 列表切换）。
+  assert.match(scJs, /async function fqLessonDetail\(c, row\)/);
+  assert.match(scJs, /fq-sc-lesson-drawer/);
+  assert.match(scJs, /async function fqLessonForm\(c, row = \{\}\)/);
+  assert.match(scJs, /fq-sc-new-drawer/);
+  assert.match(scJs, /async function fqTemplatesPage\(c\)/);
+  assert.match(scJs, /月课程还没生成/);
+  assert.match(scCss, /dialog\.fq-sc-lesson-drawer/);
+  assert.match(scCss, /dialog\.fq-sc-new-drawer/);
+  assert.match(scCss, /\.fq-sc-board/);
+  // 学员：课时与缴费卡片行 + 「⋯」操作菜单 + 最近 3 条流水 + 手机信息卡纯数字。
+  assert.match(stJs, /class: "fq-st-pk"/);
+  assert.match(stJs, /allTxs\.slice\(0, 3\)/);
+  assert.match(stJs, /fq-st-morebtn/);
+  assert.match(stJs, /class: "fq-st-pay"/);
+  assert.match(stJs, /const stripUnit = \(v\) => String\(v\)\.replace\(/);
+  // 老师：课酬标准两列卡片 + 「⋯」菜单（UI.actionMenu）+ 删除走 finance/rates/:id DELETE。
+  assert.match(tcJs, /class: "fq-tp-rgrid"/);
+  assert.match(tcJs, /m\.trigger\.classList\.add\("fq-tp-dots"\)/);
+  assert.match(tcJs, /api\("finance\/rates\/" \+ r\.id, "DELETE"/);
+  assert.match(tcCss, /\.fq-tp-rrow \.ui-button\.fq-tp-dots/);
 });

@@ -61,6 +61,28 @@ export function object(x) {
 export function version(x) {
   return integer(x, "版本", 1, 2147483647);
 }
+export const COURSE_FORMAT_VALUES = Object.freeze([
+  "individual",
+  "group",
+  "class",
+]);
+export function normalizeFormat(value, label = "课程形式") {
+  if (value === "individual") return "individual";
+  if (value === "group" || value === "class") return "group";
+  fail(422, label + "不正确");
+}
+export function parseImportFormat(value, label = "形式") {
+  if (typeof value !== "string") fail(422, label + "不正确，请填写一对一或班课");
+  const raw = value.trim();
+  if (raw === "一对一" || raw === "individual") return "individual";
+  if (
+    ["班课", "小组课", "小班课", "小班", "集训班", "group", "class"].includes(
+      raw,
+    )
+  )
+    return "group";
+  fail(422, label + "不正确，请填写一对一或班课");
+}
 export async function body(req) {
   if (req.headers.get("origin") !== new URL(req.url).origin)
     fail(403, "请求来源不正确");

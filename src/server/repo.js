@@ -3,7 +3,7 @@ import { effectiveAIConfig } from './ai-config.js';
 
 import { jsonChunks, boundedText, storedRecord, auditChunks, checkBindings, assertPattern, MANIFEST_BUDGET, D1_VALUE_BUDGET, SNAPSHOT_SAFE_ASCII_PATTERN } from "./d1-limits.js";
 import { backupTables, creditTables, BACKUP_STATUS_LABELS } from "./backup-model.js";
-import { randomId, now, fail } from "./core.js";
+import { randomId, now, fail, normalizeFormat } from "./core.js";
 
 // D1 每个 compound SELECT 最多 5 段（实测第 6 段报 too many terms in compound SELECT，本地 SQLite 允许 500 段）。
 // 超过时按 5 段一组嵌套成子查询；行、列名与顺序不变，参数仍按文本顺序绑定。
@@ -580,13 +580,14 @@ const businessSql = {
       "version",
       "deleted_at",
       "class_id",
+      "unit_minutes",
     ],
     list: "SELECT p.*,t.name AS teacher_name,c.name AS course_name,o.name AS location_name FROM schedule_templates p JOIN teachers t ON t.tenant_id=p.tenant_id AND t.id=p.teacher_id JOIN course_types c ON c.tenant_id=p.tenant_id AND c.id=p.course_type_id LEFT JOIN locations o ON o.tenant_id=p.tenant_id AND o.id=p.location_id WHERE p.tenant_id=? AND p.deleted_at IS NULL ORDER BY p.id LIMIT 200 OFFSET ?",
     get: "SELECT * FROM schedule_templates WHERE tenant_id=? AND id=? AND deleted_at IS NULL",
     insert:
-      "INSERT INTO schedule_templates(tenant_id,id,teacher_id,assistant_id,course_type_id,location_id,weekday,start_time,duration,units,mode,date_from,date_to,active,note,created_at,created_by,updated_at,updated_by,version,deleted_at,class_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO schedule_templates(tenant_id,id,teacher_id,assistant_id,course_type_id,location_id,weekday,start_time,duration,units,mode,date_from,date_to,active,note,created_at,created_by,updated_at,updated_by,version,deleted_at,class_id,unit_minutes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     update:
-      "UPDATE schedule_templates SET teacher_id=?,assistant_id=?,course_type_id=?,location_id=?,weekday=?,start_time=?,duration=?,units=?,mode=?,date_from=?,date_to=?,active=?,note=?,created_at=?,created_by=?,updated_at=?,updated_by=?,version=?,deleted_at=?,class_id=? WHERE tenant_id=? AND id=?",
+      "UPDATE schedule_templates SET teacher_id=?,assistant_id=?,course_type_id=?,location_id=?,weekday=?,start_time=?,duration=?,units=?,mode=?,date_from=?,date_to=?,active=?,note=?,created_at=?,created_by=?,updated_at=?,updated_by=?,version=?,deleted_at=?,class_id=?,unit_minutes=? WHERE tenant_id=? AND id=?",
     guard:
       "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?,?,?,COALESCE((SELECT version FROM schedule_templates WHERE tenant_id=? AND id=? AND deleted_at IS NULL),-1)",
   },
@@ -639,13 +640,14 @@ const businessSql = {
       "version",
       "deleted_at",
       "class_id",
+      "unit_minutes",
     ],
     list: "SELECT * FROM lessons WHERE tenant_id=? AND deleted_at IS NULL ORDER BY id LIMIT 200 OFFSET ?",
     get: "SELECT l.*,c.name course_name,t.name teacher_name,o.name location_name FROM lessons l JOIN course_types c ON c.tenant_id=l.tenant_id AND c.id=l.course_type_id JOIN teachers t ON t.tenant_id=l.tenant_id AND t.id=l.teacher_id LEFT JOIN locations o ON o.tenant_id=l.tenant_id AND o.id=l.location_id WHERE l.tenant_id=? AND l.id=? AND l.deleted_at IS NULL",
     insert:
-      "INSERT INTO lessons(tenant_id,id,start_at,duration,units,teacher_id,assistant_id,course_type_id,location_id,mode,status,template_id,occurrence_date,note,teacher_paid,override_rate,override_basis,locked_rate,format,current_submission_id,created_at,created_by,updated_at,updated_by,version,deleted_at,class_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO lessons(tenant_id,id,start_at,duration,units,teacher_id,assistant_id,course_type_id,location_id,mode,status,template_id,occurrence_date,note,teacher_paid,override_rate,override_basis,locked_rate,format,current_submission_id,created_at,created_by,updated_at,updated_by,version,deleted_at,class_id,unit_minutes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     update:
-      "UPDATE lessons SET start_at=?,duration=?,units=?,teacher_id=?,assistant_id=?,course_type_id=?,location_id=?,mode=?,status=?,template_id=?,occurrence_date=?,note=?,teacher_paid=?,override_rate=?,override_basis=?,locked_rate=?,format=?,current_submission_id=?,created_at=?,created_by=?,updated_at=?,updated_by=?,version=?,deleted_at=?,class_id=? WHERE tenant_id=? AND id=?",
+      "UPDATE lessons SET start_at=?,duration=?,units=?,teacher_id=?,assistant_id=?,course_type_id=?,location_id=?,mode=?,status=?,template_id=?,occurrence_date=?,note=?,teacher_paid=?,override_rate=?,override_basis=?,locked_rate=?,format=?,current_submission_id=?,created_at=?,created_by=?,updated_at=?,updated_by=?,version=?,deleted_at=?,class_id=?,unit_minutes=? WHERE tenant_id=? AND id=?",
     guard:
       "INSERT INTO mutation_guards(tenant_id,id,expected,actual) SELECT ?,?,?,COALESCE((SELECT version FROM lessons WHERE tenant_id=? AND id=? AND deleted_at IS NULL),-1)",
   },
@@ -2114,7 +2116,7 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
           ns,
         ),
         sql(
-          "SELECT id,name FROM course_types WHERE tenant_id=? AND name IN(SELECT value FROM json_each(?)) AND deleted_at IS NULL AND active=1",
+          "SELECT id,name,format FROM course_types WHERE tenant_id=? AND name IN(SELECT value FROM json_each(?)) AND deleted_at IS NULL AND active=1",
           tenantId,
           ts,
         ),
@@ -3080,12 +3082,23 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
     },
     async rateOverlap(row) {
       scoped();
+      const format = normalizeFormat(row.format);
+      if (format === "group")
+        return first(
+          "SELECT id FROM teacher_rates WHERE tenant_id=? AND teacher_id=? AND course_type_id=? AND format IN ('group','class') AND id<>? AND deleted_at IS NULL AND effective_from<=? AND effective_to>=? LIMIT 1",
+          tenantId,
+          row.teacher_id,
+          row.course_type_id,
+          row.id,
+          row.effective_to,
+          row.effective_from,
+        );
       return first(
         "SELECT id FROM teacher_rates WHERE tenant_id=? AND teacher_id=? AND course_type_id=? AND format=? AND id<>? AND deleted_at IS NULL AND effective_from<=? AND effective_to>=? LIMIT 1",
         tenantId,
         row.teacher_id,
         row.course_type_id,
-        row.format,
+        format,
         row.id,
         row.effective_to,
         row.effective_from,
@@ -3111,7 +3124,7 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
           .toISOString()
           .slice(0, 10);
       const rows = await all(
-        "SELECT l.id,l.start_at,l.duration,l.units,l.status,c.name course_name,t.name teacher_name,lo.name location_name FROM lessons l JOIN course_types c ON c.tenant_id=l.tenant_id AND c.id=l.course_type_id JOIN teachers t ON t.tenant_id=l.tenant_id AND t.id=l.teacher_id LEFT JOIN locations lo ON lo.tenant_id=l.tenant_id AND lo.id=l.location_id WHERE l.tenant_id=? AND l.deleted_at IS NULL AND l.start_at>=? AND l.start_at<? AND (? IS NULL OR l.teacher_id=? OR l.assistant_id=?) AND (? IS NULL OR EXISTS(SELECT 1 FROM lesson_participants p WHERE p.tenant_id=l.tenant_id AND p.lesson_id=l.id AND p.student_id=? AND p.deleted_at IS NULL)) ORDER BY l.start_at,l.id LIMIT 5001",
+        "SELECT l.id,l.start_at,l.duration,l.units,l.status,l.format,c.name course_name,t.name teacher_name,lo.name location_name FROM lessons l JOIN course_types c ON c.tenant_id=l.tenant_id AND c.id=l.course_type_id JOIN teachers t ON t.tenant_id=l.tenant_id AND t.id=l.teacher_id LEFT JOIN locations lo ON lo.tenant_id=l.tenant_id AND lo.id=l.location_id WHERE l.tenant_id=? AND l.deleted_at IS NULL AND l.start_at>=? AND l.start_at<? AND (? IS NULL OR l.teacher_id=? OR l.assistant_id=?) AND (? IS NULL OR EXISTS(SELECT 1 FROM lesson_participants p WHERE p.tenant_id=l.tenant_id AND p.lesson_id=l.id AND p.student_id=? AND p.deleted_at IS NULL)) ORDER BY l.start_at,l.id LIMIT 5001",
         tenantId,
         from,
         end,
@@ -3548,7 +3561,7 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
             SELECT template_id,COUNT(DISTINCT id) member_count FROM roster
             WHERE date_from<=?3 AND date_to>=?3 GROUP BY template_id
           )
-          SELECT t.id,t.weekday,t.start_time,t.duration,
+          SELECT t.id,t.weekday,t.start_time,t.duration,t.unit_minutes,t.units,
             CASE WHEN time(t.start_time,'+'||t.duration||' minutes')='00:00:00' THEN '24:00'
               ELSE substr(time(t.start_time,'+'||t.duration||' minutes'),1,5) END end_time,
             c.id course_type_id,c.name course_name,h.id teacher_id,h.name teacher_name,
@@ -3786,7 +3799,15 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
         if (change.resource === "lessons") {
           row.teacher_paid ??= 0;
           row.override_basis ??= "legacy";
-          row.format ??= "individual";
+          row.format = normalizeFormat(row.format ?? "individual");
+        }
+        if (
+          (change.resource === "course_types" ||
+            change.resource === "teacher_rates") &&
+          row.format !== undefined &&
+          row.format !== null
+        ) {
+          row.format = normalizeFormat(row.format);
         }
         if (change.resource === "settlements") {
           row.status ??= "draft";

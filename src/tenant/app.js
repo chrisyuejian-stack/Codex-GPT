@@ -2479,17 +2479,17 @@ async function recordForm(c, resource, row = {}) {
     select("所属大类", "category_id", await choices("course_categories"));
     select("形式", "format", [
       { id: "individual", name: "一对一" },
-      { id: "group", name: "小组课" },
-      { id: "class", name: "班课" },
-    ]).value = row.format || "individual";
-    select(
-      "默认分钟",
+      { id: "group", name: "班课" },
+    ]).value = row.format === "class" ? "group" : row.format || "individual";
+    const defaultMins = select(
+      "单课时时长（分钟）",
       "default_minutes",
       [30, 45, 60].map((id) => ({ id, name: String(id) })),
-    ).value = row.default_minutes || 45;
-    const lessonUnits = text("每节课时", "units_per_lesson", "number", 1);
-    lessonUnits.min = "1";
-    lessonUnits.step = "0.01";
+    );
+    defaultMins.value = row.default_minutes || 45;
+    const lessonUnits = text("每节课时", "units_per_lesson", "number", row.units_per_lesson ?? 1);
+    attachUnitStepper(lessonUnits);
+    bindDurationPreview(form, { unitField: "default_minutes", unitsField: "units_per_lesson", anchor: lessonUnits });
     text("人数上限", "capacity", "number", 1);
   }
   if (resource === "locations") {

@@ -47,7 +47,7 @@
       const box = n("section", null, { class: "v-panel v-cl-empty" });
       box.append(
         n("h2", "还没有班级"),
-        n("p", "班级用来管固定名单：小班课、集训班、乐理班。建好后可以整班排课、整班销课，每周固定课程自动带入全班学员。", { class: "v-muted" }),
+        n("p", "班级用来管固定名单的班课（如乐理班、合奏班）。建好后可以整班排课、整班销课，每周固定课程自动带入全班学员。", { class: "v-muted" }),
       );
       if (enabled("classes", "create")) box.append(button("＋ 新建班级", () => classForm(c), "primary"));
       c.append(box);
@@ -480,7 +480,7 @@
     ["types", "细分课程"],
     ["rooms", "教室与地点"],
   ];
-  const FORMAT = { individual: "一对一", group: "小班课", class: "集训班" };
+  const FORMAT = { individual: "一对一", group: "班课", class: "班课" };
   async function courses(c, section) {
     const sec = SECTIONS.find((x) => x[0] === section);
     if (!sec) {
@@ -550,7 +550,7 @@
         },
         { label: "大类", value: (r) => look.cats.find((x) => x.id === r.category_id)?.name || "—" },
         { label: "形式", value: (r) => FORMAT[r.format] || "—" },
-        { label: "每节时长", num: true, value: (r) => (r.default_minutes ? r.default_minutes + " 分钟" : "—") },
+        { label: "单课时时长", num: true, value: (r) => (r.default_minutes ? r.default_minutes + " 分钟" : "—") },
         { label: "每节扣课时", num: true, value: (r) => String(r.units_per_lesson ?? 1) },
         { label: "人数上限", num: true, value: (r) => String(r.capacity ?? "—") },
         { label: "状态", value: state },

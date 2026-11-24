@@ -675,9 +675,11 @@
         F.day(data.start_at) +
         " " +
         F.range(data.start_at, data.duration) +
-        " · " +
+        " · 共 " +
         data.duration +
-        " 分钟 · " +
+        " 分钟" +
+        (data.unit_minutes ? "（" + data.unit_minutes + "′×" + data.units + "）" : "") +
+        " · " +
         (data.location_name || "线上") +
         " · " +
         (participants.length > 1 ? "每人扣 " : "扣 ") +

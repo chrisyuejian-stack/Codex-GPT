@@ -208,7 +208,9 @@
   async function detailView(c, id, tab, isPhone) {
     const key = encodeURIComponent(id);
     const want = {
-      packs: tab === "overview" && enabled("packages") ? api("credits/packages?student_id=" + key).then((d) => d.items || []) : null,
+      packs: (tab === "overview" || tab === "packages") && enabled("packages") ? api("credits/packages?student_id=" + key).then((d) => d.items || []) : null,
+      txs: tab === "packages" && enabled("packages") ? api("credits/transactions?student_id=" + key).then((d) => d.items || []) : null,
+      pays: tab === "packages" && enabled("tuition") ? api("credits/payments?student_id=" + key).then((d) => d.items || []) : null,
       // 跟进页签的角标要未完成数，所以每次都取（与概况共用同一个请求）。
       tasks: enabled("followup") ? toolPage("followup_tasks", id).then((d) => d.items || []) : null,
       records: tab === "records" && !isPhone ? R().take("c2/students/" + key + "/history") : null,
@@ -416,13 +418,29 @@
       const hero = n("section", null, { class: "fq-st-hero" }),
         top = n("div", null, { class: "fq-st-prof-top" }),
         main = n("div", null, { class: "fq-st-prof-main" });
+      acct.querySelector("i")?.remove();
       main.append(name, contact, acct);
       top.append(avatar(row.name, "is-big"), main);
       const grid = n("div", null, { class: "fq-st-hero-nums" });
-      for (const x of [nums.balance, nums.next, nums.month, nums.paid].filter(Boolean)) {
+      const stripUnit = (v) => String(v).replace(/\s*(?:课时|次)$/, "");
+      const heroCells = [
+        nums.balance && {
+          label: nums.balance.label,
+          value: stripUnit(nums.balance.value),
+          hint: urgent ? urgent.course_name + (urgent.state === "zero" ? "已用完" : "快用完") : nums.balance.hint,
+          tone: nums.balance.tone,
+        },
+        nums.next && { ...nums.next, sm: true },
+        nums.month && { label: nums.month.label, value: stripUnit(nums.month.value), hint: nums.month.hint },
+        nums.paid && {
+          label: nums.paid.label,
+          value: nums.paid.value,
+          hint: facts.due_unresolved ? "待核对 " + facts.due_unresolved + " 笔" : nums.paid.hint,
+        },
+      ].filter(Boolean);
+      for (const x of heroCells) {
         const cell = n("div");
-        const isNext = x === nums.next;
-        cell.append(n("small", x.label), n("b", x.value, { class: (x.tone ? x.tone : "") + (isNext ? " sm" : "") }), n("span", x.hint || ""));
+        cell.append(n("small", x.label), n("b", x.value, { class: (x.tone ? x.tone : "") + (x.sm ? " sm" : "") }), n("span", x.hint || ""));
         grid.append(cell);
       }
       hero.append(top);
@@ -533,29 +551,207 @@
       );
     } else if (tab === "packages") {
       body.classList.add("fq-st-pkgs");
-      const jobs = [];
       const funds = n("div", null, { class: "fq-st-fundsbox" });
       body.append(funds);
-      jobs.push(globalThis.ChannelV2Pay.studentFunds(funds, id, row.name, again).catch(() => {}));
-      const section = (title, en, sub, host) => {
-        const h = n("div", null, { class: "fq-st-sec" });
-        h.append(n("h3", title), n("em", en));
-        if (sub) h.append(n("small", sub));
-        const box = card("fq-st-table");
-        box.append(host);
-        body.append(h, box);
+      const [_, packs, txs, pays] = await Promise.all([
+        globalThis.ChannelV2Pay.studentFunds(funds, id, row.name, again).catch(() => {}),
+        want.packs ? want.packs.catch(() => []) : null,
+        want.txs ? want.txs.catch(() => []) : null,
+        want.pays ? want.pays.catch(() => []) : null,
+      ]);
+      const packMap = new Map((packs || []).map((p) => [p.id, p]));
+      const TX_LABELS = { purchase: "购买", consume: "销课", reversal: "回补", adjustment: "调整", transfer_in: "转入", transfer_out: "转出" };
+      const openPackFlows = (p) => {
+        const list = (txs || []).filter((x) => !p || x.package_id === p.id);
+        const view = UI.drawer({
+          title: p ? (p.course_name || "课时包") + " · 课时流水" : row.name + " · 全部课时流水",
+          subtitle: "共 " + list.length + " 条",
+        });
+        if (!list.length) {
+          view.body.append(n("p", "暂无课时流水。", { class: "fq-st-empty" }));
+          return;
+        }
+        const cardBox = card();
+        for (const x of list) cardBox.append(flowRow(x, TX_LABELS));
+        view.body.append(cardBox);
       };
       if (enabled("packages")) {
-        const a = n("div");
-        section("课时包", "Packages", groups.length ? "先买先扣 · " + groups.length + " 组有效" : "", a);
-        jobs.push(creditPage(a, "packages", id));
+        const activePacks = (packs || []).filter((p) => p.status === "active" && Number(p.balance ?? 0) > 0);
+        const closedPacks = (packs || []).filter((p) => !(p.status === "active" && Number(p.balance ?? 0) > 0));
+        const sec = n("div", null, { class: "fq-st-sec" });
+        sec.append(
+          n("h3", "课时包"),
+          n("em", "Packages"),
+          n("small", "先买先扣 · " + activePacks.length + " 个有效"),
+          n("span", null, { class: "fq-st-sp" }),
+        );
+        if (enabled("packages", "create")) sec.append(btn("＋ 新建课时包", () => addPack(), "sm primary"));
+        const box = card();
+        const renderPackRow = (p, done = false) => {
+          const total = Math.max(Number(p.units_total || 0), 0);
+          const bal = Number(p.balance ?? 0);
+          const isLow = !done && bal <= S.threshold && bal > 0;
+          const isBad = bal <= 0;
+          const rowEl = n("div", null, { class: "fq-st-pk" + (done ? " is-done" : "") });
+          const nameCol = n("div", null, { class: "fq-st-pk-name" });
+          const title = n("strong", (p.course_name || "课时包") + " ");
+          title.append(
+            done
+              ? pill(p.display_status?.text || (bal <= 0 ? "已用完" : "已暂停"), "", false)
+              : isLow
+                ? pill("快用完", "warn")
+                : pill(p.display_status?.text || "启用", "ok"),
+          );
+          const boughtAt = p.created_at
+            ? typeof p.created_at === "number" || /^\d{9,}$/.test(String(p.created_at))
+              ? new Date(Number(p.created_at) * (Number(p.created_at) > 1e12 ? 1 : 1000)).toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" })
+              : String(p.created_at).slice(0, 10)
+            : "";
+          const subParts = [
+            F.units(total),
+            boughtAt && "购于 " + boughtAt,
+            p.note,
+          ].filter(Boolean);
+          nameCol.append(title, n("small", subParts.join(" · ")));
+          const leftCol = n("div", null, { class: "fq-st-pk-left" });
+          leftCol.append(n("b", String(Math.round(bal * 100) / 100), { class: isBad ? "bad" : isLow ? "warn" : "" }), " / " + F.units(total));
+          const meter = n("div", null, {
+            class: "fq-st-meter" + (isBad ? " bad" : isLow ? " warn" : ""),
+            role: "meter",
+            "aria-label": "剩余课时",
+            "aria-valuemin": "0",
+            "aria-valuemax": String(Math.max(total, 1)),
+            "aria-valuenow": String(Math.max(0, bal)),
+          });
+          const pct = Math.max(0, Math.min(100, (bal / Math.max(total, 1)) * 100));
+          const fill = n("i");
+          fill.setAttribute("data-pct", String(Math.round(pct / 5) * 5));
+          meter.append(fill);
+          leftCol.append(meter);
+          const metaCol = n("div", null, { class: "fq-st-pk-meta" });
+          const validText = !p.valid_from && !p.valid_to ? "不限" : (p.valid_from || "不限") + " → " + (p.valid_to || "不限");
+          metaCol.append("有效期 ", n("span", validText));
+          if (enabled("tuition")) {
+            metaCol.append(
+              n("br"),
+              "金额 ",
+              n("span", p.amount == null ? "待补录" : F.money(p.amount)),
+              " · 单价 ",
+              n("span", p.unit_price == null ? "待补录" : F.money(p.unit_price)),
+            );
+          }
+          const opsCol = n("div", null, { class: "fq-st-pk-ops" });
+          if (enabled("packages", "update")) {
+            opsCol.append(btn("编辑", () => creditForm(sink(again), "packages", p), "sm"));
+            opsCol.append(btn("调整课时", () => adjustForm(sink(again), p), "sm"));
+          }
+          const moreItems = [];
+          if (enabled("packages", "transfer")) moreItems.push({ label: "课时转移", onSelect: () => transferForm(sink(again), id) });
+          moreItems.push({ label: "查看流水", onSelect: () => openPackFlows(p) });
+          if (enabled("packages", "delete"))
+            moreItems.push({
+              label: "删除课时包",
+              danger: true,
+              onSelect: () =>
+                globalThis.ChannelV2Pay.removeItem({
+                  title: "删除这个课时包？",
+                  consequence: "只有还没扣过课、也没关联缴费的课时包可以删除。",
+                  path: "data/packages/" + p.id,
+                  body: { version: p.version },
+                  done: again,
+                }),
+            });
+          if (moreItems.length) {
+            const m = UI.actionMenu({ label: "", items: moreItems });
+            m.trigger.classList.add("fq-st-btn", "is-sm", "fq-st-morebtn");
+            m.trigger.setAttribute("aria-label", "更多课时包操作");
+            m.trigger.replaceChildren(n("span", "⋯"));
+            opsCol.append(m.element);
+          }
+          rowEl.append(nameCol, leftCol, metaCol, opsCol);
+          return rowEl;
+        };
+        const shownPacks = activePacks.length ? activePacks : closedPacks.slice(0, 2);
+        const hiddenPacks = activePacks.length ? closedPacks : closedPacks.slice(2);
+        if (!shownPacks.length) box.append(n("p", "还没有课时包。", { class: "fq-st-empty" }));
+        else for (const p of shownPacks) box.append(renderPackRow(p, !(p.status === "active" && Number(p.balance ?? 0) > 0)));
+
+        const allTxs = txs || [];
+        for (const x of allTxs.slice(0, 3)) box.append(flowRow(x, TX_LABELS));
+
+        const extraBox = n("div", null, { class: "fq-st-extra", hidden: "" });
+        for (const p of hiddenPacks) extraBox.append(renderPackRow(p, true));
+        for (const x of allTxs.slice(3)) extraBox.append(flowRow(x, TX_LABELS));
+        if (hiddenPacks.length || allTxs.length > 3) {
+          box.append(extraBox);
+          const fold = n("div", null, { class: "fq-st-fold" });
+          const summaryParts = [];
+          if (hiddenPacks.length) summaryParts.push("已用完 / 已暂停的课时包 " + hiddenPacks.length + " 个");
+          if (allTxs.length) summaryParts.push("课时流水 " + allTxs.length + " 条");
+          let open = false;
+          const toggle = textLink("展开 ⌄", () => {
+            open = !open;
+            extraBox.hidden = !open;
+            toggle.textContent = open ? "收起 ⌃" : "展开 ⌄";
+          });
+          fold.append(summaryParts.join(" · ") + " ", toggle, "　「⋯」内：课时转移、查看流水");
+          box.append(fold);
+        } else if (shownPacks.length) {
+          box.append(n("div", "「⋯」内：课时转移、查看流水", { class: "fq-st-fold" }));
+        }
+        body.append(sec, box);
       }
       if (enabled("tuition")) {
-        const b = n("div");
-        section("缴费记录", "Payments", facts.paid_amount !== undefined ? "累计 " + F.money(facts.paid_amount) : "", b);
-        jobs.push(creditPage(b, "payments", id));
+        const sec = n("div", null, { class: "fq-st-sec" });
+        sec.append(
+          n("h3", "缴费记录"),
+          n("em", "Payments"),
+          facts.paid_amount !== undefined ? n("small", "累计 " + F.money(facts.paid_amount)) : "",
+          n("span", null, { class: "fq-st-sp" }),
+        );
+        if (enabled("tuition", "create")) sec.append(btn("＋ 登记缴费", () => creditForm(sink(again), "payments", { student_id: id }), "sm primary"));
+        const box = card();
+        const list = pays || [];
+        if (!list.length) box.append(n("p", "还没有缴费记录。", { class: "fq-st-empty" }));
+        for (const r of list) {
+          const isVoid = !!(r.reversed_at || r.status === "reversed" || r.kind === "reversal" || Number(r.amount) < 0);
+          const isPending = !isVoid && (r.unresolved || (!r.kind && !r.package_id));
+          const isOther = !isVoid && r.kind === "other_income";
+          const line = n("div", null, { class: "fq-st-pay" });
+          const what = n("span", r.method || "未填方式", { class: "fq-st-pay-what" });
+          const pkg = r.package_id ? packMap.get(r.package_id) : null;
+          const targetDesc = isVoid
+            ? r.note || "已冲正"
+            : isOther
+              ? "其他收入" + (r.other_category ? " · " + r.other_category : "") + (r.note ? " · " + r.note : "")
+              : isPending
+                ? "学费 · 未关联课时包" + (r.note ? " · " + r.note : "")
+                : pkg
+                  ? "→ " + (pkg.course_name || "课时包") + " · " + F.units(pkg.units_total || 0)
+                  : r.note || "学费（已分配 / 预收）";
+          what.append(n("small", targetDesc));
+          const statusPill = isVoid
+            ? pill("已冲正", "", false)
+            : isPending
+              ? pill("待核对", "warn")
+              : isOther
+                ? pill("其他收入", "info")
+                : pill("已关联", "ok");
+          line.append(
+            n("span", (r.paid_at || "").slice(0, 10), { class: "fq-st-pay-date" }),
+            n("span", F.money(r.amount), { class: "fq-st-pay-amt" + (isVoid ? " is-void" : "") }),
+            what,
+            statusPill,
+          );
+          if (enabled("tuition", "update")) {
+            line.append(btn(isVoid ? "查看" : "编辑", () => globalThis.ChannelV2Pay.payEdit(r, again), "sm"));
+          } else {
+            line.append(n("span"));
+          }
+          box.append(line);
+        }
+        body.append(sec, box);
       }
-      await Promise.all(jobs);
     } else if (tab === "schedule") {
       const box = n("div", null, { class: "fq-st-week-box" });
       body.append(box);
@@ -593,6 +789,17 @@
       body.append(box);
     }
     return wrap;
+  }
+
+  function flowRow(x, labels) {
+    const row = n("div", null, { class: "fq-st-flow" });
+    const d = String(x.date || x.created_at || "").slice(5, 10) || "—";
+    const typeLabel = labels[x.type] || "变动";
+    const desc = [typeLabel, x.course_name, x.note].filter(Boolean).join(" · ");
+    const delta = Number(x.delta || 0);
+    const val = delta > 0 ? "+" + delta : delta < 0 ? "−" + Math.abs(delta) : "0";
+    row.append(n("span", d), n("span", desc), n("b", val));
+    return row;
   }
 
   function timelineItem(c, l) {

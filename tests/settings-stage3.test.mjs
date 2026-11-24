@@ -342,7 +342,7 @@ test("YX3 报价时长与排课时长分离，跨机构排课课程不能关联"
   ok(await call(s, "data/course_types/" + s.type, "PATCH", {
     ...old,
     default_minutes: 120
-  }), 400);
+  }), 422);
 }));
 
 test("YX3 报价筛选分页、停用保留历史价格、价目表版本递增", () => withSchool(async s => {

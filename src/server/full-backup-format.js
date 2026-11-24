@@ -1,6 +1,6 @@
 import { backupTables } from "./backup-model.js";
-import { b64, unb64, bytes, textBytes, sha, fail } from "./core.js";
-export const FULL_BACKUP_VERSION = 33;
+import { b64, unb64, bytes, textBytes, sha, fail, now, normalizeFormat } from "./core.js";
+export const FULL_BACKUP_VERSION = 35;
 export const MAX_FULL_BACKUP_BYTES = 16 * 1024 * 1024;
 export const fullBackupTables = Object.fromEntries(
   Object.entries(backupTables).filter(
@@ -129,7 +129,7 @@ export async function validateFullPayload(payload, env, tenantId) {
   )
     fail(
       422,
-      "备份数据库版本不兼容，当前仅支持0033结构",
+      "备份数据库版本不兼容，当前仅支持0035结构",
       "backup_version_mismatch",
     );
   if (payload.tenant_id !== tenantId)
@@ -295,6 +295,9 @@ export async function validateFullPayload(payload, env, tenantId) {
     fail(422, "备份缺失媒体声明无效", "invalid_backup");
   if (images.some((x) => !media.has(x.r2_key) && !missing.includes(x.r2_key)))
     fail(422, "备份缺少图库文件", "invalid_backup");
+  for (const table of ["course_types", "lessons", "teacher_rates"])
+    for (const row of payload.tables[table])
+      normalizeFormat(row.format, "备份课程形式");
   return {
     schema_version: payload.schema_version,
     migration_version: payload.migration_version,
@@ -312,4 +315,38 @@ export async function validateFullPayload(payload, env, tenantId) {
         ]
       : [],
   };
+}
+
+export function normalizeFullBackupFormats(payload, at = now()) {
+  if (!payload?.tables) return payload;
+  const rates = payload.tables.teacher_rates || [];
+  const activeGroupRates = rates.filter(
+    (r) =>
+      r.deleted_at === null && (r.format === "group" || r.format === "class"),
+  );
+  const losers = new Set();
+  for (const r of activeGroupRates) {
+    const beaten = activeGroupRates.some(
+      (other) =>
+        other !== r &&
+        other.tenant_id === r.tenant_id &&
+        other.teacher_id === r.teacher_id &&
+        (other.course_type_id ?? null) === (r.course_type_id ?? null) &&
+        other.format !== r.format &&
+        other.effective_from <= r.effective_to &&
+        other.effective_to >= r.effective_from &&
+        (other.created_at > r.created_at ||
+          (other.created_at === r.created_at && other.id > r.id)),
+    );
+    if (beaten) losers.add(r);
+  }
+  for (const r of losers) {
+    r.deleted_at = at;
+    r.updated_at = at;
+    r.version = (Number(r.version) || 1) + 1;
+  }
+  for (const table of ["course_types", "lessons", "teacher_rates"])
+    for (const row of payload.tables[table] || [])
+      row.format = normalizeFormat(row.format, "备份课程形式");
+  return payload;
 }
