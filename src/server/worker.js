@@ -133,7 +133,6 @@ async function teacherToday(req, env, t, user, policy, url) {
     .filter(
       (r) =>
         String(r.start_at).slice(0, 10) === date &&
-        !r.source_course_id &&
         r.teacher_id === user.teacher_id &&
         r.status === "planned" &&
         r.review_status !== "pending" &&
@@ -213,8 +212,6 @@ const tenantAuthenticatedApi = (path) =>
     "/api/finance/receivable-summary",
     "/api/search",
     "/api/todo/summary",
-    "/api/workbench",
-    "/api/renewals",
     "/api/renewals/remind",
     "/api/renewal-brand",
     "/api/renewal-settings",
@@ -340,15 +337,6 @@ async function tenantApi(req, env, resolved, url, context) {
       login_bg: b.login_bg,
       theme_color: b.theme_color,
       welcome_text: b.welcome_text,
-    });
-  }
-  if (path === "/api/public/theme.css" && req.method === "GET") {
-    const b = await r.brand();
-    const color = /^#[a-f0-9]{6}$/i.test(b.theme_color)
-      ? b.theme_color
-      : "#2B4C7E";
-    return new Response(":root { --theme: " + color + "; }", {
-      headers: { "Content-Type": "text/css; charset=utf-8" },
     });
   }
   if (["/api/login", "/api/auth/login"].includes(path) && req.method === "POST")
@@ -477,8 +465,6 @@ async function tenantApi(req, env, resolved, url, context) {
       "/api/finance/receivable-summary",
       "/api/search",
       "/api/todo/summary",
-      "/api/workbench",
-      "/api/renewals",
       "/api/renewals/remind",
       "/api/renewal-brand",
       "/api/renewal-settings",
@@ -702,8 +688,7 @@ async function tenantApi(req, env, resolved, url, context) {
     requireCan(user, policy, "settings", "read");
     return json({
       feedback_auto_confirm: false,
-      teacher_can_publish_reports: false,
-      ...policy.settings,
+      ...Object.fromEntries(Object.entries(policy.settings).filter(([key]) => key !== "teacher_can_publish_reports")),
       max_debt_units: maxDebtUnits(policy.settings),
     });
   }
@@ -724,15 +709,12 @@ async function tenantApi(req, env, resolved, url, context) {
         "academic_can_create_accounts",
         "academic_can_reset_accounts",
         "feedback_auto_confirm",
-        "teacher_can_publish_reports",
       ].includes(d.key) ||
       typeof d.value !== "boolean"
     )
       fail(400, "设置格式不正确");
     if (
-      ["feedback_auto_confirm", "teacher_can_publish_reports"].includes(
-        d.key,
-      ) &&
+      d.key === "feedback_auto_confirm" &&
       !user.roles.includes("supervisor")
     )
       fail(403, "仅主管可修改", "forbidden");
@@ -1081,7 +1063,6 @@ const worker = {
     }
     const secured = secureResponse(
       response,
-      false,
       response.status === 200 ? env.__cacheControl : undefined,
     );
     if (/^\/(?:[^/]+\/)?api\//.test(url.pathname))

@@ -1,9 +1,9 @@
+import { IMPORT_SHAPES } from "./fixtures-import-shapes.mjs";
 // Test-only translation for fixed business regression data; never bundled or exposed over HTTP.
 // Only the old education JSON is recognized. No old authentication, portal, application, AI, or bindings.
 import {
   backupTables,
   restoreTables,
-  IMPORT_SHAPES,
   TABLE_LABELS,
 } from "../src/server/backup-model.js";
 import { randomId, now, fail, string, phone } from "../src/server/core.js";
