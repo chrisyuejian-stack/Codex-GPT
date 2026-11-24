@@ -57,3 +57,11 @@
   - 在 `src/ui/components.css` 与 `src/tenant/fq.css` 统一层为所有第三期 `.fq-*` 按钮、筛选药丸、页签、列表行、图标按钮、手机底栏补充 `0.16s` 过渡、`@media (hover: hover)` 悬停反馈、`:active` 按下微缩、`:focus-visible` 焦点环、禁用态及 `prefers-reduced-motion: reduce` 支持。
 - **验证**：`tests/e2e/ui-audit-and-hover.spec.mjs` 4/4 通过（Desktop / Tablet `768×1024` / Mobile `390×844`）。
 
+## 2026-11-23：任务 #15 全站页面元素可用性彻查（分支 `antigravity/usability-audit`）
+
+- **彻查内容**（详见 `docs/qa/页面元素可用性彻查_2026-11-22.md`）：
+  - 复用 `ui-audit-crawl.mjs` 在 Desktop（`1280×800`）与 Mobile（`390×844`）双视口下遍历主管 13 个核心页面与老师端/学员端首页；
+  - 验证全站 0 `pageerror`、0 非预期 `5xx`、线索抽屉必填校验/手机键盘类型/脏关闭「放弃更改」确认、`Esc` 关闭铃铛弹层、手机底栏热区 ≥ 40px 及老师/学员端离线提示条 `.fq-offline-bar`。
+- **回归测试**：`tests/e2e/usability-audit.spec.mjs` **2 / 2 通过**（51.3s）。
+
+
