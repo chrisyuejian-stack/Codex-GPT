@@ -130,3 +130,11 @@ await expect(page.locator('.ui-sheet')).toHaveCount(0);
 ```
 
 没有调整timeout、retries、skip或业务断言；不改src/tenant、src/ui、design。因AGENTS把tests/e2e归Antigravity，实际写入该文件须获用户单文件授权或由Antigravity执行。此处先给出可审查方案，授权前不改该目录。
+
+
+### 2026-11-24：提交与当前交接点
+
+- [PR #38：后端清理批次1](https://github.com/chrisyuejian-stack/Codex-GPT/pull/38)：12项安全清理；四门禁与原有smoke套件均通过，未合并/未部署。
+- [PR #39：后端补审与加固（草稿）](https://github.com/chrisyuejian-stack/Codex-GPT/pull/39)：两项尾号P2修复、7项新回归和完整书面补审；四项后端门禁通过，但原样smoke的日期辅助函数仍失败，暂不标记可合并。
+- 日期辅助函数方案已在`work/`临时副本用原有业务断言验证：桌面/手机两项均通过（2/2）；只限定放弃确认对话框并增加最终所有抽屉关闭断言。正式`tests/e2e/date-input.spec.mjs`完全未改，等待用户单文件授权或Antigravity执行。临时副本通过不替代正式套件门禁。
+- 两PR携带同一份追加报告/接口说明，原main文档前缀未改，后续合并不需要在两份不同的尾部追加中二选一。未改任务板、项目状态、前端或任何数据库结构。
