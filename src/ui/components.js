@@ -123,6 +123,9 @@ export function field({
   hint = "",
   error = "",
   required = false,
+  min = "",
+  max = "",
+  disabled = false,
   validate,
 } = {}) {
   const element = node("div", null, { class: "ui-field" }),
@@ -135,10 +138,26 @@ export function field({
   if (type !== "textarea") input.type = type;
   input.value = value;
   input.required = required;
+  input.disabled = disabled;
+  if (min) input.min = min;
+  if (max) input.max = max;
   if (type === "checkbox") {
     input.classList.add("ui-input-switch");
     input.setAttribute("role", "switch");
   }
+  const caption = node("label", label, { for: id, class: "ui-field-label" }),
+    help = node("p", hint, { class: "ui-field-hint", id: id + "-hint" }),
+    feedback = node("p", "", {
+      class: "ui-field-error",
+      id: id + "-error",
+      "aria-live": "polite",
+    });
+  let innerError = "";
+  const setError = (message = "") => {
+    feedback.textContent = message;
+    feedback.hidden = !message;
+    input.setAttribute("aria-invalid", String(!!message));
+  };
   let wrapped;
   if (["date", "month", "time", "datetime-local"].includes(type)) {
     input.type = "hidden";
@@ -147,20 +166,37 @@ export function field({
     if (!value && type === "time") input.value = "09:00";
     const change = (v) => {
       input.value = v;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     };
-    if (type === "date")
-      wrapped = datePicker({
+    const syncError = (msg = "") => {
+      innerError = msg;
+      setError(msg);
+    };
+    if (type === "date") {
+      const picker = datePicker({
         label,
         value: value || "",
-        allowEmpty: true,
+        allowEmpty: !required,
+        min,
+        max,
+        disabled,
+        onError: syncError,
         onChange: change,
-      }).element;
-    else if (type === "month")
-      wrapped = monthPicker({
+      });
+      wrapped = picker.element;
+    } else if (type === "month") {
+      const picker = monthPicker({
         value: value || viewFormat.date(Date.now()).slice(0, 7),
+        allowEmpty: !required,
+        min,
+        max,
+        disabled,
+        onError: syncError,
         onChange: change,
-      }).element;
-    else if (type === "time")
+      });
+      wrapped = picker.element;
+    } else if (type === "time")
       wrapped = timePicker({
         label,
         value: value || "09:00",
@@ -175,10 +211,14 @@ export function field({
         datePicker({
           label: label + "日期",
           value: date,
-          allowEmpty: true,
+          allowEmpty: !required,
+          min: min ? min.slice(0, 10) : "",
+          max: max ? max.slice(0, 10) : "",
+          disabled,
+          onError: syncError,
           onChange: (v) => {
             date = v;
-            change(date + "T" + time);
+            change(date ? date + "T" + time : "");
           },
         }).element,
         timePicker({
@@ -186,7 +226,7 @@ export function field({
           value: time,
           onChange: (v) => {
             time = v;
-            change(date + "T" + time);
+            if (date) change(date + "T" + time);
           },
         }).element,
       );
@@ -206,22 +246,14 @@ export function field({
     row.append(wrapped, filename);
     wrapped = row;
   }
-  const caption = node("label", label, { for: id, class: "ui-field-label" }),
-    help = node("p", hint, { class: "ui-field-hint", id: id + "-hint" }),
-    feedback = node("p", "", {
-      class: "ui-field-error",
-      id: id + "-error",
-      "aria-live": "polite",
-    });
   input.setAttribute("aria-describedby", id + "-hint " + id + "-error");
   help.hidden = !hint;
   element.append(caption, input, ...(wrapped ? [wrapped] : []), help, feedback);
-  const setError = (message = "") => {
-    feedback.textContent = message;
-    feedback.hidden = !message;
-    input.setAttribute("aria-invalid", String(!!message));
-  };
   const check = () => {
+    if (innerError) {
+      setError(innerError);
+      return false;
+    }
     const message = validate
       ? validate(input.value)
       : required && !input.value.trim()
@@ -232,9 +264,9 @@ export function field({
   };
   input.addEventListener("blur", check);
   input.addEventListener("input", () => {
-    if (input.getAttribute("aria-invalid") === "true") check();
+    if (input.getAttribute("aria-invalid") === "true" && !innerError) check();
   });
-  setError(error);
+  if (error) setError(error);
   return { element, input, setError, validate: check };
 }
 export function badge(text, tone = "neutral") {
@@ -726,10 +758,77 @@ export function validDate(value) {
     new Date(value + "T12:00:00Z").toISOString().slice(0, 10) === value
   );
 }
+export function normalizeDateInput(raw, { defaultYear } = {}) {
+  const s0 = String(raw ?? "").trim();
+  if (!s0) return "";
+  if (/^长期/.test(s0)) return "2099-12-31";
+  const currentYear =
+    defaultYear ||
+    Number(
+      new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" })
+        .format(new Date())
+        .slice(0, 4),
+    );
+  const s = s0
+    .replace(/[年月/.\\\s]/g, "-")
+    .replace(/日$/, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  let y, m, d, r;
+  if ((r = /^(\d{4})(\d{2})(\d{2})$/.exec(s))) {
+    [y, m, d] = [Number(r[1]), Number(r[2]), Number(r[3])];
+  } else if ((r = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) {
+    [y, m, d] = [Number(r[1]), Number(r[2]), Number(r[3])];
+  } else if ((r = /^(\d{1,2})-(\d{1,2})$/.exec(s))) {
+    [y, m, d] = [currentYear, Number(r[1]), Number(r[2])];
+  } else if ((r = /^(\d{2})(\d{2})$/.exec(s))) {
+    [y, m, d] = [currentYear, Number(r[1]), Number(r[2])];
+  } else {
+    return null;
+  }
+  if (y < 1900 || y > 2099 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const formatted =
+    String(y).padStart(4, "0") +
+    "-" +
+    String(m).padStart(2, "0") +
+    "-" +
+    String(d).padStart(2, "0");
+  return validDate(formatted) ? formatted : null;
+}
+export function normalizeMonthInput(raw, { defaultYear } = {}) {
+  const s0 = String(raw ?? "").trim();
+  if (!s0) return "";
+  if (/^长期/.test(s0)) return "2099-12";
+  const currentYear =
+    defaultYear ||
+    Number(
+      new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" })
+        .format(new Date())
+        .slice(0, 4),
+    );
+  const s = s0
+    .replace(/[年月/.\\\s]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  let y, m, r;
+  if ((r = /^(\d{4})-?(\d{1,2})$/.exec(s))) {
+    [y, m] = [Number(r[1]), Number(r[2])];
+  } else if ((r = /^(\d{1,2})$/.exec(s))) {
+    [y, m] = [currentYear, Number(r[1])];
+  } else {
+    return null;
+  }
+  if (y < 1900 || y > 2099 || m < 1 || m > 12) return null;
+  return String(y).padStart(4, "0") + "-" + String(m).padStart(2, "0");
+}
 export function dateControl({
   label,
   value,
   allowEmpty = false,
+  min = "",
+  max = "",
+  disabled = false,
+  onError = () => {},
   onChange = () => {},
 } = {}) {
   const today = new Intl.DateTimeFormat("sv-SE", {
@@ -739,40 +838,151 @@ export function dateControl({
   let selected = value || (allowEmpty ? "" : today),
     active = selected || today,
     year = Number(active.slice(0, 4)),
-    month = Number(active.slice(5, 7));
+    month = Number(active.slice(5, 7)),
+    pickingYM = false;
   const root = node("div", null, { class: "ui-field ui-date" }),
     id = uid("date"),
-    caption = node("label", label, { id: id + "-label" }),
-    trigger = node("button", null, {
-      type: "button",
-      class: "ui-control ui-picker-trigger",
-      "aria-haspopup": "dialog",
-      "aria-expanded": "false",
+    caption = node("label", label, {
+      id: id + "-label",
+      for: id + "-input",
+    }),
+    combo = node("div", null, { class: "ui-date-combo" }),
+    input = node("input", null, {
+      type: "text",
+      id: id + "-input",
+      class: "ui-control ui-date-input",
+      placeholder: "YYYY-MM-DD",
+      inputmode: "numeric",
+      autocomplete: "off",
       "aria-labelledby": id + "-label",
     }),
-    text = node("span"),
+    trigger = node("button", null, {
+      type: "button",
+      class: "ui-picker-trigger ui-date-btn",
+      "aria-haspopup": "dialog",
+      "aria-expanded": "false",
+      "aria-label": (label ? label + " · " : "") + "日历选择",
+      title: "打开日历",
+    }),
+    text = node("span", selected || "选择日期", { class: "ui-sr-only" }),
+    errorEl = node("p", "", {
+      class: "ui-field-error ui-date-error",
+      "aria-live": "polite",
+    }),
     popup = node("div", null, {
       class: "ui-popover ui-calendar",
       role: "dialog",
       "aria-label": "选择日期",
+      tabindex: "-1",
       id,
     });
+  errorEl.hidden = true;
+  input.value = selected;
+  input.disabled = disabled;
+  trigger.disabled = disabled;
   trigger.append(text, icon("calendar"));
   trigger.setAttribute("aria-controls", id);
-  root.append(caption, trigger, popup);
+  combo.append(input, trigger);
+  root.append(caption, combo, popup, errorEl);
   popup.hidden = true;
+  const setErr = (msg = "") => {
+    errorEl.textContent = msg;
+    errorEl.hidden = !msg;
+    input.setAttribute("aria-invalid", String(!!msg));
+    input.setCustomValidity?.(msg);
+    onError(msg);
+  };
   const close = () => {
     popup.hidden = true;
+    pickingYM = false;
     trigger.setAttribute("aria-expanded", "false");
   };
-  const choose = (date) => {
+  const applyValue = (date, notify = true) => {
     selected = date;
-    active = date;
+    active = date || today;
+    year = Number(active.slice(0, 4));
+    month = Number(active.slice(5, 7));
+    input.value = selected;
     text.textContent = selected || "选择日期";
-    close();
-    trigger.focus();
-    onChange(date);
+    setErr("");
+    if (notify) onChange(selected);
   };
+  const choose = (date) => {
+    if ((min && date < min) || (max && date > max && !date.startsWith("2099"))) {
+      setErr(
+        "日期超出可选范围" +
+          (min ? "（最早 " + min + "）" : "") +
+          (max ? "（最晚 " + max + "）" : ""),
+      );
+      return;
+    }
+    applyValue(date, true);
+    close();
+    input.focus();
+  };
+  const commitInput = () => {
+    const raw = input.value.trim();
+    if (!raw) {
+      if (allowEmpty) {
+        if (selected !== "") applyValue("", true);
+        else setErr("");
+        return true;
+      }
+      setErr("请填写有效日期，例如 " + today);
+      return false;
+    }
+    const parsed = normalizeDateInput(raw, {
+      defaultYear: Number(today.slice(0, 4)),
+    });
+    if (!parsed) {
+      setErr("请填写有效日期，例如 " + today);
+      return false;
+    }
+    if (
+      (min && parsed < min) ||
+      (max && parsed > max && !parsed.startsWith("2099"))
+    ) {
+      setErr(
+        "日期超出可选范围" +
+          (min ? "（最早 " + min + "）" : "") +
+          (max ? "（最晚 " + max + "）" : ""),
+      );
+      return false;
+    }
+    const changed = parsed !== selected;
+    applyValue(parsed, changed);
+    if (!popup.hidden) render();
+    return true;
+  };
+  input.addEventListener("input", () => {
+    if (input.getAttribute("aria-invalid") === "true") {
+      const raw = input.value.trim();
+      const parsed = normalizeDateInput(raw, {
+        defaultYear: Number(today.slice(0, 4)),
+      });
+      if ((raw === "" && allowEmpty) || (parsed && (!min || parsed >= min) && (!max || parsed <= max)))
+        setErr("");
+    }
+  });
+  input.addEventListener("blur", () => {
+    commitInput();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const ok = commitInput();
+      if (!ok) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    } else if (e.key === "ArrowDown" && popup.hidden) {
+      e.preventDefault();
+      openPopup();
+    } else if (e.key === "Escape" && !popup.hidden) {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    }
+  });
   const moveMonth = (delta) => {
     const focusedLabel = document.activeElement?.getAttribute("aria-label");
     const next = new Date(Date.UTC(year, month - 1 + delta, 1));
@@ -782,120 +992,261 @@ export function dateControl({
       year,
       month,
       Math.min(
-        Number(active.slice(8)),
+        Number(active.slice(8)) || 1,
         new Date(Date.UTC(year, month, 0)).getUTCDate(),
       ),
     );
     render();
-    if (["上个月", "下个月"].includes(focusedLabel))
-      [...popup.querySelectorAll("button")]
-        .find((e) => e.getAttribute("aria-label") === focusedLabel)
-        ?.focus();
+    if (["上个月", "下个月", "上一年", "下一年"].includes(focusedLabel)) {
+      const target = [...popup.querySelectorAll("button")].find(
+        (e) => e.getAttribute("aria-label") === focusedLabel,
+      );
+      (target || popup).focus();
+    } else if (!root.contains(document.activeElement)) {
+      popup.focus();
+    }
+  };
+  const makeNavBtn = (ariaLabel, iconName, handler) => {
+    const btn = node("button", null, {
+      type: "button",
+      class: "ui-button ui-button--icon ui-calendar-nav",
+      "aria-label": ariaLabel,
+      title: ariaLabel,
+    });
+    const face = node("span", null, { class: "ui-button-face" });
+    face.append(icon(iconName));
+    btn.append(face);
+    btn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handler();
+    });
+    return btn;
   };
   function render() {
     popup.replaceChildren();
-    const head = node("div", null, { class: "ui-calendar-header" });
+    const head = node("div", null, { class: "ui-calendar-header" }),
+      titleBtn = node("button", year + "年" + month + "月", {
+        type: "button",
+        class: "ui-calendar-title",
+        "aria-label": "快速选择年月（当前 " + year + "年" + month + "月）",
+        "aria-expanded": String(pickingYM),
+      });
+    titleBtn.addEventListener("pointerdown", (e) => e.preventDefault());
+    titleBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      pickingYM = !pickingYM;
+      render();
+      popup.focus();
+    });
     head.append(
-      iconButton("上个月", "chevron-left", () => moveMonth(-1)),
-      node("strong", year + "年" + month + "月"),
-      iconButton("下个月", "chevron-right", () => moveMonth(1)),
+      makeNavBtn("上个月", "chevron-left", () => moveMonth(-1)),
+      titleBtn,
+      makeNavBtn("下个月", "chevron-right", () => moveMonth(1)),
     );
     popup.append(head);
-    const days = node("div", null, {
-        class: "ui-calendar-grid",
-        role: "grid",
-        "aria-label": year + "年" + month + "月",
-      }),
-      weekHeader = node("div", null, {
-        class: "ui-calendar-week",
-        role: "row",
-      });
-    days.append(weekHeader);
-    for (const day of ["一", "二", "三", "四", "五", "六", "日"])
-      weekHeader.append(
-        node("span", day, {
-          class: "ui-calendar-weekday",
-          role: "columnheader",
-        }),
+    if (pickingYM) {
+      const ymPanel = node("div", null, { class: "ui-calendar-ym" }),
+        yRow = node("div", null, { class: "ui-calendar-yrow" }),
+        yLabel = node("strong", year + "年"),
+        mGrid = node("div", null, { class: "ui-calendar-mgrid" });
+      yRow.append(
+        makeNavBtn("上一年", "chevron-left", () => moveMonth(-12)),
+        yLabel,
+        makeNavBtn("下一年", "chevron-right", () => moveMonth(12)),
       );
-    const start = new Date(Date.UTC(year, month - 1, 1)),
-      shift = (start.getUTCDay() + 6) % 7;
-    let week;
-    for (let i = 0; i < 42; i++) {
-      if (i % 7 === 0) {
-        week = node("div", null, { class: "ui-calendar-week", role: "row" });
-        days.append(week);
-      }
-      const date = isoDate(year, month, 1 - shift + i),
-        outside = Number(date.slice(5, 7)) !== month;
-      const b = node("button", Number(date.slice(8)), {
-        type: "button",
-        class:
-          "ui-calendar-day" +
-          (outside ? " is-outside" : "") +
-          (date === today ? " is-today" : ""),
-        role: "gridcell",
-        "aria-label": date,
-        "aria-selected": String(date === selected),
-        tabindex: date === active ? "0" : "-1",
-        "data-date": date,
-      });
-      b.addEventListener("click", () => choose(date));
-      b.addEventListener("keydown", (e) => {
-        const delta = {
-          ArrowLeft: -1,
-          ArrowRight: 1,
-          ArrowUp: -7,
-          ArrowDown: 7,
-        }[e.key];
-        if (delta !== undefined || e.key === "Home" || e.key === "End") {
+      for (let m = 1; m <= 12; m++) {
+        const mb = node("button", m + "月", {
+          type: "button",
+          class: "ui-calendar-mbtn" + (m === month ? " is-selected" : ""),
+          "aria-pressed": String(m === month),
+        });
+        mb.addEventListener("pointerdown", (e) => e.preventDefault());
+        mb.addEventListener("click", (e) => {
           e.preventDefault();
-          const d = new Date(date + "T12:00:00Z"),
-            weekday = (d.getUTCDay() + 6) % 7;
-          d.setUTCDate(
-            d.getUTCDate() +
-              (delta ?? (e.key === "Home" ? -weekday : 6 - weekday)),
+          e.stopPropagation();
+          month = m;
+          active = isoDate(
+            year,
+            month,
+            Math.min(
+              Number(active.slice(8)) || 1,
+              new Date(Date.UTC(year, month, 0)).getUTCDate(),
+            ),
           );
-          active = d.toISOString().slice(0, 10);
-          year = d.getUTCFullYear();
-          month = d.getUTCMonth() + 1;
+          pickingYM = false;
           render();
           popup.querySelector('[tabindex="0"]')?.focus();
-        } else if (e.key === "PageUp" || e.key === "PageDown") {
-          e.preventDefault();
-          moveMonth(e.key === "PageUp" ? -1 : 1);
-          popup.querySelector('[tabindex="0"]')?.focus();
+        });
+        mGrid.append(mb);
+      }
+      ymPanel.append(yRow, mGrid);
+      popup.append(ymPanel);
+    } else {
+      const days = node("div", null, {
+          class: "ui-calendar-grid",
+          role: "grid",
+          "aria-label": year + "年" + month + "月",
+        }),
+        weekHeader = node("div", null, {
+          class: "ui-calendar-week",
+          role: "row",
+        });
+      days.append(weekHeader);
+      for (const day of ["一", "二", "三", "四", "五", "六", "日"])
+        weekHeader.append(
+          node("span", day, {
+            class: "ui-calendar-weekday",
+            role: "columnheader",
+          }),
+        );
+      const start = new Date(Date.UTC(year, month - 1, 1)),
+        shift = (start.getUTCDay() + 6) % 7;
+      let week;
+      for (let i = 0; i < 42; i++) {
+        if (i % 7 === 0) {
+          week = node("div", null, { class: "ui-calendar-week", role: "row" });
+          days.append(week);
         }
+        const date = isoDate(year, month, 1 - shift + i),
+          outside = Number(date.slice(5, 7)) !== month,
+          outOfRange =
+            Boolean(min && date < min) ||
+            Boolean(max && date > max && !date.startsWith("2099"));
+        const b = node("button", Number(date.slice(8)), {
+          type: "button",
+          class:
+            "ui-calendar-day" +
+            (outside ? " is-outside" : "") +
+            (date === today ? " is-today" : ""),
+          role: "gridcell",
+          "aria-label": date,
+          "aria-selected": String(date === selected),
+          tabindex: date === active ? "0" : "-1",
+          "data-date": date,
+        });
+        if (outOfRange) b.disabled = true;
+        b.addEventListener("pointerdown", (e) => e.preventDefault());
+        b.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          choose(date);
+        });
+        b.addEventListener("keydown", (e) => {
+          const delta = {
+            ArrowLeft: -1,
+            ArrowRight: 1,
+            ArrowUp: -7,
+            ArrowDown: 7,
+          }[e.key];
+          if (delta !== undefined || e.key === "Home" || e.key === "End") {
+            e.preventDefault();
+            const d = new Date(date + "T12:00:00Z"),
+              weekday = (d.getUTCDay() + 6) % 7;
+            d.setUTCDate(
+              d.getUTCDate() +
+                (delta ?? (e.key === "Home" ? -weekday : 6 - weekday)),
+            );
+            active = d.toISOString().slice(0, 10);
+            year = d.getUTCFullYear();
+            month = d.getUTCMonth() + 1;
+            render();
+            popup.querySelector('[tabindex="0"]')?.focus();
+          } else if (e.key === "PageUp" || e.key === "PageDown") {
+            e.preventDefault();
+            moveMonth(e.key === "PageUp" ? -1 : 1);
+            popup.querySelector('[tabindex="0"]')?.focus();
+          } else if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            choose(date);
+          }
+        });
+        week.append(b);
+      }
+      popup.append(days);
+    }
+    const foot = node("div", null, { class: "ui-calendar-footer" }),
+      todayBtn = node("button", "今天", {
+        type: "button",
+        class: "ui-calendar-quick",
       });
-      week.append(b);
+    todayBtn.addEventListener("pointerdown", (e) => e.preventDefault());
+    todayBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      choose(today);
+    });
+    foot.append(todayBtn);
+    if (allowEmpty) {
+      const clearBtn = node("button", "清除", {
+        type: "button",
+        class: "ui-calendar-quick is-muted",
+      });
+      clearBtn.addEventListener("pointerdown", (e) => e.preventDefault());
+      clearBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        applyValue("", true);
+        close();
+        input.focus();
+      });
+      foot.append(clearBtn);
     }
-    popup.append(days);
+    popup.append(foot);
   }
-  trigger.addEventListener("click", () => {
-    if (!popup.hidden) {
-      close();
-      return;
-    }
+  const openPopup = () => {
+    if (input.disabled) return;
     // 空日期打开时从今天所在月份开始（原来会显示“0年0月”）。
+    const candidate = normalizeDateInput(input.value, {
+      defaultYear: Number(today.slice(0, 4)),
+    });
+    if (candidate) selected = candidate;
     active = selected || today;
     year = Number(active.slice(0, 4));
     month = Number(active.slice(5, 7));
+    pickingYM = false;
     render();
     popup.hidden = false;
     trigger.setAttribute("aria-expanded", "true");
     const box = root.getBoundingClientRect();
     popup.classList.toggle("is-above", box.bottom + 370 > innerHeight);
     // 靠右的日期框：日历改为右对齐，不超出窗口或侧边栏右边。
-    const edge = Math.min(innerWidth, root.closest("dialog, .ui-overlay, aside")?.getBoundingClientRect().right || innerWidth);
+    const edge = Math.min(
+      innerWidth,
+      root.closest("dialog, .ui-overlay, aside")?.getBoundingClientRect()
+        .right || innerWidth,
+    );
     popup.classList.toggle("is-end", box.left + 312 > edge - 8);
     popup.querySelector('[tabindex="0"]')?.focus();
+  };
+  trigger.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!popup.hidden) {
+      close();
+      return;
+    }
+    openPopup();
   });
   popup.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
       close();
-      trigger.focus();
+      input.focus();
+    } else if (e.key === "PageUp" || e.key === "PageDown") {
+      e.preventDefault();
+      moveMonth(e.key === "PageUp" ? -1 : 1);
+      popup.querySelector('[tabindex="0"]')?.focus();
     }
     if (
       e.key === "Tab" &&
@@ -904,8 +1255,16 @@ export function dateControl({
     )
       close();
   });
+  let pointerInside = false;
+  root.addEventListener("pointerdown", () => {
+    pointerInside = true;
+    setTimeout(() => {
+      pointerInside = false;
+    }, 150);
+  });
   root.addEventListener("focusout", () =>
     setTimeout(() => {
+      if (pointerInside) return;
       if (!root.contains(document.activeElement)) close();
     }, 0),
   );
@@ -916,14 +1275,21 @@ export function dateControl({
   text.textContent = selected || "选择日期";
   return {
     element: root,
+    input,
     trigger,
+    validate: commitInput,
     get value() {
       return selected;
     },
     setValue(v) {
-      if (!validDate(v)) throw Error("日期格式不正确");
-      selected = v;
-      text.textContent = v.replaceAll("-", " / ");
+      if (v === "" && allowEmpty) {
+        applyValue("", false);
+        return;
+      }
+      const norm = normalizeDateInput(v);
+      if (!norm || !validDate(norm)) throw Error("日期格式不正确");
+      applyValue(norm, false);
+      text.textContent = norm.replaceAll("-", " / ");
     },
     destroy() {
       document.removeEventListener("pointerdown", outside);
@@ -1938,26 +2304,96 @@ export function timePicker({
 }
 export function monthPicker({
   value = fmt.date(Date.now()).slice(0, 7),
+  allowEmpty = false,
+  min = "",
+  max = "",
+  disabled = false,
+  onError = () => {},
   onChange = () => {},
 } = {}) {
   const element = node("div", null, { class: "ui-month-picker" }),
-    text = node("strong");
+    input = node("input", null, {
+      type: "text",
+      class: "ui-control ui-month-input",
+      placeholder: "YYYY-MM",
+      inputmode: "numeric",
+      autocomplete: "off",
+      "aria-label": "月份（YYYY-MM）",
+    }),
+    text = node("strong", "", { class: "ui-month-label" });
   let current = value;
-  const paint = () => {
-    text.textContent =
-      Number(current.slice(0, 4)) + "年" + Number(current.slice(5)) + "月";
+  input.disabled = disabled;
+  const setErr = (msg = "") => {
+    input.setAttribute("aria-invalid", String(!!msg));
+    input.setCustomValidity?.(msg);
+    onError(msg);
   };
+  const paint = () => {
+    input.value = current || "";
+    text.textContent = current
+      ? Number(current.slice(0, 4)) + "年" + Number(current.slice(5)) + "月"
+      : "选择月份";
+  };
+  const commit = async () => {
+    const raw = input.value.trim();
+    if (!raw && allowEmpty) {
+      setErr("");
+      if (current !== "") {
+        current = "";
+        paint();
+        await onChange("");
+      }
+      return true;
+    }
+    const parsed = normalizeMonthInput(raw);
+    if (!parsed) {
+      setErr("请填写有效月份，例如 2026-11");
+      return false;
+    }
+    if ((min && parsed < min) || (max && parsed > max)) {
+      setErr(
+        "月份超出可选范围" +
+          (min ? "（最早 " + min + "）" : "") +
+          (max ? "（最晚 " + max + "）" : ""),
+      );
+      return false;
+    }
+    setErr("");
+    if (parsed !== current) {
+      const old = current;
+      current = parsed;
+      paint();
+      try {
+        await onChange(current);
+      } catch (e) {
+        current = old;
+        paint();
+        throw e;
+      }
+    } else {
+      paint();
+    }
+    return true;
+  };
+  input.addEventListener("blur", () => {
+    void commit();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      void commit().then((ok) => {
+        if (!ok) e.preventDefault();
+      });
+    }
+  });
   const move = async (n) => {
+    const base = current || fmt.date(Date.now()).slice(0, 7);
     const old = current;
     current = new Date(
-      Date.UTC(
-        Number(current.slice(0, 4)),
-        Number(current.slice(5)) - 1 + n,
-        1,
-      ),
+      Date.UTC(Number(base.slice(0, 4)), Number(base.slice(5)) - 1 + n, 1),
     )
       .toISOString()
       .slice(0, 7);
+    setErr("");
     paint();
     try {
       await onChange(current);
@@ -1968,13 +2404,23 @@ export function monthPicker({
     }
   };
   element.append(
-    button("上月", { icon: "chevron-left", onClick: () => move(-1) }),
+    button("上月", {
+      icon: "chevron-left",
+      disabled,
+      onClick: () => move(-1),
+    }),
+    input,
     text,
-    button("下月", { icon: "chevron-right", onClick: () => move(1) }),
+    button("下月", {
+      icon: "chevron-right",
+      disabled,
+      onClick: () => move(1),
+    }),
   );
   paint();
   return {
     element,
+    input,
     get value() {
       return current;
     },

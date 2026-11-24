@@ -234,10 +234,11 @@
         preset.student_id || "",
         preset.student_id ? "选择学员" : "正在加载学员名单…",
       ),
-      paidAt = n("input", null, { type: "date", value: todayStr(), max: todayStr() }),
+      paidAt = UI.datePicker({ label: "收款日期", value: todayStr(), max: todayStr() }),
       amount = numInput("", { placeholder: "本次实收金额", min: "0.01" }),
       method = n("input", null, { type: "text", list: "v-pay-methods", placeholder: "微信、转账…", maxlength: "40" }),
       note = n("input", null, { type: "text", placeholder: "选填", maxlength: "500" });
+    paidAt.element.classList.add("ui-inner-pick");
     const dl = n("datalist", null, { id: "v-pay-methods" });
     for (const m of METHODS) dl.append(n("option", null, { value: m }));
     student.disabled = !!preset.student_id && preset.lock !== false;
@@ -245,7 +246,7 @@
     const grid = n("div", null, { class: "v-pay-grid" });
     grid.append(
       inputBox("学员 *", student),
-      inputBox("收款日期 *", paidAt),
+      inputBox("收款日期 *", paidAt.element),
       inputBox("本次收款金额（元）*", amount),
       inputBox("收款方式", method),
     );
@@ -698,7 +699,8 @@
     const op = operation();
     const legacy = !row.kind;
     const amount = numInput(row.amount);
-    const paidAt = n("input", null, { type: "date", value: (row.paid_at || "").slice(0, 10) });
+    const paidAt = UI.datePicker({ label: "收款日期", value: (row.paid_at || "").slice(0, 10) });
+    paidAt.element.classList.add("ui-inner-pick");
     const view = UI.drawer({
       title: "修改缴费记录",
       subtitle: (row.student_name || "") + " · " + F.money(row.amount) + " · " + (row.paid_at || "").slice(0, 10),
@@ -719,7 +721,7 @@
         },
       },
     });
-    if (legacy) view.body.append(inputBox("金额（元）", amount), inputBox("收款日期", paidAt));
+    if (legacy) view.body.append(inputBox("金额（元）", amount), inputBox("收款日期", paidAt.element));
     if (legacy && enabled("tuition", "delete")) {
       const del = button("删除这笔缴费", async () => {
         const ok = await removeItem({

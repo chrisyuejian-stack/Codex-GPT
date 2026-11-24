@@ -1340,18 +1340,17 @@
       }
       if (u && usageDate === today()) stats.ai = u;
 
-      const dateInput = n("input", null, {
-        type: "date",
+      const datePickerCtl = UI.datePicker({
+        label: "统计日期",
         value: usageDate,
-        class: "fq-se-in fq-se-date-in",
-        "aria-label": "统计日期",
+        onChange: (v) => {
+          if (!v) return;
+          usageDate = v;
+          void renderUsage();
+        },
       });
-      dateInput.addEventListener("change", () => {
-        if (!dateInput.value) return;
-        usageDate = dateInput.value;
-        void renderUsage();
-      });
-      const up = panel("AI 用量统计", "每天北京时间 0 点重新计数；快速和深度两档分开计算。", [dateInput]);
+      datePickerCtl.element.classList.add("ui-inner-pick", "fq-se-date-in");
+      const up = panel("AI 用量统计", "每天北京时间 0 点重新计数；快速和深度两档分开计算。", [datePickerCtl.element]);
       if (errMsg || !u) {
         const errWrap = n("div", null, { class: "fq-se-pb" });
         errWrap.append(banner(errMsg || "暂时无法读取 AI 用量数据。", "error"));
@@ -1821,21 +1820,31 @@
         grid.append(wrapField("操作人", actorIn));
       }
 
-      const fromIn = n("input", null, { type: "date", value: logState.from, class: "fq-se-in", "aria-label": "开始日期" });
-      const toIn = n("input", null, { type: "date", value: logState.to, class: "fq-se-in", "aria-label": "结束日期" });
-      fromIn.addEventListener("change", () => {
-        logState.from = fromIn.value || "";
-        currentOffset = 0;
-        renderFilters();
-        void loadList(0);
+      const fromCtl = UI.datePicker({
+        label: "开始日期",
+        value: logState.from,
+        allowEmpty: true,
+        onChange: (v) => {
+          logState.from = v || "";
+          currentOffset = 0;
+          renderFilters();
+          void loadList(0);
+        },
       });
-      toIn.addEventListener("change", () => {
-        logState.to = toIn.value || "";
-        currentOffset = 0;
-        renderFilters();
-        void loadList(0);
+      fromCtl.element.classList.add("ui-inner-pick");
+      const toCtl = UI.datePicker({
+        label: "结束日期",
+        value: logState.to,
+        allowEmpty: true,
+        onChange: (v) => {
+          logState.to = v || "";
+          currentOffset = 0;
+          renderFilters();
+          void loadList(0);
+        },
       });
-      grid.append(wrapField("开始日期", fromIn), wrapField("结束日期", toIn));
+      toCtl.element.classList.add("ui-inner-pick");
+      grid.append(wrapField("开始日期", fromCtl.element), wrapField("结束日期", toCtl.element));
 
       const qIn = n("input", null, {
         type: "search",

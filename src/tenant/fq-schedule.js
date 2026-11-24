@@ -1103,14 +1103,12 @@
         },
       },
     });
-    const fromIn = n("input", null, { type: "date", value: todayBJ(), class: "fq-sc-input" });
-    const toIn = n("input", null, { type: "date", value: "", class: "fq-sc-input" });
+    const fromIn = UI.datePicker({ label: "开始日期", value: todayBJ() });
+    const toIn = UI.datePicker({ label: "结束日期（留空为长期）", value: "", allowEmpty: true });
     const dates = n("div", null, { class: "fq-sc-fs" });
-    const f1 = n("label", null, { class: "fq-sc-fld is-half" });
-    f1.append(n("span", "开始日期"), fromIn);
-    const f2 = n("label", null, { class: "fq-sc-fld is-half" });
-    f2.append(n("span", "结束日期（留空为长期）"), toIn);
-    dates.append(f1, f2);
+    fromIn.element.classList.add("fq-sc-fhalf");
+    toIn.element.classList.add("fq-sc-fhalf");
+    dates.append(fromIn.element, toIn.element);
     const qIn = n("input", null, { type: "search", placeholder: "搜索学员姓名", class: "fq-sc-input", "aria-label": "搜索学员" });
     const itemsBox = n("div", null, { class: "fq-sc-picklist" });
     const draw = () => {
