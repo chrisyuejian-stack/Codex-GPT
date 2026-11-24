@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fixture } from "./support.mjs";
-import { setup } from "./fixtures-credit.mjs";
+import { setup, mutate } from "./fixtures-credit.mjs";
 
 function ok(r, status = 200) {
   assert.equal(r.status, status, r.text);
@@ -137,4 +137,35 @@ test("排课总时长 #16：45分钟×2课时=90分钟占用并触发后半段�
   } finally {
     f.db.raw.close();
   }
+});
+
+test("总时长贯通：模板实际生成、补课预查/写入一致；按课次不随units翻倍", async () => {
+  const f = await fixture();
+  try {
+    const s = { ...(await setup(f, 1, "duration-paths")), f };
+    const tpl = ok(await s.call("data/schedule_templates", "POST", { course_type_id: s.type, teacher_id: s.teacher, location_id: s.room, weekday: 2, start_time: "09:00", unit_minutes: 45, units: 2, date_from: "2026-11-01", date_to: "2026-11-30" }));
+    ok(await s.call("data/schedule_enrollments", "POST", { template_id: tpl.id, student_id: s.students[0], date_from: "2026-11-01", date_to: "2026-11-30" }));
+    const generated = ok(await s.call("templates/generate", "POST", { from: "2026-11-18", to: "2026-11-18" }));
+    assert.equal(generated.generated, 1);
+    const original = f.db.raw.prepare("SELECT * FROM lessons WHERE template_id=?").get(tpl.id);
+    assert.equal(original.unit_minutes, 45);
+    assert.equal(original.duration, 90);
+    ok(await mutate(s, `credits/lessons/${original.id}/status`, { version: original.version, status: "student_leave" }));
+    const part = f.db.raw.prepare("SELECT id FROM lesson_participants WHERE lesson_id=?").get(original.id).id;
+    const candidate = { start_at: "2026-11-19T10:00", teacher_id: s.teacher, course_type_id: s.type, location_id: s.room, unit_minutes: 45, units: 0.5 };
+    assert.equal(ok(await s.call(`c2/makeups/${part}/check`, "POST", candidate)).ok, true);
+    const made = ok(await mutate(s, "credits/makeups", { original_participant_id: part, new_lesson: candidate }));
+    assert.equal(made.committed, true);
+    const makeup = f.db.raw.prepare("SELECT * FROM lessons WHERE template_id IS NULL").get();
+    assert.equal(makeup.unit_minutes, 45);
+    assert.equal(makeup.duration, 23);
+    assert.equal(makeup.units, 0.5);
+    ok(await mutate(s, "finance/rates", { teacher_id: s.teacher, course_type_id: s.type, rate_basis: "lesson", rate: 200, effective_from: "2026-11-01" }));
+    ok(await mutate(s, `credits/lessons/${makeup.id}/status`, { version: makeup.version, status: "completed" }));
+    const payroll = ok(await s.call("finance/payroll?month=2026-11"));
+    assert.equal(payroll.lessons.find(r => r.id === makeup.id).amount, 200);
+    const late = await s.call("data/lessons", "POST", { ...candidate, start_at: "2026-11-19T23:50", units: 2, student_ids: s.students });
+    assert.equal(late.status, 400);
+    assert.match(late.body.message, /午夜/);
+  } finally { f.restore(); }
 });

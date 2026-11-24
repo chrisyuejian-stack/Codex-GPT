@@ -2681,7 +2681,7 @@ async studentFeedbackMedia(image,children) { scoped(); return first(`SELECT a.* 
     async c2StudentPhoneCiphers(status) {
       scoped();
       return all(
-        "SELECT id,phone_enc,parent_phone_enc FROM students WHERE tenant_id=? AND deleted_at IS NULL AND (phone_enc IS NOT NULL OR parent_phone_enc IS NOT NULL) AND (?='' OR status=?) ORDER BY id LIMIT 5000",
+        "SELECT id,phone_enc,parent_phone_enc FROM students WHERE tenant_id=? AND deleted_at IS NULL AND (phone_enc IS NOT NULL OR parent_phone_enc IS NOT NULL) AND (?='' OR status=?) ORDER BY id LIMIT 5001",
         tenantId,
         status,
         status,

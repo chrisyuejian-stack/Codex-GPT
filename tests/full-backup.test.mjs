@@ -713,3 +713,16 @@ test("不补课决定进入全量备份并整体恢复，恢复不会残留更�
     ok(await confirm(s, p.id));
     assert.equal((await s.r.makeupDecision(item.id)).skipped, 1);
   }));
+
+test("0035兼容结构中的旧class备份可恢复为group，单课时时长、总时长与课时数保持原值", () =>
+  school(async (s) => {
+    const made = ok(await request(s, "data/lessons", "POST", { start_at: "2026-11-18T09:00", teacher_id: s.teacher, course_type_id: s.type, location_id: s.room, unit_minutes: 45, units: 0.5, student_ids: [s.students[0]] }));
+    const payload = await passwordOpen(await exportFile(s), PASSWORD);
+    payload.tables.course_types.find(r => r.id === s.type).format = "class";
+    payload.tables.lessons.find(r => r.id === made.id).format = "class";
+    const p = ok(await preview(s, await passwordSeal(payload, PASSWORD)), 201);
+    ok(await confirm(s, p.id));
+    const row = s.f.db.raw.prepare("SELECT format,unit_minutes,duration,units FROM lessons WHERE id=?").get(made.id);
+    assert.deepEqual({...row}, {format: "group", unit_minutes: 45, duration: 23, units: 0.5});
+    assert.equal(s.f.db.raw.prepare("SELECT format FROM course_types WHERE id=?").get(s.type).format, "group");
+  }));

@@ -20,19 +20,27 @@ export async function phoneTailIds(env, t, r, q, status) {
   if (!/^\d{4,11}$/.test(tail)) return [];
   const rows = await r.c2StudentPhoneCiphers(status);
   if (!rows.length) return [];
-  const open = await fieldDecryptor(env),
-    ctx = t.id + ":phone",
-    ids = [];
-  for (const row of rows) {
-    for (const value of [row.phone_enc, row.parent_phone_enc]) {
-      const plain = await open(value, ctx).catch(() => "");
-      if (plain && plain.replace(/\D/g, "").endsWith(tail)) {
-        ids.push(row.id);
-        break;
+  // 多取一条作为哨兵，禁止将部分扫描伪装成完整搜索结果。
+  if (rows.length > 5000)
+    fail(422, "尾号搜索最多扫描5000位学员，请按状态缩小范围", "phone_search_limit");
+  try {
+    const open = await fieldDecryptor(env),
+      ctx = t.id + ":phone",
+      ids = [];
+    for (const row of rows) {
+      for (const value of [row.phone_enc, row.parent_phone_enc]) {
+        const plain = await open(value, ctx);
+        if (plain && plain.replace(/\D/g, "").endsWith(tail)) {
+          ids.push(row.id);
+          break;
+        }
       }
     }
+    return ids;
+  } catch {
+    // 密钥配置和密文异常都不能被当作「没有匹配」；不向客户端泄露密文或底层错误。
+    fail(503, "手机号搜索暂不可用，请联系主管检查字段密钥与数据", "phone_search_unavailable");
   }
-  return ids;
 }
 const date = () =>
   new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(

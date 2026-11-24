@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { fixture } from "./support.mjs";
 import { schoolFixture } from "./fixtures-school.mjs";
 import { accountToken, request } from "./fixtures-credit.mjs";
+import { b64, bytes } from "../src/server/core.js";
 
 // 第三期决定 2：学员搜索支持手机尾号（学员或家长手机，4 位以上数字，匹配末尾）。
 test("学员名单：手机尾号（学员/家长）与家长称呼可搜；不足 4 位不按号码；密文不外泄；财务可用", async () => {
@@ -42,4 +43,50 @@ test("学员名单：手机尾号（学员/家长）与家长称呼可搜；不�
   } finally {
     f.restore();
   }
+});
+
+test("尾号搜索：5000条完整匹配，5001条明确拒绝而不返回截断结果；状态过滤仍可用", async () => {
+  const f = await fixture();
+  try {
+    const s = await schoolFixture(f);
+    const made = await s.call("data/students", "POST", { name: "边界学员", phone: "13900001234" });
+    assert.equal(made.status, 200, made.text);
+    const columns = f.db.raw.prepare("PRAGMA table_info(students)").all().map(x => x.name);
+    const clone = f.db.raw.prepare(`INSERT INTO students(${columns.join(",")}) SELECT ${columns.map(x => x === "id" ? "?" : x).join(",")} FROM students WHERE id=?`);
+    for (let i = 1; i < 5000; i++) clone.run("boundary_" + i, made.body.id);
+    const full = await s.call("c2/students?q=1234");
+    assert.equal(full.status, 200, full.text);
+    assert.equal(full.body.total, 5000);
+    clone.run("boundary_last", made.body.id);
+    const overflow = await s.call("c2/students?q=1234");
+    assert.equal(overflow.status, 422, overflow.text);
+    assert.equal(overflow.body.code, "phone_search_limit");
+    const filtered = await s.call("c2/students?q=1234&status=paused");
+    assert.equal(filtered.status, 200, filtered.text);
+    assert.equal(filtered.body.total, 0);
+    assert.equal((await s.call("c2/students?q=边界")).status, 200);
+  } finally { f.restore(); }
+});
+
+test("尾号搜索：错误/损坏字段密钥和损坏密文均明确不可用，不伪装成无匹配，不泄露号码或密文", async () => {
+  const f = await fixture();
+  try {
+    const s = await schoolFixture(f);
+    const made = await s.call("data/students", "POST", { name: "密钥学员", phone: "13900001234" });
+    assert.equal(made.status, 200, made.text);
+    const original = f.env.FIELD_KEY;
+    for (const [key, code] of [[b64(bytes(32)), "phone_search_unavailable"], ["invalid-key", "CONFIG_INVALID"]]) {
+      f.env.FIELD_KEY = key;
+      const res = await s.call("c2/students?q=1234");
+      assert.equal(res.status, 503, res.text);
+      assert.equal(res.body.code, code);
+      assert.doesNotMatch(res.text, /13900001234|v1\./);
+    }
+    f.env.FIELD_KEY = original;
+    f.db.raw.prepare("UPDATE students SET phone_enc='broken-cipher' WHERE id=?").run(made.body.id);
+    const broken = await s.call("c2/students?q=1234");
+    assert.equal(broken.status, 503, broken.text);
+    assert.equal(broken.body.code, "phone_search_unavailable");
+    assert.doesNotMatch(broken.text, /broken-cipher|13900001234/);
+  } finally { f.restore(); }
 });
