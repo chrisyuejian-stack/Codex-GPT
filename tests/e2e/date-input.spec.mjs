@@ -110,12 +110,14 @@ test.describe('任务 #14 日期输入与日历组件双端回归（5 大页面�
           if (!(await page.locator('.ui-sheet').count())) break;
           await page.keyboard.press('Escape');
           await page.waitForTimeout(200);
-          const confirmBtn = page.locator("dialog[open] button:has-text('放弃'), dialog[open] button:has-text('确认'), dialog[open] button:has-text('离开')").last();
+          const confirmDlg = page.locator("dialog[open]:has-text('放弃'), dialog[open]:has-text('未保存')").last();
+          const confirmBtn = confirmDlg.locator("button:has-text('放弃'), button:has-text('离开'), button:has-text('确定')").last();
           if (await confirmBtn.count() && await confirmBtn.isVisible()) {
             await confirmBtn.click();
             await page.waitForTimeout(250);
           }
         }
+        await expect(page.locator('.ui-sheet')).toHaveCount(0);
       };
 
       await discardDrawer();
