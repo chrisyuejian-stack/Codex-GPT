@@ -161,3 +161,4 @@ await expect(page.locator('.ui-sheet')).toHaveCount(0);
 - 与Antigravity协作：已在前端PR #41发布对接说明（comment-7129123363），请联动app.BATCH_EXACT。另只读审查3a9f4efa前端发现null被`Number(...||0)`归零及`<0.02`核对容差接受1分钱差异，已留言请其分别处理未知快照和整数分精确核对；本分支不改其目录，不通过改变后端null/金额语义迁就显示。源码完整回归已384/384通过、零跳过，打包/迁移预检/冒烟继续执行。
 - 最终验证（Node v24.22.1）：npm run build通过；npm test **384/384**、TEST_BUNDLE=1 npm test **384/384**，均0失败/0跳过；npm run test:migrations:preflight **35项通过**（84表/4视图/63索引/70触发器，foreign_key_check=0，integrity=ok）；现有双端smoke **26通过/0失败/2项main原有手机skip**。初次冒烟启动缺少本工作树Playwright依赖，安装既定依赖后原样重跑通过；没有调整测试超时、重试或skip。
 - 未删除测试文件或既有业务断言；仅扩充read-batch的路径案例和精确预期集合，4项新增综合测试都通过严格D1模拟器。本轮结果为本地验证，不代表生产验收或前端PR #41已完成实际接口联调。
+- 已提交[PR #42：确认收入明细接口与双工作表报表导出](https://github.com/chrisyuejian-stack/Codex-GPT/pull/42)，并在前端PR #41补上后端链接及验证结果，交Antigravity复核接口、处理前端名单/null/分级核对联动并安排实际联调；本轮未合并或部署。
