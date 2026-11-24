@@ -164,8 +164,15 @@
       [
         "确认收入",
         has("earned_amount") ? report.earned_amount : null,
-        earnedMissing ? "该月锁定早于新口径，只有实收" : "已上的课 × 单价" + (report?.unpriced_units ? " · " + report.unpriced_units + " 课时无单价" : ""),
+        earnedMissing
+          ? "该月锁定早于新口径，只有实收"
+          : (has("other_income_amount") && Number(report.other_income_amount) > 0
+              ? "消课 " + F.money(Number(report.earned_amount || 0) - Number(report.other_income_amount || 0)) + " · 其他 " + F.money(report.other_income_amount)
+              : "已上的课 × 单价") +
+            (report?.unpriced_units ? " · " + report.unpriced_units + " 课时无单价" : ""),
         "check",
+        !earnedMissing && enabled("reports") && Fin()?.openEarnedDrawer ? "is-earned-link" : "",
+        !earnedMissing && enabled("reports") && Fin()?.openEarnedDrawer ? () => Fin().openEarnedDrawer(financeMonth, "all") : null,
       ],
       ["老师课酬", has("teacher_pay_amount") ? report.teacher_pay_amount : null, lessons !== undefined && lessons !== null ? lessons + " 节" : "已发生的课", "users"],
       ["其他成本", has("cost_amount") ? report.cost_amount : null, catText || "不含今天之后的成本", "book"],
@@ -178,13 +185,18 @@
       ],
     ];
     const row = n("section", null, { class: "fq-fin-stats", "aria-label": "本月关键数字" });
-    for (const [label, value, foot, icon, cls] of cards) {
-      const card = n("div", null, { class: "fq-fin-stat" + (cls ? " " + cls : "") });
+    for (const [label, value, foot, icon, cls, onOpen] of cards) {
+      const card = n(onOpen ? "button" : "div", null, {
+        ...(onOpen ? { type: "button" } : {}),
+        class: "fq-fin-stat" + (cls ? " " + cls : ""),
+      });
       const h = n("div", label, { class: "fq-fin-stat-h" });
+      if (onOpen) h.append(n("span", "查看明细 →", { class: "fq-fin-stat-badge" }));
       const ic = n("span", null, { class: "fq-fin-ic" });
       ic.append(UI.icon(icon));
       h.append(ic);
       card.append(h, n("strong", money(value), { class: "fq-fin-num" }), n("span", foot, { class: "fq-fin-ft" }));
+      if (onOpen) card.addEventListener("click", onOpen);
       row.append(card);
     }
     return row;
@@ -384,6 +396,34 @@
     if (!vHead) c.append(monthSwitch(() => overview(c)));
     if (report || receipt || payroll || settlement) c.append(closing({ report, receipt, payroll, settlement }));
     c.append(stats({ report, receipt, payroll, costs }));
+    if (report && report.earned_amount !== null && "earned_amount" in report && Fin()?.openEarnedDrawer) {
+      const sumStrip = n("section", null, { class: "fq-fin-earned-bar", "aria-label": "确认收入来源构成" });
+      const info = n("div", null, { class: "fq-fin-earned-bar-t" });
+      const otherAmt = Number(report.other_income_amount || 0);
+      const lessonNet = Math.round((Number(report.earned_amount || 0) - otherAmt) * 100) / 100;
+      info.append(
+        n("strong", "本月确认收入构成"),
+        n(
+          "span",
+          "课程消课 " +
+            F.money(lessonNet) +
+            (otherAmt ? " + 其他收入 " + F.money(otherAmt) : "") +
+            " = " +
+            F.money(report.earned_amount),
+        ),
+      );
+      const acts = n("div", null, { class: "fq-fin-earned-bar-acts" });
+      if (Number(report.unpriced_units || 0) > 0) {
+        const unp = n("button", report.unpriced_units + " 课时无单价 →", { type: "button", class: "fq-fin-chipbtn is-warn" });
+        unp.addEventListener("click", () => Fin().openEarnedDrawer(financeMonth, "unpriced"));
+        acts.append(unp);
+      }
+      const det = n("button", "查看逐笔收入明细 →", { type: "button", class: "fq-fin-chipbtn" });
+      det.addEventListener("click", () => Fin().openEarnedDrawer(financeMonth, "all"));
+      acts.append(det);
+      sumStrip.append(info, acts);
+      c.append(sumStrip);
+    }
     const cols = n("div", null, { class: "fq-fin-cols" }),
       side = n("div", null, { class: "fq-fin-side" });
     if (receipt) side.append(duePanel(receipt));

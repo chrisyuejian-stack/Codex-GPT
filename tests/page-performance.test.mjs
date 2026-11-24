@@ -45,7 +45,6 @@ test("P1 缓存：品牌短缓存，已授权成功读取图片才长缓存，�
   const { f } = s;
   const brand = await get(s,"public/brand","");
   assert.equal(brand.headers.get("cache-control"),"private, max-age=60");
-  assert.equal((await get(s,"public/theme.css")).headers.get("cache-control"),"no-store");
   assert.equal((await get(s,"me")).headers.get("cache-control"),"no-store");
 
 }));

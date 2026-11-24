@@ -81,8 +81,8 @@ test("第六阶段查询预算：30人班级、30个班级模板整月、200行E
       "GET tools/class_members",
       request(s, "tools/class_members?class_id=" + cls),
     );
-    await check("GET workbench", request(s, "workbench"));
-    await check("GET renewals", request(s, "renewals"));
+    await check("GET c2/home", request(s, "c2/home"));
+    await check("GET c2/renewals", request(s, "c2/renewals"));
     await check("GET renewal-brand", request(s, "renewal-brand"));
     await check("GET renewal-settings", request(s, "renewal-settings"));
     await check(

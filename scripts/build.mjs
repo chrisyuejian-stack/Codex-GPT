@@ -47,11 +47,6 @@ await writeFile(
   chunks.join("\n") + `\nexport default ${entry}.default;\n`,
 );
 await copyFile("src/tenant/index.html", out + "/tenant.html");
-for (const app of ["tenant"]) {
-  const directory = app === "tenant" ? "assets" : "console-assets";
-  await copyFile(`src/${app}/app.js`, `${out}/${directory}/${app}.js`);
-  await copyFile(`src/${app}/app.css`, `${out}/${directory}/${app}.css`);
-}
 const frontend = await tenantAssets();
 await writeFile(out + "/assets/tenant.js", frontend.js);
 await writeFile(out + "/assets/tenant.css", frontend.css);

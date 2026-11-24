@@ -123,7 +123,7 @@ export function config(env) {
  if(!env.CHANNEL_DB||!env.CHANNEL_BACKUPS)fail(503,'系统资源配置不完整','CONFIG_MISSING');
  if(env.TENANT_ID!==undefined && (typeof env.TENANT_ID!=='string'||! /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(env.TENANT_ID)))fail(503,'TENANT_ID 格式不正确','CONFIG_INVALID');
 }
-export function secureResponse(res, login = false, cacheControl = "no-store") {
+export function secureResponse(res, cacheControl = "no-store") {
   const out = new Response(res.body, res);
   for (const [k, v] of Object.entries({
     "Cache-Control": cacheControl,
