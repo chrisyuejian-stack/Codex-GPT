@@ -700,3 +700,175 @@ html .fq-finance.v-fin-bar .ui-month-picker strong {
     font-size: 24px;
   }
 }
+
+/* ---------- 确认收入来源明细（概览卡片下钻 + 报表逐笔流水） ---------- */
+html .fq-finance button.fq-fin-stat.is-earned-link {
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-color: rgba(106, 53, 184, 0.34);
+  transition: transform 0.14s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+html .fq-finance .fq-fin-stat-badge {
+  margin-left: auto;
+  margin-right: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--fq-violet-soft);
+  color: var(--fq-violet-dark);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  html .fq-finance button.fq-fin-stat.is-earned-link:hover {
+    transform: translateY(-2px);
+    border-color: var(--fq-violet);
+    box-shadow: 0 8px 22px rgba(106, 53, 184, 0.14);
+  }
+  html .fq-finance button.fq-fin-stat.is-earned-link:hover .fq-fin-stat-badge {
+    background: var(--fq-violet);
+    color: #fff;
+  }
+}
+html .fq-finance button.fq-fin-stat.is-earned-link:focus-visible {
+  outline: 2px solid var(--fq-violet);
+  outline-offset: 2px;
+}
+html .fq-finance .fq-fin-earned-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 18px;
+  border-radius: 14px;
+  background: var(--fq-card);
+  border: 1px solid var(--fq-line);
+  box-shadow: var(--fq-shadow);
+}
+html .fq-finance .fq-fin-earned-bar-t {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+html .fq-finance .fq-fin-earned-bar-t strong {
+  font-size: 13.5px;
+  color: var(--fq-text);
+}
+html .fq-finance .fq-fin-earned-bar-t span {
+  font-size: 12.5px;
+  color: var(--fq-sub);
+  font-variant-numeric: tabular-nums;
+}
+html .fq-finance .fq-fin-earned-bar-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+html .fq-finance .fq-fin-chipbtn.is-warn {
+  background: #fcefdd;
+  border-color: transparent;
+  color: #8a4a0b;
+}
+html .fq-fin-edwrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+html .fq-fin-edsum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8f4ee;
+  border: 1px solid #e4dccf;
+  font-size: 12.5px;
+}
+html .fq-fin-edform {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+html .fq-fin-edform .is-sep {
+  color: var(--fq-sub);
+}
+html .fq-fin-edform .is-ok {
+  color: #256b43;
+}
+html .fq-fin-edform .is-bad {
+  color: var(--fq-red);
+}
+html .fq-fin-edform .is-tot {
+  font-size: 14px;
+  color: var(--fq-ink);
+}
+html .fq-fin-edchk {
+  font-size: 12px;
+  font-weight: 600;
+}
+html .fq-fin-edchk.is-ok {
+  color: #256b43;
+}
+html .fq-fin-edchk.is-warn {
+  color: #8a4a0b;
+}
+html .fq-fin-edtools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+html .fq-fin-edq {
+  width: 210px;
+  min-width: 160px;
+  max-width: 100%;
+  height: 34px;
+  font-size: 13px;
+}
+html .fq-fin-pill.is-violet {
+  background: var(--fq-violet-soft);
+  color: var(--fq-violet-dark);
+}
+html .fq-fin-edcell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+html .fq-fin-edcell small {
+  font-size: 11.5px;
+  color: var(--fq-faint);
+}
+html .fq-fin-edamt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+html .fq-fin-edamt.is-neg strong {
+  color: var(--fq-red);
+}
+html .fq-fin-edamt.is-warn strong {
+  color: #8a4a0b;
+}
+html .fq-fin-edlist {
+  overflow-x: auto;
+}
+@media (max-width: 760px) {
+  html .fq-fin-edq {
+    width: 100%;
+  }
+  html .fq-fin-edamt {
+    align-items: flex-start;
+  }
+}

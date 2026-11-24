@@ -80,3 +80,12 @@
   - `GET /api/setup` → `{"initialized":true}`，未登录 `GET /api/tools/leads` → HTTP 401。
 - **暂代 Claude 文档同步**：Claude 暂休期间，按用户委托同步更新过时的 `docs/fengqin/任务板.md`、`docs/fengqin/项目状态.md` 与 `deployment/cloudflare/README.md`，与 GPT 当前正在执行的后端补审及 #5 清理零冲突。
 
+## 2026-11-24：财务「确认收入来源明细」接口契约与前端实现（分支 `antigravity/finance-earned-details`）
+
+- **接口契约**（已写入 `docs/fengqin/接口变更.md`）：定义 `GET /api/c3/report/earned?month=YYYY-MM`（零新表/零迁移，基于 `credit_income_entries` + `student_payment_resolutions` 返回 `summary`、`dimensions`、`items`）与 `GET /api/export?kind=report&month=YYYY-MM&scope=occurred` 的明细导出要求，待 GPT 实现后端部分。
+- **前端实现**（无内联样式/HTML 注入/原生弹窗，后端未合入前优雅兼容不崩溃）：
+  - `src/tenant/v2f.js`：新增共享明细组件 `renderEarnedDetails` 与 `openEarnedDrawer`；`#finance-reports` 增强「按教师/课程/学员」维度表补「确认收入 / 课酬后毛利」列并支持点击行下钻，新增第 4 个页签「收入明细」。
+  - `src/tenant/fq-finance.js` & `fq-finance.css`：「财务 › 概览」的「确认收入」数字卡升级为可点击下钻入口（带「查看明细 →」标签），下方增加「本月确认收入构成」摘要条与「无单价待补录」快捷跳转。
+- **回归测试**：`tests/e2e/finance-earned-details.spec.mjs` 双端通过。
+
+

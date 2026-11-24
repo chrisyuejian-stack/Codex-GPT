@@ -14,7 +14,7 @@
   const cell = (v) => (v === 0 || v === null || v === undefined ? "—" : F.money(v));
   const today = () => todayBJ();
   const old = { creditPage, financePage, financeRecords, reportsPage };
-  const fState = { payTab: "received", payQ: "", payMethod: "", pkStatus: "", pkQ: "", payrollTab: "payroll", basis: "earned", repTab: "teachers" };
+  const fState = { payTab: "received", payQ: "", payMethod: "", pkStatus: "", pkQ: "", payrollTab: "payroll", basis: "earned", repTab: "teachers", repFilter: "all", repQ: "" };
 
   // ---------- 公共件 ----------
   function monthBar(c, reload, ...extra) {
@@ -619,8 +619,206 @@
     box.append(legend, svg);
     return box;
   }
+  function renderEarnedDetails(host, data, { initialFilter = "all", initialQuery = "", onClose = null } = {}) {
+    host.replaceChildren();
+    if (!data || data.earned_amount === null || !Array.isArray(data.items)) {
+      host.append(UI.empty({ text: data?.earned_amount === null ? "该月锁定早于确认收入口径，暂无逐笔确认收入明细。" : "当前暂无确认收入明细，或明细接口尚未启用。" }));
+      return;
+    }
+    const local = { filter: initialFilter || "all", q: initialQuery || "" };
+    const items = data.items || [];
+    const sum = data.summary || {};
+    const lessonAmt = Number(sum.lesson_amount ?? items.filter((r) => r.category === "lesson").reduce((s, r) => s + Number(r.amount || 0), 0));
+    const otherAmt = Number(sum.other_income_amount ?? items.filter((r) => r.category === "other").reduce((s, r) => s + Number(r.amount || 0), 0));
+    const revAmt = Number(sum.reversal_amount ?? items.filter((r) => r.category === "reversal").reduce((s, r) => s + Number(r.amount || 0), 0));
+    const totalAmt = Number(data.earned_amount || 0);
+    const wrap = n("div", null, { class: "fq-fin-edwrap" });
+
+    // 顶部来源核对条
+    const rec = n("div", null, { class: "fq-fin-edsum" });
+    const formula = n("div", null, { class: "fq-fin-edform" });
+    formula.append(
+      n("span", "课程消课 "), n("strong", money(lessonAmt)),
+      n("span", " + 其他收入 ", { class: "is-sep" }), n("strong", money(otherAmt), { class: "is-ok" }),
+      n("span", " − 冲红撤回 ", { class: "is-sep" }), n("strong", money(Math.abs(revAmt)), { class: "is-bad" }),
+      n("span", " = ", { class: "is-sep" }), n("strong", money(totalAmt), { class: "is-tot" }),
+    );
+    const itemsTotal = Math.round(items.reduce((s, r) => s + Number(r.amount || 0), 0) * 100) / 100;
+    const matched = Math.abs(itemsTotal - totalAmt) < 0.02;
+    const check = n(
+      "div",
+      matched
+        ? (data.locked ? "✓ 已锁月 · 台账明细与锁月快照核对一致" : "✓ 明细合计与本月确认收入完全一致")
+        : "明细合计 " + money(itemsTotal) + " · 快照 " + money(totalAmt),
+      { class: "fq-fin-edchk" + (matched ? " is-ok" : " is-warn") },
+    );
+    rec.append(formula, check);
+
+    const tools = n("div", null, { class: "fq-fin-edtools" });
+    const filterHost = n("div", null, { class: "fq-fin-edfilters" });
+    const qInput = n("input", null, {
+      type: "search",
+      class: "ui-control fq-fin-edq",
+      placeholder: "搜学员 / 课程 / 老师...",
+      value: local.q,
+      "aria-label": "筛选确认收入明细",
+    });
+    const listHost = n("div", null, { class: "fq-fin-edlist" });
+
+    const counts = {
+      all: items.length,
+      lesson: items.filter((r) => r.category === "lesson").length,
+      other: items.filter((r) => r.category === "other").length,
+      reversal: items.filter((r) => r.category === "reversal").length,
+      unpriced: items.filter((r) => r.category === "unpriced").length,
+    };
+
+    const redraw = () => {
+      filterHost.replaceChildren(
+        chips(
+          [
+            ["all", "全部 · " + counts.all],
+            ["lesson", "课程消课 · " + counts.lesson],
+            ["other", "其他收入 · " + counts.other],
+            ["reversal", "冲红撤回 · " + counts.reversal],
+            ["unpriced", "仅看无单价 · " + counts.unpriced],
+          ],
+          local.filter,
+          (k) => {
+            local.filter = k;
+            redraw();
+          },
+          "来源筛选",
+        ),
+      );
+
+      const q = local.q.trim().toLowerCase();
+      const filtered = items.filter((r) => {
+        if (local.filter !== "all" && r.category !== local.filter) return false;
+        if (!q) return true;
+        return [r.student_name, r.course_name, r.teacher_name, r.source_label, r.package_name, r.note]
+          .some((v) => String(v || "").toLowerCase().includes(q));
+      });
+      const sub = Math.round(filtered.reduce((s, r) => s + Number(r.amount || 0), 0) * 100) / 100;
+
+      const tone = (cat) => ({ lesson: "violet", other: "ok", reversal: "err", unpriced: "warn" }[cat] || "");
+      listHost.replaceChildren(
+        vtable(
+          [
+            { label: "入账日期", key: "date", value: (r) => r.date || "—" },
+            {
+              label: "来源类型",
+              key: "source",
+              value: (r) => n("span", r.source_label || r.source || "—", { class: "fq-fin-pill is-" + tone(r.category) }),
+            },
+            {
+              label: "学员",
+              key: "student",
+              value: (r) =>
+                r.student_id
+                  ? link(r.student_name || "未命名学员", () => {
+                      onClose?.();
+                      R().goStudent(r.student_id, "packages");
+                    })
+                  : (r.student_name || "—"),
+            },
+            {
+              label: "课程与老师 / 说明",
+              key: "detail",
+              value: (r) => {
+                const box = n("div", null, { class: "fq-fin-edcell" });
+                box.append(n("strong", r.course_name || r.note || "—"));
+                const meta = [r.start_at ? String(r.start_at).slice(5, 16).replace("T", " ") : "", r.teacher_name || "", r.package_name || "", r.note && r.course_name !== r.note ? r.note : ""]
+                  .filter(Boolean)
+                  .join(" · ");
+                if (meta) box.append(n("small", meta));
+                return box;
+              },
+            },
+            {
+              label: "课时 × 单价",
+              key: "qty",
+              num: true,
+              value: (r) => {
+                if (r.category === "other") return "—";
+                if (r.unit_price === null || r.unit_price === undefined) return (r.unpriced_units || r.units || 0) + " 课时 × 未定价";
+                return (r.units ?? 0) + " × " + money(r.unit_price);
+              },
+            },
+            {
+              label: "确认金额",
+              key: "amount",
+              num: true,
+              value: (r) => {
+                const box = n("div", null, { class: "fq-fin-edamt" + (Number(r.amount) < 0 ? " is-neg" : r.category === "unpriced" ? " is-warn" : "") });
+                box.append(n("strong", money(r.amount)));
+                if (r.category === "unpriced" && r.can_fix_price && r.student_id) {
+                  box.append(
+                    link("去补单价 →", () => {
+                      onClose?.();
+                      R().goStudent(r.student_id, "packages");
+                    }),
+                  );
+                }
+                return box;
+              },
+            },
+          ],
+          filtered,
+          {
+            empty: "当前筛选条件下暂无确认收入明细。",
+            cls: "is-flat",
+            foot: filtered.length
+              ? {
+                  date: "筛选小计",
+                  source: filtered.length + " 笔",
+                  student: "",
+                  detail: "",
+                  qty: "",
+                  amount: money(sub),
+                }
+              : null,
+          },
+        ),
+      );
+    };
+
+    qInput.addEventListener("input", () => {
+      local.q = qInput.value;
+      redraw();
+    });
+    tools.append(filterHost, qInput);
+    wrap.append(rec, tools, listHost);
+    host.append(wrap);
+    redraw();
+  }
+
+  async function openEarnedDrawer(month = financeMonth, initialFilter = "all", initialQuery = "") {
+    const mm = Number(month.slice(0, 4)) + " 年 " + Number(month.slice(5)) + " 月";
+    const d = UI.drawer({
+      title: mm + " · 确认收入明细",
+      subtitle: "逐笔追溯至具体课程、学员与非学费其他收入",
+    });
+    d.body.append(n("p", "正在加载当月确认收入明细…", { class: "v-muted" }));
+    const exp = exportBtn("report", "&scope=occurred");
+    if (exp) d.footer.append(exp);
+    const data = await api("c3/report/earned?month=" + month).catch((err) => ({ _error: err?.message || "加载失败" }));
+    if (data?._error) {
+      d.body.replaceChildren(UI.empty({ text: "明细暂不可用：" + data._error }));
+      return;
+    }
+    renderEarnedDetails(d.body, data, {
+      initialFilter,
+      initialQuery,
+      onClose: () => void d.close(),
+    });
+  }
+
   async function reports(c) {
-    const data = await api("c3/report?month=" + financeMonth);
+    const [data, earnedData] = await Promise.all([
+      api("c3/report?month=" + financeMonth),
+      api("c3/report/earned?month=" + financeMonth).catch(() => null),
+    ]);
     const hasEarned = "earned_amount" in data,
       basis = hasEarned ? fState.basis : "cash",
       earnedMissing = basis === "earned" && data.earned_amount === null;
@@ -690,33 +888,84 @@
       c.append(p);
     }
     const tabs = [
-      ["teachers", "按教师"],
-      ["courses", "按课程"],
-      ["students", "按学员"],
+      ["teachers", "按教师", data.teachers?.length || 0],
+      ["courses", "按课程", data.courses?.length || 0],
+      ["students", "按学员", data.students?.length || 0],
+      ...(earnedData ? [["earned", "收入明细", earnedData.items?.length || 0]] : []),
     ];
+    if (!tabs.some(([k]) => k === fState.repTab)) fState.repTab = "teachers";
     const box = V().panel("明细");
     const nav = n("nav", null, { class: "v-ptabs", "aria-label": "报表明细" });
-    for (const [k, t] of tabs) {
-      const b = n("button", t + " · " + (data[k]?.length || 0), { type: "button", class: "v-ptab" + (fState.repTab === k ? " is-on" : "") });
+    for (const [k, t, cnt] of tabs) {
+      const b = n("button", t + " · " + cnt, { type: "button", class: "v-ptab" + (fState.repTab === k ? " is-on" : "") });
       b.addEventListener("click", () => {
         fState.repTab = k;
+        if (k === "earned") {
+          fState.repFilter = "all";
+          fState.repQ = "";
+        }
         void reports(c);
       });
       nav.append(b);
     }
-    const rows = [...(data[fState.repTab] || [])].sort((a, b) => (b.teacher_pay_amount ?? b.units) - (a.teacher_pay_amount ?? a.units));
+    box.append(nav);
+
+    if (fState.repTab === "earned" && earnedData) {
+      const body = n("div");
+      box.append(body);
+      renderEarnedDetails(body, earnedData, {
+        initialFilter: fState.repFilter,
+        initialQuery: fState.repQ,
+      });
+      c.append(box);
+      return;
+    }
+
+    const dimMap = new Map((earnedData?.dimensions?.[fState.repTab] || []).map((x) => [x.id, x]));
+    const rows = [...(data[fState.repTab] || [])]
+      .map((r) => {
+        const extra = dimMap.get(r.id);
+        return extra ? { ...r, earned_amount: extra.earned_amount, unpriced_units: extra.unpriced_units, other_income_amount: extra.other_income_amount } : r;
+      })
+      .sort((a, b) => (b.earned_amount ?? b.teacher_pay_amount ?? b.units) - (a.earned_amount ?? a.teacher_pay_amount ?? a.units));
     const pay = rows.some((r) => "teacher_pay_amount" in r);
+    const hasRowEarned = rows.some((r) => "earned_amount" in r && r.earned_amount !== null && r.earned_amount !== undefined);
     box.append(
-      nav,
       vtable(
         [
-          { label: fState.repTab === "courses" ? "课程" : "姓名", value: (r) => r.name },
+          {
+            label: fState.repTab === "courses" ? "课程" : "姓名",
+            value: (r) => {
+              const box = n("div", null, { class: "fq-fin-edcell" });
+              box.append(n("strong", r.name));
+              const notes = [];
+              if (r.other_income_amount) notes.push("含其他收入 " + money(r.other_income_amount));
+              if (r.unpriced_units) notes.push(r.unpriced_units + " 课时无单价");
+              if (notes.length) box.append(n("small", notes.join(" · ")));
+              return box;
+            },
+          },
           { label: "已发生课次", num: true, value: (r) => String(r.lesson_count) },
           { label: "课时", num: true, value: (r) => String(r.units) },
+          ...(hasRowEarned ? [{ label: "确认收入", num: true, value: (r) => money(r.earned_amount) }] : []),
           ...(pay ? [{ label: "课酬分摊", num: true, value: (r) => cell(r.teacher_pay_amount) }] : []),
+          ...(hasRowEarned && pay
+            ? [{ label: "课酬后毛利", num: true, value: (r) => money(Number(r.earned_amount || 0) - Number(r.teacher_pay_amount || 0)) }]
+            : []),
         ],
         rows,
-        { empty: "这个月还没有已发生的课。", cls: "is-flat" },
+        {
+          empty: "这个月还没有已发生的课。",
+          cls: "is-flat",
+          rowAction: earnedData
+            ? (r) => {
+                fState.repTab = "earned";
+                fState.repFilter = "all";
+                fState.repQ = r.name || "";
+                return reports(c);
+              }
+            : null,
+        },
       ),
     );
     c.append(box);
@@ -737,5 +986,14 @@
   financeRecords = (c, kind, ...args) =>
     kind === "costs" && inPage(c) ? costs(c) : old.financeRecords(c, kind, ...args);
   reportsPage = (c) => (inPage(c) ? reports(c) : old.reportsPage(c));
-  globalThis.ChannelV2Finance = { payments, packages, payroll, costs, reports, payTab: (k) => (fState.payTab = k) };
+  globalThis.ChannelV2Finance = {
+    payments,
+    packages,
+    payroll,
+    costs,
+    reports,
+    payTab: (k) => (fState.payTab = k),
+    openEarnedDrawer,
+    renderEarnedDetails,
+  };
 })();
