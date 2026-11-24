@@ -96,3 +96,14 @@
   - `src/tenant/v2f.js`：`renderEarnedDetails` 区分 `earned_amount === null` 历史快照（显示「快照未记录 / 暂不可核对」并保留实时台账明细，不再误转为 `0` 元）；明细与快照改按整数分精确比对，1 分钱差异即显示警告；维度表 `确认收入` 与 `课酬后毛利` 在空值时展示 `—` 并按分相减。
   - `tests/e2e/finance-earned-details.spec.mjs`：升级为包含无 Mock 的真实前后端与 `read-batch` 联调冒烟，及 `earned_amount: null` 历史快照、1 分钱差异告警、来源筛选与搜索回归。
 
+## 2026-11-24：最新 `main@25194ee` 部署上线与只读核对
+
+- **部署范围**（含 PR #37–#43，无新增 D1 迁移，数据库保持 `0035_lesson_unit_minutes.sql`）：
+  - 备份 Worker `fengqin-backup-prod`：已部署 Version `d42a0b99-90ff-41c3-9b13-581efbac0c99`（cron `0 19 * * *`、`*/5 * * * *`）。
+  - Pages `fengqin-crm-prod`：已部署 Deployment `75074c20`（环境变量、密钥与 D1/R2 绑定均未改动）。
+- **上线只读核对**（`https://edu.fantasmearts.com`）：
+  - `GET /api/setup` → `200 {"initialized":true}`。
+  - `/login` 资源版本 `tenant.css?v=283bc3ac3867`、`tenant.js?v=928a7b46c157` 与本地 `dist/` SHA-256 一致。
+  - 未登录访问 `/api/tools/leads`、`/api/c2/students`、`/api/teacher/today`、`/api/settings/institution`、`/api/c3/report/earned?month=2026-11` 均返回 `401`。
+  - 已下线 `/api/public/theme.css`、`/api/workbench`、`/api/renewals` 返回 `404`。
+  - Google Chrome 158 桌面（`1440×900`）与手机（`390×844`）`/login` 页面均 HTTP `200`、零 `pageerror`、零 `>=400` 请求、无横向溢出。
