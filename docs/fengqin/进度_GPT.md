@@ -138,3 +138,11 @@ await expect(page.locator('.ui-sheet')).toHaveCount(0);
 - [PR #39：后端补审与加固（草稿）](https://github.com/chrisyuejian-stack/Codex-GPT/pull/39)：两项尾号P2修复、7项新回归和完整书面补审；四项后端门禁通过，但原样smoke的日期辅助函数仍失败，暂不标记可合并。
 - 日期辅助函数方案已在`work/`临时副本用原有业务断言验证：桌面/手机两项均通过（2/2）；只限定放弃确认对话框并增加最终所有抽屉关闭断言。正式`tests/e2e/date-input.spec.mjs`完全未改，等待用户单文件授权或Antigravity执行。临时副本通过不替代正式套件门禁。
 - 两PR携带同一份追加报告/接口说明，原main文档前缀未改，后续合并不需要在两份不同的尾部追加中二选一。未改任务板、项目状态、前端或任何数据库结构。
+
+
+### 2026-11-24：用户澄清统筹权限与Antigravity交接
+
+- 整体控制与规划仍归Claude；Claude额度不足期间，由Antigravity暂代统筹。GPT负责后端实现，与Antigravity协作处理跨目录改动、QA验收及部署交接。
+- 本节取代上文“等待用户单文件授权”的处理方式：日期E2E辅助函数交Antigravity审查并执行，或由其确认GPT代修，不再要求用户逐项处理团队目录授权。正式测试文件仍未改，#39保持草稿直至正式门禁通过。
+- 已在[PR #39协作交接评论](https://github.com/chrisyuejian-stack/Codex-GPT/pull/39#issuecomment-7128059071)提供精确选择器修复、加强断言、临时副本验证及正式回归要求，并同步更新PR描述。评论已发布，不代表Antigravity已经阅读或确认。
+- 高风险删表/删列仍按用户原要求等待其明确确认；不把日常协作统筹等同于该项数据库操作授权。任务板、项目状态和前端目录保持职责边界。
