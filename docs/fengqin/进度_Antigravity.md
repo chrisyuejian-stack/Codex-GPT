@@ -57,3 +57,12 @@
   - 在 `src/ui/components.css` 与 `src/tenant/fq.css` 统一层为所有第三期 `.fq-*` 按钮、筛选药丸、页签、列表行、图标按钮、手机底栏补充 `0.16s` 过渡、`@media (hover: hover)` 悬停反馈、`:active` 按下微缩、`:focus-visible` 焦点环、禁用态及 `prefers-reduced-motion: reduce` 支持。
 - **验证**：`tests/e2e/ui-audit-and-hover.spec.mjs` 4/4 通过（Desktop / Tablet `768×1024` / Mobile `390×844`）。
 
+## 2026-11-23：任务 #4 死代码第 5 批：清理 `c2 / c3` 无人调用旧后备入口（分支 `antigravity/deadcode-batch5`）
+
+- **盘点结果**：
+  - `src/tenant/v2pay.js` 全部分支与 8 个导出均仍在被 `fq-today.js`、`fq-students.js`、`fq-finance.js`、`v2f.js`、`c3.js` 调用，**完整保留**；
+  - `src/tenant/c2.js`：移除确认 0 调用的 `pendingItem`、`courseLine`、`studentDetail`（已被 `v2p.js`/`fq-students.js` 覆盖）、`recordsPage`/`creditPage` 中不可达的 `dataset.studentDetail` 分支及 `ChannelRebuild.legacy` / `ChannelRebuild.studentDetail` 初始导出；
+  - `src/tenant/c3.js`：移除确认 0 调用的 `leadDetail`（已被 `v2t.js`/`fq-leads.js` 无条件覆盖）、`dialogPassword`、`logOut`、`personalCourse`、`teacherToday`、`studentHome`、`personalSchedule`、`personalProfile`、`studentPayments`、`personalRecords` 及对应初始导出。
+- **验证**：`npm run build && npm test` 与 `TEST_BUNDLE=1 npm test` 均 **378 / 378** 全绿。
+
+
